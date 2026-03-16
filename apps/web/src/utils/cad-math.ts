@@ -5,11 +5,12 @@ import type { SceneItemType } from '@/store/editor-store';
 // To rest on Y=0 the position.y must equal half the box height.
 // These values MUST match the BoxGeometry args in SceneItemObject (Viewport.tsx).
 const ITEM_HALF_HEIGHTS: Record<SceneItemType | 'default', number> = {
-  rack:    1.000,   // BoxGeometry [1, 2, 0.5]    → h/2 = 1.0
-  shelf:   0.900,   // BoxGeometry [1, 1.8, 0.4]  → h/2 = 0.9
-  desk:    0.375,   // BoxGeometry [1.5, 0.75, 0.8] → h/2 = 0.375
-  cabinet: 0.600,   // BoxGeometry [0.8, 1.2, 0.6] → h/2 = 0.6
-  default: 0.500,
+  rack:          1.000,   // BoxGeometry [1, 2, 0.5]    → h/2 = 1.0
+  shelf:         0.900,   // BoxGeometry [1, 1.8, 0.4]  → h/2 = 0.9
+  desk:          0.375,   // BoxGeometry [1.5, 0.75, 0.8] → h/2 = 0.375
+  cabinet:       0.600,   // BoxGeometry [0.8, 1.2, 0.6] → h/2 = 0.6
+  'catalog-item': 0.500, // fallback — catalog items use their boundingBox.height
+  default:       0.500,
 };
 
 /** Returns the Y position where the pivot must sit so the item base touches Y=0. */

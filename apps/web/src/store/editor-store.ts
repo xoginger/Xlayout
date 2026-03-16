@@ -1,6 +1,7 @@
 import { create } from 'zustand';
+import type { ProductDefinition } from '@/types/catalog';
 
-export type SceneItemType = 'rack' | 'shelf' | 'desk' | 'cabinet';
+export type SceneItemType = 'rack' | 'shelf' | 'desk' | 'cabinet' | 'catalog-item';
 export type OpeningType = 'door' | 'window';
 export type ViewMode = '2D' | '3D';
 export type ToolType = 'select' | 'pan' | 'zoom' | 'move' | 'rotate' | 'scale' | 'wall' | 'room' | 'door' | 'window' | 'product' | 'measure' | 'dimension' | 'delete' | 'duplicate' | 'line' | 'rectangle';
@@ -32,11 +33,11 @@ export interface RectangleEntity {
   start: [number, number, number];
   end: [number, number, number];
   width: number;
-  height: number;
+  depth: number;           // end.z - start.z  (Z dimension on the floor plane)
   type: 'rectangle';
-  category?: string;  // e.g. 'room', 'office', 'warehouse', 'area'
-  layer?: string;     // layer name this entity belongs to
-  label?: string;     // optional user-facing label
+  category?: string;       // e.g. 'room', 'office', 'warehouse', 'area'
+  layer?: string;          // layer name this entity belongs to
+  label?: string;          // optional user-facing label
   metadata?: Record<string, unknown>; // extensible meta
 }
 
@@ -46,6 +47,13 @@ export interface SceneItem {
   position: [number, number, number];
   rotation: [number, number, number];
   scale: [number, number, number];
+  /** Links back to ProductDefinition.id — null for legacy placed items */
+  productId?: string;
+  /** Snapshot of dimensions at insert time (avoids re-fetching catalog) */
+  boundingBox?: { width: number; depth: number; height: number };
+  /** Display name snapshot */
+  label?: string;
+  /** Legacy dimensions field for backward compat */
   dimensions?: { width: number; height: number; depth: number };
 }
 
@@ -83,6 +91,8 @@ interface EditorState {
   gridSize: number;
   snapEnabled: boolean;
   showGrid: boolean;
+  /** Asset Library / Catalog panel visibility state */
+  catalogPanelState: 'open' | 'collapsed' | 'hidden';
 
   // History
   history: any[];
@@ -101,12 +111,18 @@ interface EditorState {
   updateWall: (id: string, updates: Partial<Wall>) => void;
   toggleLayer: (id: string) => void;
   removeItem: (id: string) => void;
+  duplicateItem: (id: string) => void;
+  /** Insert a product from the catalog into the scene */
+  insertSceneItem: (productId: string, productDef: ProductDefinition) => void;
   select: (id: string | null, type?: 'item' | 'wall' | 'opening' | 'dimension' | 'line' | 'rectangle' | null) => void;
+  clearSelection: () => void;
   setActiveTool: (tool: ToolType) => void;
   setViewMode: (mode: ViewMode) => void;
   setGridSize: (size: number) => void;
   toggleSnap: () => void;
   toggleGrid: () => void;
+  setCatalogPanelState: (state: 'open' | 'collapsed' | 'hidden') => void;
+  toggleCatalogPanel: () => void;
   undo: () => void;
   redo: () => void;
   saveToHistory: () => void;
@@ -134,6 +150,7 @@ export const useEditorStore = create<EditorState>((set, get) => ({
   gridSize: 0.5,
   snapEnabled: true,
   showGrid: true,
+  catalogPanelState: 'open' as const,
   history: [],
   historyIndex: -1,
 
@@ -146,8 +163,25 @@ export const useEditorStore = create<EditorState>((set, get) => ({
     set({ history: newHistory, historyIndex: newHistory.length - 1 });
   },
 
-  addItem: (item) => {
+  addItem: (item: SceneItem) => {
     get().saveToHistory();
+    set((state) => ({ items: [...state.items, item], selectedId: item.id, selectedType: 'item' }));
+  },
+
+  insertSceneItem: (productId, productDef) => {
+    get().saveToHistory();
+    const bb = productDef.boundingBox ?? { width: productDef.width, depth: productDef.depth, height: productDef.height };
+    const halfH = bb.height / 2;
+    const item: SceneItem = {
+      id: Math.random().toString(36).substr(2, 9),
+      type: 'catalog-item',
+      position: [0, halfH, 0],
+      rotation: [0, 0, 0],
+      scale: [1, 1, 1],
+      productId,
+      boundingBox: bb,
+      label: productDef.name,
+    };
     set((state) => ({ items: [...state.items, item], selectedId: item.id, selectedType: 'item' }));
   },
 
@@ -218,12 +252,53 @@ export const useEditorStore = create<EditorState>((set, get) => ({
     }));
   },
 
+  duplicateItem: (id) => {
+    const state = get();
+    const OFFSET: [number, number, number] = [0.5, 0, 0.5];
+    const newId = () => Math.random().toString(36).substr(2, 9);
+
+    const wall = state.walls.find((w) => w.id === id);
+    if (wall) {
+      get().saveToHistory();
+      const dup: Wall = { ...wall, id: newId(), start: [wall.start[0]+OFFSET[0], wall.start[1], wall.start[2]+OFFSET[2]], end: [wall.end[0]+OFFSET[0], wall.end[1], wall.end[2]+OFFSET[2]] };
+      set((s) => ({ walls: [...s.walls, dup], selectedId: dup.id, selectedType: 'wall' }));
+      return;
+    }
+    const line = state.lines.find((l) => l.id === id);
+    if (line) {
+      get().saveToHistory();
+      const dup: LineEntity = { ...line, id: newId(), start: [line.start[0]+OFFSET[0], line.start[1], line.start[2]+OFFSET[2]], end: [line.end[0]+OFFSET[0], line.end[1], line.end[2]+OFFSET[2]] };
+      set((s) => ({ lines: [...s.lines, dup], selectedId: dup.id, selectedType: 'line' }));
+      return;
+    }
+    const rect = state.rectangles.find((r) => r.id === id);
+    if (rect) {
+      get().saveToHistory();
+      const dup: RectangleEntity = { ...rect, id: newId(), start: [rect.start[0]+OFFSET[0], rect.start[1], rect.start[2]+OFFSET[2]], end: [rect.end[0]+OFFSET[0], rect.end[1], rect.end[2]+OFFSET[2]] };
+      set((s) => ({ rectangles: [...s.rectangles, dup], selectedId: dup.id, selectedType: 'rectangle' }));
+      return;
+    }
+    const item = state.items.find((i) => i.id === id);
+    if (item) {
+      get().saveToHistory();
+      const dup: SceneItem = { ...item, id: newId(), position: [item.position[0]+OFFSET[0], item.position[1], item.position[2]+OFFSET[2]] };
+      set((s) => ({ items: [...s.items, dup], selectedId: dup.id, selectedType: 'item' }));
+    }
+  },
+
   select: (id, type = null) => set({ selectedId: id, selectedType: type }),
+  clearSelection: () => set({ selectedId: null, selectedType: null }),
   setActiveTool: (tool) => set({ activeTool: tool }),
   setViewMode: (mode) => set({ viewMode: mode }),
   setGridSize: (size) => set({ gridSize: size }),
   toggleSnap: () => set((state) => ({ snapEnabled: !state.snapEnabled })),
   toggleGrid: () => set((state) => ({ showGrid: !state.showGrid })),
+  setCatalogPanelState: (panelState) => set({ catalogPanelState: panelState }),
+  toggleCatalogPanel: () => set((state) => ({
+    catalogPanelState:
+      state.catalogPanelState === 'open'      ? 'collapsed' :
+      state.catalogPanelState === 'collapsed' ? 'hidden'    : 'open'
+  })),
 
   undo: () => {
     const { history, historyIndex } = get();

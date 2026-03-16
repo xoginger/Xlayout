@@ -7,15 +7,15 @@ import { Suspense } from 'react';
 const EditorShell = dynamic(() => import('@/components/editor/EditorShell').then(mod => mod.EditorShell), {
   ssr: false,
   loading: () => (
-    <div className="flex h-screen w-screen items-center justify-center bg-zinc-950 text-zinc-500 font-mono text-xs tracking-widest uppercase animate-pulse">
-      Iniciando RT-CORE Engine...
+    <div className="flex h-screen w-screen items-center justify-center bg-white text-zinc-400 font-mono text-xs tracking-widest uppercase animate-pulse">
+      Initializing XLayout Studio...
     </div>
   )
 });
 
 export default function EditorPage() {
   return (
-    <div className="bg-zinc-950 min-h-screen">
+    <div className="bg-white min-h-screen">
       <EditorShell />
     </div>
   );
