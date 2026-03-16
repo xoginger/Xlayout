@@ -1,0 +1,361 @@
+// schema.prisma
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  
+}
+
+// ==========================================
+// ORGANIZATIONS & AUTH (MULTI-TENANT BASE)
+// ==========================================
+
+enum CompanyType {
+  PLATFORM_OWNER
+  MANUFACTURER
+  DISTRIBUTOR
+}
+
+model Company {
+  id        String      @id @default(uuid())
+  name      String
+  type      CompanyType
+  createdAt DateTime    @default(now())
+  updatedAt DateTime    @updatedAt
+
+  users              User[]
+  brands             Brand[]
+  grantedBrandAccess CompanyBrandAccess[]
+  projects           Project[]
+  priceLists         CompanyPriceList[]
+  discountRules      DiscountRule[]
+
+  @@map("companies")
+}
+
+model User {
+  id        String   @id @default(uuid())
+  email     String   @unique
+  password  String
+  firstName String
+  lastName  String
+  tenantId  String   @map("tenant_id")
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  company  Company    @relation(fields: [tenantId], references: [id])
+  roles    UserRole[]
+  projects Project[]  @relation("ProjectCreator")
+
+  @@map("users")
+}
+
+model Role {
+  id          String     @id @default(uuid())
+  name        String     @unique
+  description String?
+  users       UserRole[]
+
+  @@map("roles")
+}
+
+model UserRole {
+  userId String @map("user_id")
+  roleId String @map("role_id")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  role Role @relation(fields: [roleId], references: [id], onDelete: Cascade)
+
+  @@id([userId, roleId])
+  @@map("user_roles")
+}
+
+// ==========================================
+// MARKETPLACE VISIBILITY & RULES
+// ==========================================
+
+model CompanyBrandAccess {
+  companyId String @map("company_id")
+  brandId   String @map("brand_id")
+  grantedAt DateTime @default(now())
+
+  company Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  brand   Brand   @relation(fields: [brandId], references: [id], onDelete: Cascade)
+
+  @@id([companyId, brandId])
+  @@map("company_brand_access")
+}
+
+// ==========================================
+// CATALOG
+// ==========================================
+
+model Brand {
+  id          String   @id @default(uuid())
+  name        String
+  description String?
+  logoUrl     String?
+  tenantId    String   @map("tenant_id") // The manufacturer company owning this brand
+
+  company     Company              @relation(fields: [tenantId], references: [id])
+  lines       ProductLine[]
+  products    Product[]
+  accessRules CompanyBrandAccess[]
+
+  @@map("brands")
+}
+
+model ProductLine {
+  id      String @id @default(uuid())
+  name    String
+  brandId String @map("brand_id")
+
+  brand    Brand     @relation(fields: [brandId], references: [id], onDelete: Cascade)
+  products Product[]
+
+  @@map("product_lines")
+}
+
+model ProductCategory {
+  id       String  @id @default(uuid())
+  name     String
+  parentId String? @map("parent_id")
+
+  parent   ProductCategory?  @relation("CategoryToCategory", fields: [parentId], references: [id])
+  children ProductCategory[] @relation("CategoryToCategory")
+  products Product[]
+
+  @@map("product_categories")
+}
+
+enum ProductStatus {
+  DRAFT
+  PUBLISHED
+  ARCHIVED
+}
+
+model Product {
+  id         String        @id @default(uuid())
+  sku        String        @unique
+  name       String
+  brandId    String        @map("brand_id")
+  lineId     String        @map("line_id")
+  categoryId String        @map("category_id")
+  width      Float
+  depth      Float
+  height     Float
+  basePrice  Decimal       @map("base_price") @db.Decimal(10, 2)
+  status     ProductStatus @default(DRAFT)
+  metadata   Json?         @map("metadata_json") // Allows extensible properties
+
+  brand       Brand           @relation(fields: [brandId], references: [id])
+  line        ProductLine     @relation(fields: [lineId], references: [id])
+  category    ProductCategory @relation(fields: [categoryId], references: [id])
+  variants    ProductVariant[]
+  media       ProductMedia[]
+  priceItems  PriceListItem[]
+
+  @@map("products")
+}
+
+model ProductVariant {
+  id        String  @id @default(uuid())
+  productId String  @map("product_id")
+  sku       String? @unique
+  name      String
+  attributes Json?  // E.g. {"color": "red", "material": "wood"}
+
+  product   Product @relation(fields: [productId], references: [id], onDelete: Cascade)
+
+  @@map("product_variants")
+}
+
+model ProductMedia {
+  id        String  @id @default(uuid())
+  productId String  @map("product_id")
+  url       String
+  type      String  // IMAGE, MODEL_3D (GLTF, USDZ)
+  order     Int     @default(0)
+
+  product   Product @relation(fields: [productId], references: [id], onDelete: Cascade)
+
+  @@map("product_media")
+}
+
+// ==========================================
+// PRICING ENGINE
+// ==========================================
+
+model PriceList {
+  id          String   @id @default(uuid())
+  name        String
+  currency    String   @default("USD")
+  createdAt   DateTime @default(now())
+
+  items       PriceListItem[]
+  companies   CompanyPriceList[]
+
+  @@map("price_lists")
+}
+
+model PriceListItem {
+  priceListId String  @map("price_list_id")
+  productId   String  @map("product_id")
+  price       Decimal @db.Decimal(10, 2)
+
+  priceList   PriceList @relation(fields: [priceListId], references: [id], onDelete: Cascade)
+  product     Product   @relation(fields: [productId], references: [id], onDelete: Cascade)
+
+  @@id([priceListId, productId])
+  @@map("price_list_items")
+}
+
+model CompanyPriceList {
+  companyId   String @map("tenant_id")
+  priceListId String @map("price_list_id")
+
+  company   Company   @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  priceList PriceList @relation(fields: [priceListId], references: [id], onDelete: Cascade)
+
+  @@id([companyId, priceListId])
+  @@map("company_price_lists")
+}
+
+model DiscountRule {
+  id             String   @id @default(uuid())
+  tenantId       String   @map("tenant_id") // The company that creates the rule
+  name           String
+  strategyType   String   // BrandDiscountStrategy, VolumeDiscountStrategy, etc.
+  configPayload  Json     // Holds strategy specific parameters (e.g. {"brandId": "123", "discountPercent": 15})
+  priority       Int      @default(0)
+  active         Boolean  @default(true)
+
+  company        Company  @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@map("discount_rules")
+}
+
+// ==========================================
+// LAYOUT ENGINE & PROJECTS (SPATIAL MODEL)
+// ==========================================
+
+model Project {
+  id          String   @id @default(uuid())
+  tenantId    String   @map("tenant_id")
+  name        String
+  description String?
+  creatorId   String   @map("creator_id")
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  company     Company          @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  creator     User             @relation("ProjectCreator", fields: [creatorId], references: [id])
+  versions    ProjectVersion[]
+
+  @@map("projects")
+}
+
+model ProjectVersion {
+  id         String   @id @default(uuid())
+  projectId  String   @map("project_id")
+  versionNum Int
+  sceneState Json     @map("scene_state_json") // Denormalized state (Rooms, Walls, Placements)
+  createdAt  DateTime @default(now())
+
+  project    Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  quotes     Quote[]
+
+  rooms      Room[]
+  walls      Wall[]
+  openings   Opening[]
+  placements Placement[]
+
+
+  @@unique([projectId, versionNum])
+  @@map("project_versions")
+}
+
+// ==========================================
+// QUOTE ENGINE
+// ==========================================
+
+model Quote {
+  id               String   @id @default(uuid())
+  tenantId         String   @map("tenant_id")
+  projectVersionId String   @map("project_version_id")
+  totalAmount      Decimal  @map("total_amount") @db.Decimal(10, 2)
+  status           String   @default("DRAFT")
+  quoteData        Json     // Snapshot of prices and lines
+  createdAt        DateTime @default(now())
+
+  projectVersion   ProjectVersion @relation(fields: [projectVersionId], references: [id])
+
+  @@map("quotes")
+}
+model Room {
+  id               String   @id @default(uuid())
+  projectVersionId String   @map("project_version_id")
+  name             String?
+  areaSquareMeters Float?   @map("area_square_meters")
+  dataJson         Json?    
+
+  projectVersion   ProjectVersion @relation(fields: [projectVersionId], references: [id], onDelete: Cascade)
+  walls            Wall[]
+  placements       Placement[]
+
+  @@map("rooms")
+}
+
+model Wall {
+  id               String   @id @default(uuid())
+  projectVersionId String   @map("project_version_id")
+  roomId           String?  @map("room_id")
+  startX           Float    @map("start_x")
+  startY           Float    @map("start_y")
+  endX             Float    @map("end_x")
+  endY             Float    @map("end_y")
+  thickness        Float
+  height           Float
+
+  projectVersion   ProjectVersion @relation(fields: [projectVersionId], references: [id], onDelete: Cascade)
+  room             Room?          @relation(fields: [roomId], references: [id], onDelete: SetNull)
+  openings         Opening[]
+
+  @@map("walls")
+}
+
+model Opening {
+  id               String   @id @default(uuid())
+  projectVersionId String   @map("project_version_id")
+  wallId           String   @map("wall_id")
+  type             String   // DOOR, WINDOW
+  positionX        Float    @map("position_x") // Center X on wall length
+  width            Float
+  height           Float
+
+  projectVersion   ProjectVersion @relation(fields: [projectVersionId], references: [id], onDelete: Cascade)
+  wall             Wall           @relation(fields: [wallId], references: [id], onDelete: Cascade)
+
+  @@map("openings")
+}
+
+model Placement {
+  id               String   @id @default(uuid())
+  projectVersionId String   @map("project_version_id")
+  roomId           String?  @map("room_id")
+  productId        String   @map("product_id")
+  posX             Float    @map("pos_x")
+  posY             Float    @map("pos_y")
+  posZ             Float    @map("pos_z")
+  rotX             Float    @map("rot_x")
+  rotY             Float    @map("rot_y")
+  rotZ             Float    @map("rot_z")
+
+  projectVersion   ProjectVersion @relation(fields: [projectVersionId], references: [id], onDelete: Cascade)
+  room             Room?          @relation(fields: [roomId], references: [id], onDelete: SetNull)
+
+  @@map("placements")
+}

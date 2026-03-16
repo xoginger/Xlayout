@@ -1,0 +1,80 @@
+version: '3.8'
+
+services:
+  postgres:
+    image: postgres:15-alpine
+    container_name: xlayout_postgres
+    environment:
+      POSTGRES_USER: xlayout_user
+      POSTGRES_PASSWORD: xlayout_password
+      POSTGRES_DB: xlayout_db
+    ports:
+      - "5432:5432"
+    volumes:
+      - xlayout_pgdata:/var/lib/postgresql/data
+    restart: always
+
+  redis:
+    image: redis:7-alpine
+    container_name: xlayout_redis
+    ports:
+      - "6379:6379"
+    restart: always
+
+  api:
+    build:
+      context: ./apps/api
+      dockerfile: Dockerfile
+    container_name: xlayout_api
+    environment:
+      - DATABASE_URL=postgresql://xlayout_user:xlayout_password@postgres:5432/xlayout_db?schema=public
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+      - JWT_SECRET=super_secret_jwt_key
+      - PORT=3000
+    depends_on:
+      - postgres
+      - redis
+    restart: always
+
+  worker:
+    build:
+      context: ./apps/api
+      dockerfile: Dockerfile
+    container_name: xlayout_worker
+    command: npm run start:worker
+    environment:
+      - DATABASE_URL=postgresql://xlayout_user:xlayout_password@postgres:5432/xlayout_db?schema=public
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+    depends_on:
+      - postgres
+      - redis
+    restart: always
+
+  web:
+    build:
+      context: ./apps/web
+      dockerfile: Dockerfile
+    container_name: xlayout_web
+    environment:
+      - NEXT_PUBLIC_API_URL=/api
+    depends_on:
+      - api
+    restart: always
+
+  nginx:
+    image: nginx:alpine
+    container_name: xlayout_nginx
+    ports:
+      - "80:80"
+    volumes:
+      - ./nginx.conf:/etc/nginx/nginx.conf:ro
+      - /opt/xlayout/storage:/opt/xlayout/storage:ro
+    depends_on:
+      - web
+      - api
+    restart: always
+
+volumes:
+  xlayout_pgdata:
