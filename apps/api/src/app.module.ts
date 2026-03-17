@@ -1,4 +1,4 @@
-import { Module } from '@nestjs/common';
+import { Module, NestModule, MiddlewareConsumer } from '@nestjs/common';
 import { AppController } from './app.controller';
 import { AppService } from './app.service';
 import { BullModule } from '@nestjs/bullmq';
@@ -9,6 +9,17 @@ import { CatalogModule } from './catalog/catalog.module';
 import { PricingModule } from './pricing/pricing.module';
 import { ProjectsModule } from './projects/projects.module';
 import { ImportsModule } from './imports/imports.module';
+// ── Master SaaS Backend Modules (master-backend-v1) ────────
+import { PlatformUsersModule } from './platform-users/platform-users.module';
+import { TenantsModule } from './tenants/tenants.module';
+import { CompanyUsersModule } from './company-users/company-users.module';
+import { EndUsersModule } from './end-users/end-users.module';
+import { CatalogAccessModule } from './catalog-access/catalog-access.module';
+import { ActivationCodesModule } from './activation-codes/activation-codes.module';
+import { AuditModule } from './audit/audit.module';
+import { PlatformInfoModule } from './platform-info/platform-info.module';
+import { CompanyInfoModule } from './company-info/company-info.module';
+import { TenantMiddleware } from './prisma/tenant.middleware';
 
 @Module({
   imports: [
@@ -19,14 +30,29 @@ import { ImportsModule } from './imports/imports.module';
         port: parseInt(process.env.REDIS_PORT || '6379', 10),
       },
     }),
+    // ── Legacy / existing modules ───────
     AuthModule,
     OrganizationsModule,
     CatalogModule,
     PricingModule,
     ProjectsModule,
     ImportsModule,
+    // ── Master SaaS Backend v1 ──────────
+    PlatformUsersModule,
+    TenantsModule,
+    CompanyUsersModule,
+    EndUsersModule,
+    CatalogAccessModule,
+    ActivationCodesModule,
+    AuditModule,
+    PlatformInfoModule,
+    CompanyInfoModule,
   ],
   controllers: [AppController],
   providers: [AppService],
 })
-export class AppModule {}
+export class AppModule implements NestModule {
+  configure(consumer: MiddlewareConsumer) {
+    consumer.apply(TenantMiddleware).forRoutes('*');
+  }
+}

@@ -10,7 +10,7 @@ export class ProjectsService {
   ) {}
 
   async createProject(tenantId: string, userId: string, data: { name: string; description?: string }) {
-    return this.prisma.project.create({
+    return this.prisma.client.project.create({
       data: {
         ...data,
         tenantId,
@@ -20,7 +20,7 @@ export class ProjectsService {
   }
 
   async getProjects(tenantId: string) {
-    return this.prisma.project.findMany({
+    return this.prisma.client.project.findMany({
       where: { tenantId },
       include: {
         creator: { select: { id: true, firstName: true, lastName: true } },
@@ -30,7 +30,7 @@ export class ProjectsService {
   }
 
   async getProjectById(tenantId: string, projectId: string) {
-    const project = await this.prisma.project.findFirst({
+    const project = await this.prisma.client.project.findFirst({
       where: { id: projectId, tenantId },
       include: { versions: true }
     });
@@ -43,11 +43,11 @@ export class ProjectsService {
     // Basic verification that project belongs to tenant
     await this.getProjectById(tenantId, projectId);
 
-    const versionNum = await this.prisma.projectVersion.count({
+    const versionNum = await this.prisma.client.projectVersion.count({
       where: { projectId }
     }) + 1;
 
-    const version = await this.prisma.projectVersion.create({
+    const version = await this.prisma.client.projectVersion.create({
       data: {
         projectId,
         versionNum,
@@ -60,7 +60,7 @@ export class ProjectsService {
     if (placements.length > 0) {
        const quoteData = await this.pricingEngine.calculateQuote(tenantId, placements);
        
-       await this.prisma.quote.create({
+       await this.prisma.client.quote.create({
          data: {
            tenantId,
            projectVersionId: version.id,
@@ -75,7 +75,7 @@ export class ProjectsService {
   }
 
   async getQuotes(tenantId: string, projectId: string) {
-    return this.prisma.quote.findMany({
+    return this.prisma.client.quote.findMany({
       where: { 
         tenantId,
         projectVersion: { projectId }

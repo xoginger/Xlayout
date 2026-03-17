@@ -1,24 +1,25 @@
 import { Injectable } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
-import { Product } from '@prisma/client';
 
 export interface PricingStrategy {
-  calculatePrice(product: Product, rules: any[]): number;
+  calculatePrice(product: any, rules: any[]): number;
 }
 
 export class BasePriceStrategy implements PricingStrategy {
-  calculatePrice(product: Product): number {
-    return Number(product.basePrice);
+  calculatePrice(product: any): number {
+    const defaultPrice = product.prices?.[0]?.basePrice;
+    return defaultPrice ? Number(defaultPrice) : 0;
   }
 }
 
 export class BrandDiscountStrategy implements PricingStrategy {
-  calculatePrice(product: Product, rules: any[]): number {
-    let finalPrice = Number(product.basePrice);
+  calculatePrice(product: any, rules: any[]): number {
+    const defaultPrice = product.prices?.[0]?.basePrice;
+    let finalPrice = defaultPrice ? Number(defaultPrice) : 0;
     
-    // Find applicable rule for this brand
+    // Find applicable rule for this line (replacing brand)
     const brandRule = rules.find(
-      r => r.strategyType === 'BrandDiscountStrategy' && r.configPayload?.brandId === product.brandId
+      r => r.strategyType === 'BrandDiscountStrategy' && r.configPayload?.lineId === product.lineId
     );
 
     if (brandRule) {
@@ -36,7 +37,7 @@ export class PricingEngineService {
 
   async calculateQuote(tenantId: string, placements: any[]) {
     // 1. Fetch active discount rules for the tenant
-    const rules = await this.prisma.discountRule.findMany({
+    const rules = await this.prisma.client.discountRule.findMany({
       where: { tenantId, active: true },
       orderBy: { priority: 'desc' }
     });
@@ -48,13 +49,15 @@ export class PricingEngineService {
 
     // 2. Fetch products details and apply rules
     for (const item of placements) {
-      const product = await this.prisma.product.findUnique({
-        where: { id: item.productId }
+      const product = await this.prisma.client.product.findUnique({
+        where: { id: item.productId },
+        include: { prices: { where: { active: true } } }
       });
 
       if (!product) continue;
 
-      let itemPrice = Number(product.basePrice);
+      const defaultPrice = product.prices?.[0]?.basePrice;
+      let itemPrice = defaultPrice ? Number(defaultPrice) : 0;
 
       // Apply strategies consecutively (basic pipeline example)
       strategies.forEach(strategy => {
@@ -76,7 +79,7 @@ export class PricingEngineService {
   }
 
   async getPriceLists(tenantId: string) {
-    return this.prisma.priceList.findMany({
+    return this.prisma.client.priceList.findMany({
       where: { companies: { some: { companyId: tenantId } } }
     });
   }

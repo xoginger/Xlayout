@@ -1,95 +1,162 @@
-import { PrismaClient, CompanyType, ProductStatus } from '@prisma/client';
+/**
+ * XLayout Master SaaS Backend — Seed
+ * Version: master-backend-v1 | Build: 2026-03-16
+ * -----------------------------------------------
+ * Seeds:
+ *   - Platform user: Xocotzin (platform_owner)
+ *   - Tenant: PM La Piedad (pm-lapiedad)
+ *   - Tenant: Demo Brand (demo-brand)
+ *   - CompanyUser: admin@pmlapiedad.com (tenant_admin)
+ *   - CompanyUser: admin@demobrand.com  (tenant_admin)
+ *   - ActivationCode: example code for PM La Piedad
+ *   - ProductLines: Terra, Lockers, Archiveros, Racks for PM La Piedad
+ *   - ProductLines: Office, Storage for Demo Brand
+ */
+
+import 'dotenv/config';
+import { PrismaClient } from '@prisma/client';
 
 const prisma = new PrismaClient();
 
 async function main() {
-  console.log('Starting seed...');
+  console.log('🌱 XLayout SaaS Seed — master-backend-v1');
 
-  // 1. Roles
-  const rolesData = ['ADMIN', 'DESIGNER', 'SALES', 'MANAGER', 'VIEWER'];
-  const roles = await Promise.all(
-    rolesData.map(name => prisma.role.upsert({
-      where: { name },
-      update: {},
-      create: { name, description: `${name} Role` }
-    }))
-  );
+  // ── Platform Owner: Xocotzin ─────────────────────────────
+  const xocotzin = await prisma.platformUser.upsert({
+    where: { email: 'xocotzin@xlayout.io' },
+    update: {},
+    create: {
+      email: 'xocotzin@xlayout.io',
+      passwordHash: Buffer.from('admin2026!').toString('base64'), // Use bcrypt in production
+      firstName: 'Xocotzin',
+      lastName: 'Platform',
+      role: 'PLATFORM_OWNER' as any,
+      status: 'ACTIVE',
+    },
+  });
+  console.log('✓ PlatformUser: Xocotzin →', xocotzin.id);
 
-  // 2. Companies
-  const c1 = await prisma.company.create({ data: { name: 'XLayout Platform', type: CompanyType.PLATFORM_OWNER } });
-  const c2 = await prisma.company.create({ data: { name: 'Global Manufacturers', type: CompanyType.MANUFACTURER } });
-  const c3 = await prisma.company.create({ data: { name: 'Distributor Alpha', type: CompanyType.DISTRIBUTOR } });
+  // ── Tenant 1: PM La Piedad ───────────────────────────────
+  const tenantPM = await prisma.tenant.upsert({
+    where: { slug: 'pm-lapiedad' },
+    update: {},
+    create: {
+      name: 'PM La Piedad',
+      slug: 'pm-lapiedad',
+      contactEmail: 'contacto@pmlapiedad.com',
+      status: 'ACTIVE' as any,
+      createdById: xocotzin.id,
+      metadata: { country: 'MX', industry: 'furniture' },
+    },
+  });
+  console.log('✓ Tenant: PM La Piedad →', tenantPM.id);
 
-  // 3. Brands (associated with Manufacturer)
-  const b1 = await prisma.brand.create({ data: { name: 'PM La Piedad', tenantId: c2.id } });
-  const b2 = await prisma.brand.create({ data: { name: 'Offiho', tenantId: c2.id } });
-  const b3 = await prisma.brand.create({ data: { name: 'Interstuhl', tenantId: c2.id } });
+  // ── Tenant 2: Demo Brand ─────────────────────────────────
+  const tenantDemo = await prisma.tenant.upsert({
+    where: { slug: 'demo-brand' },
+    update: {},
+    create: {
+      name: 'Demo Brand',
+      slug: 'demo-brand',
+      contactEmail: 'admin@demobrand.io',
+      status: 'ACTIVE' as any,
+      createdById: xocotzin.id,
+      metadata: { country: 'MX', industry: 'demo' },
+    },
+  });
+  console.log('✓ Tenant: Demo Brand →', tenantDemo.id);
 
-  // 4. Lines & Categories (10 lines total distributed)
-  const cat = await prisma.productCategory.create({ data: { name: 'Chairs' } });
-  const brands = [b1, b2, b3];
-  const lines = [];
-  
-  for (let i = 0; i < 10; i++) {
-    const brand = brands[i % 3];
-    const line = await prisma.productLine.create({
-       data: { name: `Line ${i + 1}`, brandId: brand.id }
-    });
-    lines.push({ line, brand });
-  }
+  // ── Company Users ────────────────────────────────────────
+  const adminPM = await prisma.companyUser.upsert({
+    where: { email: 'admin@pmlapiedad.com' },
+    update: {},
+    create: {
+      tenantId: tenantPM.id,
+      email: 'admin@pmlapiedad.com',
+      passwordHash: Buffer.from('pmadmin2026!').toString('base64'),
+      firstName: 'Admin',
+      lastName: 'PM La Piedad',
+      role: 'TENANT_ADMIN' as any,
+      status: 'ACTIVE',
+    },
+  });
+  console.log('✓ CompanyUser: admin@pmlapiedad.com →', adminPM.id);
 
-  // 5. Products (40 products)
-  for (let i = 0; i < 40; i++) {
-    const { line, brand } = lines[i % 10];
-    await prisma.product.create({
-      data: {
-        sku: `SKU-${1000 + i}`,
-        name: `${brand.name} Product ${i+1}`,
-        brandId: brand.id,
-        lineId: line.id,
-        categoryId: cat.id,
-        width: 60, depth: 60, height: 100,
-        basePrice: 150 + (i * 10),
-        status: ProductStatus.PUBLISHED
-      }
-    });
-  }
+  const adminDemo = await prisma.companyUser.upsert({
+    where: { email: 'admin@demobrand.io' },
+    update: {},
+    create: {
+      tenantId: tenantDemo.id,
+      email: 'admin@demobrand.io',
+      passwordHash: Buffer.from('demoadmin2026!').toString('base64'),
+      firstName: 'Admin',
+      lastName: 'Demo Brand',
+      role: 'TENANT_ADMIN' as any,
+      status: 'ACTIVE',
+    },
+  });
+  console.log('✓ CompanyUser: admin@demobrand.io →', adminDemo.id);
 
-  // 6. Price Lists & Discounts
-  const pl1 = await prisma.priceList.create({ data: { name: 'Standard USD' } });
-  const pl2 = await prisma.priceList.create({ data: { name: 'Retail USD' } });
-
-  await prisma.companyPriceList.create({ data: { companyId: c3.id, priceListId: pl1.id } });
-
-  const discountStrategies = [
-    { name: '10% PM La Piedad', type: 'BrandDiscountStrategy', payload: { brandId: b1.id, discountPercent: 10 } },
-    { name: '5% Offiho', type: 'BrandDiscountStrategy', payload: { brandId: b2.id, discountPercent: 5 } },
-    { name: '15% Interstuhl', type: 'BrandDiscountStrategy', payload: { brandId: b3.id, discountPercent: 15 } },
-    { name: 'Volume > 50', type: 'VolumeDiscountStrategy', payload: { minQty: 50, discountPercent: 12 } },
-    { name: 'Volume > 100', type: 'VolumeDiscountStrategy', payload: { minQty: 100, discountPercent: 20 } },
-    { name: 'Holiday Promo', type: 'PromotionalRuleStrategy', payload: { globalDiscountPercent: 5 } },
+  // ── Product Lines — PM La Piedad ─────────────────────────
+  const linesSeed = [
+    { name: 'Terra', slug: 'terra', category: 'desk', description: 'Escritorios y mesas de trabajo' },
+    { name: 'Lockers', slug: 'lockers', category: 'locker', description: 'Casilleros y armarios de seguridad' },
+    { name: 'Archiveros', slug: 'archiveros', category: 'filing-cabinet', description: 'Archiveros metálicos' },
+    { name: 'Racks', slug: 'racks', category: 'rack', description: 'Almacenamiento selectivo para bodega' },
   ];
-
-  for (const ds of discountStrategies) {
-    await prisma.discountRule.create({
-      data: {
-        tenantId: c3.id,
-        name: ds.name,
-        strategyType: ds.type,
-        configPayload: ds.payload,
-        active: true
-      }
+  for (const l of linesSeed) {
+    await prisma.productLine.upsert({
+      where: { tenantId_slug: { tenantId: tenantPM.id, slug: l.slug } },
+      update: {},
+      create: { tenantId: tenantPM.id, ...l, active: true },
     });
   }
+  console.log('✓ ProductLines: Terra, Lockers, Archiveros, Racks → PM La Piedad');
 
-  console.log('Seed completed successfully!');
+  // ── Product Lines — Demo Brand ────────────────────────────
+  const demoLines = [
+    { name: 'Office', slug: 'office', category: 'desk', description: 'Demo office furniture' },
+    { name: 'Storage', slug: 'storage', category: 'storage', description: 'Demo storage solutions' },
+  ];
+  for (const l of demoLines) {
+    await prisma.productLine.upsert({
+      where: { tenantId_slug: { tenantId: tenantDemo.id, slug: l.slug } },
+      update: {},
+      create: { tenantId: tenantDemo.id, ...l, active: true },
+    });
+  }
+  console.log('✓ ProductLines: Office, Storage → Demo Brand');
+
+  // ── Activation Code — PM La Piedad ───────────────────────
+  await prisma.activationCode.upsert({
+    where: { code: 'PMLAPIEDAD-DEMO' },
+    update: {},
+    create: {
+      tenantId: tenantPM.id,
+      code: 'PMLAPIEDAD-DEMO',
+      catalogEnabled: true,
+      pricesEnabled: true,
+      conditionsEnabled: false,
+      maxUses: 100,
+      active: true,
+    },
+  });
+  console.log('✓ ActivationCode: PMLAPIEDAD-DEMO');
+
+  // ── Audit Log — seed action ──────────────────────────────
+  await prisma.auditLog.create({
+    data: {
+      actorType: 'PLATFORM_USER',
+      actorId: xocotzin.id,
+      action: 'SEED_COMPLETE',
+      entityType: 'system',
+      payload: { version: 'master-backend-v1', build: '2026-03-16' },
+    },
+  });
+
+  console.log('\n✅ Seed completed — Module: Master SaaS Backend | Version: master-backend-v1');
 }
 
 main()
-  .catch(e => {
-    console.error(e);
-    process.exit(1);
-  })
-  .finally(async () => {
-    await prisma.$disconnect();
-  });
+  .catch(console.error)
+  .finally(() => prisma.$disconnect());

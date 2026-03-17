@@ -21,7 +21,7 @@ export class ImportsProcessor extends WorkerHost {
       await job.updateProgress(60);
       
       // Stub: insert rows to prisma...
-      // await this.prisma.product.createMany({...})
+      // await this.prisma.client.product.createMany({...})
       
       await job.updateProgress(100);
       return { success: true, rowsInserted: 1500, type: 'catalog' };

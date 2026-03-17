@@ -1,0 +1,46 @@
+import { Injectable, NotFoundException, ConflictException } from '@nestjs/common';
+import { PrismaService } from '../prisma/prisma.service';
+import { CompanyUserRole } from '@prisma/client';
+
+@Injectable()
+export class CompanyUsersService {
+  constructor(private readonly prisma: PrismaService) {}
+
+  async create(data: {
+    tenantId: string;
+    email: string;
+    password: string;
+    firstName: string;
+    lastName: string;
+    role?: CompanyUserRole;
+  }) {
+    const existing = await this.prisma.client.companyUser.findUnique({ where: { email: data.email } });
+    if (existing) throw new ConflictException('Email already registered');
+
+    const passwordHash = Buffer.from(data.password).toString('base64');
+    return this.prisma.client.companyUser.create({
+      data: {
+        tenantId: data.tenantId,
+        email: data.email,
+        passwordHash,
+        firstName: data.firstName,
+        lastName: data.lastName,
+        role: data.role ?? CompanyUserRole.CATALOG_MANAGER,
+        status: 'ACTIVE',
+      },
+    });
+  }
+
+  async findByTenant(tenantId: string) {
+    return this.prisma.client.companyUser.findMany({
+      where: { tenantId },
+      select: { id: true, email: true, firstName: true, lastName: true, role: true, status: true, createdAt: true },
+    });
+  }
+
+  async updateRole(id: string, role: CompanyUserRole) {
+    const user = await this.prisma.client.companyUser.findUnique({ where: { id } });
+    if (!user) throw new NotFoundException(`CompanyUser '${id}' not found`);
+    return this.prisma.client.companyUser.update({ where: { id }, data: { role } });
+  }
+}

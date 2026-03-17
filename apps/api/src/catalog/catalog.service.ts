@@ -1,79 +1,240 @@
-import { Injectable, NotFoundException, ForbiddenException } from '@nestjs/common';
+import { Injectable, ForbiddenException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
-import { ProductStatus } from '@prisma/client';
 
 @Injectable()
 export class CatalogService {
   constructor(private prisma: PrismaService) {}
 
   async createBrand(tenantId: string, data: { name: string; description?: string; logoUrl?: string }) {
-    return this.prisma.brand.create({
-      data: { ...data, tenantId },
+    return this.prisma.client.brand.create({
+      data: { ...data, tenantId: tenantId || undefined },
     });
   }
 
   async getBrands(tenantId: string) {
-    // Only return brands owned by the tenant or brands they have access to
-    return this.prisma.brand.findMany({
+    return this.prisma.client.brand.findMany({
       where: {
         OR: [
-          { tenantId },
-          { accessRules: { some: { companyId: tenantId } } },
+          { tenantId: tenantId || undefined },
+          { accessRules: { some: { companyId: tenantId || undefined } } },
         ],
       },
     });
   }
 
-  async createProductLine(brandId: string, name: string) {
-    return this.prisma.productLine.create({
-      data: { brandId, name },
+  async createProductLine(tenantId: string, name: string) {
+    return this.prisma.client.productLine.create({
+      data: { tenantId: tenantId || undefined, name, slug: name.toLowerCase().replace(/\s+/g, '-') },
     });
   }
 
-  async createCategory(name: string, parentId?: string) {
-    return this.prisma.productCategory.create({
-      data: { name, parentId },
+  async getProductLines(tenantId: string) {
+    return this.prisma.client.productLine.findMany({
+      where: { tenantId: tenantId || undefined },
+      orderBy: { createdAt: 'desc' },
     });
   }
 
-  async createProduct(tenantId: string, data: {
-    sku: string;
-    name: string;
-    brandId: string;
-    lineId: string;
-    categoryId: string;
-    width: number;
-    depth: number;
-    height: number;
-    basePrice: number;
-    metadata?: any;
-  }) {
-    // Verify brand ownership
-    const brand = await this.prisma.brand.findUnique({ where: { id: data.brandId } });
-    if (!brand || brand.tenantId !== tenantId) {
-      throw new ForbiddenException('You can only create products for your own brands');
+  async updateProductLine(tenantId: string, id: string, data: { active?: boolean }) {
+    const line = await this.prisma.client.productLine.findUnique({ where: { id } });
+    if (!line || line.tenantId !== tenantId) {
+      throw new ForbiddenException('You can only update your own product lines');
+    }
+    return this.prisma.client.productLine.update({
+      where: { id },
+      data,
+    });
+  }
+
+  async createCategory(tenantId: string, name: string, parentId?: string) {
+    return this.prisma.client.productCategory.create({
+      data: { tenantId: tenantId || undefined, name, slug: name.toLowerCase().replace(/\s+/g, '-'), parentId: parentId || undefined },
+    });
+  }
+
+  async getCategories(tenantId: string) {
+    return this.prisma.client.productCategory.findMany({
+      where: { tenantId: tenantId || undefined },
+      orderBy: { createdAt: 'desc' },
+      include: { parent: true }
+    });
+  }
+
+  async updateCategoryStatus(tenantId: string, id: string, data: { active?: boolean }) {
+    const category = await this.prisma.client.productCategory.findUnique({ where: { id } });
+    if (!category || category.tenantId !== tenantId) {
+      throw new ForbiddenException('You can only update your own categories');
+    }
+    return this.prisma.client.productCategory.update({
+      where: { id },
+      data,
+    });
+  }
+
+  async createProduct(tenantId: string, data: any) {
+    const line = await this.prisma.client.productLine.findUnique({ where: { id: data.lineId } });
+    if (!line || line.tenantId !== tenantId) {
+      throw new ForbiddenException('You can only create products for your own lines');
     }
 
-    return this.prisma.product.create({
-      data: {
-        ...data,
-      },
+    return this.prisma.client.product.create({
+      data: { ...data, tenantId: tenantId || undefined },
+    });
+  }
+
+  async createProductPrice(tenantId: string, productId: string, data: any) {
+    const product = await this.prisma.client.product.findUnique({ where: { id: productId } });
+    if (!product || product.tenantId !== tenantId) {
+      throw new ForbiddenException('You can only create prices for your own products');
+    }
+
+    return this.prisma.client.productPrice.create({
+      data: { ...data, tenantId: tenantId || undefined, productId },
     });
   }
 
   async getProducts(tenantId: string, filters?: any) {
-    // Complex query: A user can see products if their company owns the brand OR has explicit access to it
-    return this.prisma.product.findMany({
-      where: {
-        brand: {
-          OR: [
-            { tenantId },
-            { accessRules: { some: { companyId: tenantId } } },
-          ],
-        },
-        ...filters,
-      },
-      include: { brand: true, line: true, category: true },
+    return this.prisma.client.product.findMany({
+      where: { tenantId: tenantId || undefined, ...filters },
+      orderBy: { createdAt: 'desc' },
+      include: { line: true, category: true, prices: true },
+    });
+  }
+
+  async updateProductStatus(tenantId: string, id: string, data: { active?: boolean }) {
+    const product = await this.prisma.client.product.findUnique({ where: { id } });
+    if (!product || product.tenantId !== tenantId) {
+      throw new ForbiddenException('You can only update your own products');
+    }
+    return this.prisma.client.product.update({
+      where: { id },
+      data,
+    });
+  }
+
+  async getAssets(tenantId: string) {
+    return this.prisma.client.productAsset.findMany({
+      where: { tenantId: tenantId || undefined },
+      orderBy: { createdAt: 'desc' },
+      include: { product: true }
+    });
+  }
+
+  async createAsset(tenantId: string, data: any) {
+    const product = await this.prisma.client.product.findUnique({ where: { id: data.productId } });
+    if (!product || product.tenantId !== tenantId) {
+      throw new ForbiddenException('You can only add assets to your own products');
+    }
+    return this.prisma.client.productAsset.create({
+      data: { ...data, tenantId: tenantId || undefined },
+    });
+  }
+
+  async getConditions(tenantId: string) {
+    return this.prisma.client.productCondition.findMany({
+      where: { tenantId: tenantId || undefined },
+      orderBy: { createdAt: 'desc' },
+      include: { product: true, line: true }
+    });
+  }
+
+  async createCondition(tenantId: string, data: { productId?: string; lineId?: string; conditionType: string; description: string }) {
+    return this.prisma.client.productCondition.create({
+      data: { ...data, tenantId: tenantId || undefined },
+    });
+  }
+
+  async updateConditionStatus(tenantId: string, id: string, data: { active?: boolean }) {
+    const condition = await this.prisma.client.productCondition.findUnique({ where: { id } });
+    if (!condition || condition.tenantId !== tenantId) {
+      throw new ForbiddenException('You can only update your own conditions');
+    }
+    return this.prisma.client.productCondition.update({
+      where: { id },
+      data,
+    });
+  }
+
+  async getPrices(tenantId: string) {
+    return this.prisma.client.productPrice.findMany({
+      where: { tenantId: tenantId || undefined },
+      orderBy: { createdAt: 'desc' },
+      include: { product: true }
+    });
+  }
+
+  async updatePriceStatus(tenantId: string, id: string, data: { active?: boolean }) {
+    const price = await this.prisma.client.productPrice.findUnique({ where: { id } });
+    if (!price || price.tenantId !== tenantId) {
+      throw new ForbiddenException('You can only update your own prices');
+    }
+    return this.prisma.client.productPrice.update({
+      where: { id },
+      data,
+    });
+  }
+
+  async getAvailableCatalog(userId: string, userType: string) {
+    let tenantAccessMap = new Map<string, { pricesEnabled: boolean }>();
+
+    if (userType === 'PLATFORM_USER') {
+      const activeTenants = await this.prisma.client.tenant.findMany({ where: { status: 'ACTIVE' } });
+      activeTenants.forEach((t: any) => tenantAccessMap.set(t.id, { pricesEnabled: true }));
+    } else if (userType === 'COMPANY_USER') {
+      const user = await this.prisma.client.companyUser.findUnique({ where: { id: userId } });
+      if (user) tenantAccessMap.set(user.tenantId, { pricesEnabled: true });
+    } else if (userType === 'END_USER') {
+      const accesses = await this.prisma.client.catalogAccess.findMany({
+        where: { endUserId: userId, active: true, catalogEnabled: true },
+      });
+      accesses.forEach((a: any) => tenantAccessMap.set(a.tenantId, { pricesEnabled: a.pricesEnabled }));
+    }
+
+    const tenantIds = Array.from(tenantAccessMap.keys());
+    if (tenantIds.length === 0) return [];
+
+    const tenantsData = await this.prisma.client.tenant.findMany({
+      where: { id: { in: tenantIds } },
+      include: {
+        productLines: {
+          where: { active: true },
+          include: {
+            products: {
+              where: { active: true },
+              include: {
+                prices: { where: { active: true } },
+                assets: true
+              }
+            }
+          }
+        }
+      }
+    });
+
+    return tenantsData.map((tenant: any) => {
+      const access = tenantAccessMap.get(tenant.id);
+      return {
+        tenantId: tenant.id,
+        tenantName: tenant.name,
+        lines: tenant.productLines.map((line: any) => ({
+          lineId: line.id,
+          lineName: line.name,
+          products: line.products.map((product: any) => {
+            const activePrice = product.prices[0];
+            return {
+              productId: product.id,
+              name: product.name,
+              sku: product.sku,
+              width: product.width,
+              depth: product.depth,
+              height: product.height,
+              price: access?.pricesEnabled && activePrice ? Number(activePrice.basePrice) : null,
+              hasPriceAccess: access?.pricesEnabled ?? false,
+              thumbnail: product.assets.find((a: any) => a.assetType === 'thumbnail')?.fileUrl || null
+            };
+          })
+        }))
+      };
     });
   }
 }

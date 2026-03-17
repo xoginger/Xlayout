@@ -1,44 +1,48 @@
-import { Injectable, OnModuleInit, Scope, Inject } from '@nestjs/common';
-import { REQUEST } from '@nestjs/core';
+import { Injectable, OnModuleInit } from '@nestjs/common';
 import { PrismaClient } from '@prisma/client';
+import { AsyncLocalStorage } from 'async_hooks';
 
-// Make PrismaService request-scoped so we can retrieve the tenantId injected by TenantGuard
-@Injectable({ scope: Scope.REQUEST })
-export class PrismaService extends PrismaClient implements OnModuleInit {
-  constructor(@Inject(REQUEST) private readonly request: any) {
-    super();
+@Injectable()
+export class PrismaService implements OnModuleInit {
+  private static _baseClient: PrismaClient;
+  private static readonly als = new AsyncLocalStorage<{ tenantId: string }>();
+
+  constructor() {}
+
+  static setTenantId(tenantId: string, callback: () => any) {
+    return this.als.run({ tenantId }, callback);
+  }
+
+  private static getBaseClient(): PrismaClient {
+    if (!PrismaService._baseClient) {
+      PrismaService._baseClient = new PrismaClient({
+        log: ['error'],
+      });
+    }
+    return PrismaService._baseClient;
   }
 
   async onModuleInit() {
-    await this.$connect();
+    await PrismaService.getBaseClient().$connect();
   }
 
-  // Extension for Tenant Row-Level Security
-  // We use Prisma Client Extensions to wrap all queries dynamically
   public get client(): any {
-    const tenantId = this.request.tenantId;
+    const context = PrismaService.als.getStore();
+    const tenantId = context?.tenantId;
 
     if (!tenantId) {
-      // If no tenantId, return normal client (e.g. for Auth/Login routes or Admin functions)
-      return this;
+      return PrismaService.getBaseClient();
     }
+    
+    const base = PrismaService.getBaseClient();
 
-    // Return an extended client that injects PostgreSQL SET LOCAL directives
-    return this.$extends({
+    return (base as any).$extends({
       query: {
          $allModels: {
-            async $allOperations({ model, operation, args, query }) {
-               const self = this as any;
-               
-               // We run the queries in an interactive transaction to guarantee RLS session scoping
-               // Note: We cast to any to access the model dynamically on the transaction object
-               return (self as PrismaClient).$transaction(async (tx: any) => {
-                  // 1. Inject the Postgres local variable for this transaction
+            async $allOperations({ model, operation, args, query }: any) {
+               const self = PrismaService.getBaseClient() as any;
+               return self.$transaction(async (tx: any) => {
                   await tx.$executeRaw`SELECT set_config('app.current_tenant', ${tenantId}, true)`;
-                  
-                  // 2. Execute original query
-                  // Prisma model names in $allOperations are PascalCase (e.g., 'User')
-                  // but property keys on 'tx' are camelCase (e.g., 'user').
                   const modelName = model.charAt(0).toLowerCase() + model.slice(1);
                   return tx[modelName][operation](args);
                });
@@ -46,5 +50,10 @@ export class PrismaService extends PrismaClient implements OnModuleInit {
          }
       }
     });
+  }
+
+  // Fallback for direct access if needed (caution: bypasses RLS if used improperly)
+  get baseClient() {
+    return PrismaService.getBaseClient();
   }
 }
