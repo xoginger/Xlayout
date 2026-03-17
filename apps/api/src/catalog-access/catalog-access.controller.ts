@@ -1,4 +1,4 @@
-import { Controller, Post, Get, Delete, Param, Body, UseGuards } from '@nestjs/common';
+import { Controller, Post, Get, Delete, Param, Body, UseGuards, Req } from '@nestjs/common';
 import { CatalogAccessService } from './catalog-access.service';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 
@@ -20,6 +20,18 @@ export class CatalogAccessController {
   }) {
     return this.service.grantAccess({
       ...body,
+      expiresAt: body.expiresAt ? new Date(body.expiresAt) : undefined,
+    });
+  }
+
+  /** POST /catalog-access/by-email — Grant access to an end user via email */
+  @Post('by-email')
+  grantByEmail(@Req() req: any, @Body() body: any) {
+    return this.service.grantAccessByEmail(req.tenantId, body.email, {
+      catalogEnabled: body.catalogEnabled,
+      pricesEnabled: body.pricesEnabled,
+      conditionsEnabled: body.conditionsEnabled,
+      activatedByUserId: req.user.sub,
       expiresAt: body.expiresAt ? new Date(body.expiresAt) : undefined,
     });
   }

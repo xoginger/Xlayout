@@ -1,10 +1,14 @@
 import { Injectable } from '@nestjs/common';
 import { InjectQueue } from '@nestjs/bullmq';
 import { Queue } from 'bullmq';
+import { PrismaService } from '../prisma/prisma.service';
 
 @Injectable()
 export class ImportsService {
-  constructor(@InjectQueue('imports') private importsQueue: Queue) {}
+  constructor(
+    @InjectQueue('imports') private importsQueue: Queue,
+    private readonly prisma: PrismaService
+  ) {}
 
   async triggerImport(tenantId: string, type: 'catalog' | 'prices', fileUrl: string) {
     const job = await this.importsQueue.add('process-import', {
@@ -14,6 +18,18 @@ export class ImportsService {
       timestamp: Date.now()
     });
     
+    // Create a database record for historical tracking
+    await this.prisma.client.importJob.create({
+      data: {
+        id: job.id,
+        tenantId,
+        type: type.toUpperCase(),
+        filename: fileUrl.split('/').pop() || 'upload.csv',
+        status: 'PENDING',
+        createdById: 'system', // or the actual user ID if passed
+      }
+    });
+
     return {
       message: 'Import queued successfully',
       jobId: job.id
@@ -23,6 +39,9 @@ export class ImportsService {
   async getImportStatus(jobId: string) {
     const job = await this.importsQueue.getJob(jobId);
     if (!job) {
+      // Check database as fallback
+      const dbJob = await this.prisma.client.importJob.findUnique({ where: { id: jobId } });
+      if (dbJob) return dbJob;
       return { status: 'NOT_FOUND' };
     }
     
@@ -33,5 +52,13 @@ export class ImportsService {
       result: job.returnvalue,
       failedReason: job.failedReason
     };
+  }
+
+  async getImportsByTenant(tenantId: string) {
+    return this.prisma.client.importJob.findMany({
+      where: { tenantId },
+      orderBy: { createdAt: 'desc' },
+      take: 50
+    });
   }
 }

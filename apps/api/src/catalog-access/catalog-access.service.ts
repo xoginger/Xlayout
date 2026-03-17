@@ -39,6 +39,19 @@ export class CatalogAccessService {
     return this.prisma.client.catalogAccess.create({ data: { ...data, active: true } });
   }
 
+  /** Grant access looking up by email */
+  async grantAccessByEmail(tenantId: string, email: string, data: any) {
+    const endUser = await this.prisma.client.endUser.findUnique({ where: { email } });
+    if (!endUser) {
+      throw new NotFoundException('End user not found with this email. They must register first.');
+    }
+    return this.grantAccess({
+      ...data,
+      tenantId,
+      endUserId: endUser.id,
+    });
+  }
+
   /** List all accesses for a tenant */
   async findByTenant(tenantId: string) {
     return this.prisma.client.catalogAccess.findMany({

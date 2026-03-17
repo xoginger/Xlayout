@@ -13,6 +13,11 @@ export class ImportsController {
     return this.importsService.triggerImport(req.tenantId, body.type, body.fileUrl);
   }
 
+  @Get()
+  async getImports(@Req() req: any) {
+    return this.importsService.getImportsByTenant(req.tenantId);
+  }
+
   @Get(':id/status')
   async getStatus(@Param('id') id: string) {
     return this.importsService.getImportStatus(id);
