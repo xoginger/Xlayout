@@ -35,3 +35,19 @@ export interface LayoutSceneState {
     version: number;
   };
 }
+
+// Command History Types for Undo/Redo Engine
+export interface ICommand {
+  execute(state: LayoutSceneState): LayoutSceneState;
+  undo(state: LayoutSceneState): LayoutSceneState;
+}
+
+// Spatial Index Bounding Box Type (RBush compatible)
+export interface SpatialBoundingBox {
+  minX: number;
+  minY: number;
+  maxX: number;
+  maxY: number;
+  id: string;      // ID of the placement or wall
+  type: 'wall' | 'placement';
+}

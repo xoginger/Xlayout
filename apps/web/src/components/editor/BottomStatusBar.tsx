@@ -30,7 +30,7 @@ export const BottomStatusBar: React.FC = () => {
       </div>
       
       <div className="flex items-center gap-6 h-full text-[9px] font-black uppercase tracking-widest text-zinc-500">
-        <VersionIndicator activeTool={activeTool} />
+        <VersionIndicator />
 
         <div className="flex items-center gap-3">
            <div className="flex items-center gap-1 hover:text-zinc-900 transition-all cursor-pointer">
@@ -59,38 +59,12 @@ export const BottomStatusBar: React.FC = () => {
   );
 };
 
-const TOOL_VERSIONS: Record<string, string> = {
-  select:    'transform-tool-v1',
-  rectangle: 'rectangle-tool-v1',
-  line:      'line-tool-v1',
-  wall:      'wall-color-parity-v1',
-  move:      'transform-tool-v1',
-  rotate:    'transform-tool-v1',
-  scale:     'transform-tool-v1',
-  duplicate: 'transform-tool-v1',
-  product:   'asset-library-toggle-v1',
-  pan:       'interior-ui-v1',
-  zoom:      'interior-ui-v1',
-  door:      'interior-ui-v1',
-  window:    'interior-ui-v1',
-  dimension: 'interior-ui-v1',
-};
-
-const VersionIndicator: React.FC<{ activeTool: string }> = ({ activeTool }) => {
-  const version = TOOL_VERSIONS[activeTool] ?? 'interior-ui-v1';
-  const isSelect = activeTool === 'select';
-  const isLine = activeTool === 'line';
-  const isRect = activeTool === 'rectangle';
-
+const VersionIndicator: React.FC = () => {
   return (
-    <div className={`flex items-center gap-2 px-3 py-1 rounded shadow-sm border transition-all ${
-      isSelect || isLine || isRect
-        ? 'bg-blue-50 border-blue-200 ring-1 ring-blue-500/20'
-        : 'bg-zinc-50 border-zinc-200'
-    }`}>
-      <span className="text-zinc-500">Theme: <span className={isSelect ? 'text-blue-600' : 'text-blue-600'}>Interior-UI</span></span>
+    <div className="flex items-center gap-2 px-3 py-1 rounded shadow-sm border bg-zinc-50 border-zinc-200">
+      <span className="text-zinc-500">Module: <span className="text-blue-600 font-black">Catalog Integration</span></span>
       <span className="text-zinc-300 mx-1">|</span>
-      <span className="text-zinc-500">Version: <span className={`font-black ${isSelect || isLine || isRect ? 'text-blue-700' : 'text-blue-600'}`}>{version}</span></span>
+      <span className="text-zinc-500">Version: <span className="font-black text-blue-700">catalog-live-v1</span></span>
       <span className="text-zinc-300 mx-1">|</span>
       <span className="text-zinc-400">Build: <span className="text-zinc-600">2026-03-16</span></span>
     </div>

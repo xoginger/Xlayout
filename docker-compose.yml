@@ -32,6 +32,8 @@ services:
       - REDIS_PORT=6379
       - JWT_SECRET=super_secret_jwt_key
       - PORT=3000
+      - PRISMA_QUERY_ENGINE_TYPE=binary
+      - PRISMA_CLI_QUERY_ENGINE_TYPE=binary
     depends_on:
       - postgres
       - redis
@@ -47,6 +49,8 @@ services:
       - DATABASE_URL=postgresql://xlayout_user:xlayout_password@postgres:5432/xlayout_db?schema=public
       - REDIS_HOST=redis
       - REDIS_PORT=6379
+      - PRISMA_QUERY_ENGINE_TYPE=binary
+      - PRISMA_CLI_QUERY_ENGINE_TYPE=binary
     depends_on:
       - postgres
       - redis

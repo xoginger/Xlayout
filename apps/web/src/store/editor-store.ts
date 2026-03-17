@@ -1,5 +1,4 @@
 import { create } from 'zustand';
-import type { ProductDefinition } from '@/types/catalog';
 
 export type SceneItemType = 'rack' | 'shelf' | 'desk' | 'cabinet' | 'catalog-item';
 export type OpeningType = 'door' | 'window';
@@ -33,28 +32,28 @@ export interface RectangleEntity {
   start: [number, number, number];
   end: [number, number, number];
   width: number;
-  depth: number;           // end.z - start.z  (Z dimension on the floor plane)
+  depth: number;
   type: 'rectangle';
-  category?: string;       // e.g. 'room', 'office', 'warehouse', 'area'
-  layer?: string;          // layer name this entity belongs to
-  label?: string;          // optional user-facing label
-  metadata?: Record<string, unknown>; // extensible meta
+  category?: string;
+  layer?: string;
+  label?: string;
+  metadata?: Record<string, unknown>;
 }
 
 export interface SceneItem {
   id: string;
+  productId: string;
+  tenantId: string;
   type: SceneItemType;
   position: [number, number, number];
   rotation: [number, number, number];
   scale: [number, number, number];
-  /** Links back to ProductDefinition.id — null for legacy placed items */
-  productId?: string;
-  /** Snapshot of dimensions at insert time (avoids re-fetching catalog) */
-  boundingBox?: { width: number; depth: number; height: number };
-  /** Display name snapshot */
+  width: number;
+  depth: number;
+  height: number;
   label?: string;
-  /** Legacy dimensions field for backward compat */
-  dimensions?: { width: number; height: number; depth: number };
+  price?: number | null;
+  hasPriceAccess?: boolean;
 }
 
 export interface Wall {
@@ -69,7 +68,7 @@ export interface Opening {
   id: string;
   wallId: string;
   type: OpeningType;
-  offset: number; // Position along the wall (0 to 1)
+  offset: number;
   width: number;
   height: number;
 }
@@ -83,7 +82,6 @@ interface EditorState {
   rectangles: RectangleEntity[];
   layers: Layer[];
   
-  // UI State
   selectedId: string | null;
   selectedType: 'item' | 'wall' | 'opening' | 'dimension' | 'line' | 'rectangle' | null;
   activeTool: ToolType;
@@ -91,14 +89,11 @@ interface EditorState {
   gridSize: number;
   snapEnabled: boolean;
   showGrid: boolean;
-  /** Asset Library / Catalog panel visibility state */
   catalogPanelState: 'open' | 'collapsed' | 'hidden';
 
-  // History
   history: any[];
   historyIndex: number;
 
-  // Actions
   addItem: (item: SceneItem) => void;
   addWall: (wall: Wall) => void;
   addOpening: (opening: Opening) => void;
@@ -112,9 +107,8 @@ interface EditorState {
   toggleLayer: (id: string) => void;
   removeItem: (id: string) => void;
   duplicateItem: (id: string) => void;
-  /** Insert a product from the catalog into the scene */
-  insertSceneItem: (productId: string, productDef: ProductDefinition) => void;
-  select: (id: string | null, type?: 'item' | 'wall' | 'opening' | 'dimension' | 'line' | 'rectangle' | null) => void;
+  insertSceneItem: (productData: any, tenantId: string) => void;
+  select: (id: string | null, type?: any) => void;
   clearSelection: () => void;
   setActiveTool: (tool: ToolType) => void;
   setViewMode: (mode: ViewMode) => void;
@@ -168,19 +162,23 @@ export const useEditorStore = create<EditorState>((set, get) => ({
     set((state) => ({ items: [...state.items, item], selectedId: item.id, selectedType: 'item' }));
   },
 
-  insertSceneItem: (productId, productDef) => {
+  insertSceneItem: (productData, tenantId) => {
     get().saveToHistory();
-    const bb = productDef.boundingBox ?? { width: productDef.width, depth: productDef.depth, height: productDef.height };
-    const halfH = bb.height / 2;
+    const halfH = productData.height / 2;
     const item: SceneItem = {
       id: Math.random().toString(36).substr(2, 9),
+      productId: productData.productId,
+      tenantId: tenantId,
       type: 'catalog-item',
       position: [0, halfH, 0],
       rotation: [0, 0, 0],
       scale: [1, 1, 1],
-      productId,
-      boundingBox: bb,
-      label: productDef.name,
+      width: productData.width,
+      depth: productData.depth,
+      height: productData.height,
+      label: productData.name,
+      price: productData.price,
+      hasPriceAccess: productData.hasPriceAccess
     };
     set((state) => ({ items: [...state.items, item], selectedId: item.id, selectedType: 'item' }));
   },

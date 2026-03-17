@@ -13,6 +13,7 @@
     "@react-three/fiber": "^9.5.0",
     "konva": "^10.2.1",
     "next": "16.1.6",
+    "rbush": "^4.0.1",
     "react": "19.2.3",
     "react-dom": "19.2.3",
     "react-konva": "^19.2.3",
@@ -22,6 +23,7 @@
   "devDependencies": {
     "@tailwindcss/postcss": "^4",
     "@types/node": "^20",
+    "@types/rbush": "^4.0.0",
     "@types/react": "^19",
     "@types/react-dom": "^19",
     "eslint": "^9",

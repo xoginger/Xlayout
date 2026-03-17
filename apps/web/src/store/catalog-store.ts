@@ -1,127 +1,107 @@
 "use client";
 
-/**
- * XLayout Catalog Store — Scalable Architecture
- * ----------------------------------------------
- * Fully separated from editor-store.
- * Manages: brands, product lines, product definitions.
- * Does NOT hold 3D assets — those are lazy-loaded via ProductAssetSet.
- */
-
 import { create } from 'zustand';
-import type { Brand, ProductLine, ProductDefinition, CatalogFilters, ProductCategory } from '@/types/catalog';
-import { MOCK_BRANDS, MOCK_LINES, MOCK_PRODUCTS } from '@/data/catalog-mock';
+import { api } from '@/lib/api';
+
+export interface Product {
+  productId: string;
+  name: string;
+  sku: string;
+  width: number;
+  depth: number;
+  height: number;
+  price: number | null;
+  hasPriceAccess: boolean;
+  thumbnail: string | null;
+}
+
+export interface Line {
+  lineId: string;
+  lineName: string;
+  products: Product[];
+}
+
+export interface TenantCatalog {
+  tenantId: string;
+  tenantName: string;
+  lines: Line[];
+}
 
 interface CatalogState {
-  // Data layers
-  brands: Brand[];
-  lines: ProductLine[];
-  products: ProductDefinition[];
-
-  // Selection / Navigation
-  selectedBrandId: string | null;
+  tenants: TenantCatalog[];
+  selectedTenantId: string | null;
   selectedLineId: string | null;
-
-  // Search & filters
-  filters: CatalogFilters;
-
-  // Loading state (for future async/pagination)
   isLoading: boolean;
+  searchQuery: string;
 
-  // ──────────────────────────────────────────
-  // Actions
-  // ──────────────────────────────────────────
-  loadCatalogMockData: () => void;
-
-  setSelectedBrand: (brandId: string | null) => void;
-  setSelectedLine: (lineId: string | null) => void;
+  loadCatalog: () => Promise<void>;
+  setSelectedTenant: (id: string | null) => void;
+  setSelectedLine: (id: string | null) => void;
   setSearchQuery: (query: string) => void;
-  setFilter: (patch: Partial<CatalogFilters>) => void;
-  clearFilters: () => void;
-
-  // Computed selectors (memoized outside for perf)
-  getLinesByBrand: (brandId: string) => ProductLine[];
-  getProductsByLine: (lineId: string) => ProductDefinition[];
-  getProductsByBrand: (brandId: string) => ProductDefinition[];
-  getFilteredProducts: () => ProductDefinition[];
-  getProductById: (id: string) => ProductDefinition | undefined;
-  getBrandById: (id: string) => Brand | undefined;
-  getLineById: (id: string) => ProductLine | undefined;
+  
+  getFilteredProducts: () => Product[];
 }
 
 export const useCatalogStore = create<CatalogState>((set, get) => ({
-  brands: [],
-  lines: [],
-  products: [],
-
-  selectedBrandId: null,
+  tenants: [],
+  selectedTenantId: null,
   selectedLineId: null,
-
-  filters: {},
   isLoading: false,
+  searchQuery: '',
 
-  // ──────────────────────────────────────────────────────────
-  // Load mock data (replaces future API call)
-  // ──────────────────────────────────────────────────────────
-  loadCatalogMockData: () => {
-    set({
-      brands: MOCK_BRANDS,
-      lines: MOCK_LINES,
-      products: MOCK_PRODUCTS,
-      selectedBrandId: MOCK_BRANDS[0]?.id ?? null,
-      selectedLineId: null,
-    });
+  loadCatalog: async () => {
+    set({ isLoading: true });
+    try {
+      const data = await api.get<TenantCatalog[]>('/catalog/available');
+      set({ 
+        tenants: data, 
+        isLoading: false,
+        selectedTenantId: data.length > 0 ? data[0].tenantId : null,
+        selectedLineId: data.length > 0 && data[0].lines.length > 0 ? data[0].lines[0].lineId : null
+      });
+    } catch (err) {
+      set({ isLoading: false });
+    }
   },
 
-  // ──────────────────────────────────────────────────────────
-  // Navigation
-  // ──────────────────────────────────────────────────────────
-  setSelectedBrand: (brandId) => set({ selectedBrandId: brandId, selectedLineId: null }),
-  setSelectedLine: (lineId) => set({ selectedLineId: lineId }),
+  setSelectedTenant: (id) => set((state) => {
+    const tenant = state.tenants.find(t => t.tenantId === id);
+    const firstLineId = tenant && tenant.lines.length > 0 ? tenant.lines[0].lineId : null;
+    return { selectedTenantId: id, selectedLineId: firstLineId };
+  }),
 
-  // ──────────────────────────────────────────────────────────
-  // Search & Filter
-  // ──────────────────────────────────────────────────────────
-  setSearchQuery: (query) =>
-    set((s) => ({ filters: { ...s.filters, searchQuery: query } })),
-
-  setFilter: (patch) =>
-    set((s) => ({ filters: { ...s.filters, ...patch } })),
-
-  clearFilters: () =>
-    set((s) => ({ filters: { brandId: s.selectedBrandId ?? undefined, lineId: s.selectedLineId ?? undefined } })),
-
-  // ──────────────────────────────────────────────────────────
-  // Selectors
-  // ──────────────────────────────────────────────────────────
-  getLinesByBrand: (brandId) =>
-    get().lines.filter((l) => l.brandId === brandId),
-
-  getProductsByLine: (lineId) =>
-    get().products.filter((p) => p.lineId === lineId),
-
-  getProductsByBrand: (brandId) =>
-    get().products.filter((p) => p.brandId === brandId),
+  setSelectedLine: (id) => set({ selectedLineId: id }),
+  setSearchQuery: (query) => set({ searchQuery: query }),
 
   getFilteredProducts: () => {
-    const { products, selectedBrandId, selectedLineId, filters } = get();
-    return products.filter((p) => {
-      if (selectedBrandId && p.brandId !== selectedBrandId) return false;
-      if (selectedLineId && p.lineId !== selectedLineId) return false;
-      if (filters.category && p.category !== filters.category) return false;
-      if (filters.searchQuery) {
-        const q = filters.searchQuery.toLowerCase();
-        if (
-          !p.name.toLowerCase().includes(q) &&
-          !p.sku.toLowerCase().includes(q) &&
-          !(p.tags ?? []).some((t) => t.toLowerCase().includes(q))
-        ) return false;
+    const { tenants, selectedTenantId, selectedLineId, searchQuery } = get();
+    
+    let products: Product[] = [];
+    
+    if (selectedTenantId) {
+      const tenant = tenants.find(t => t.tenantId === selectedTenantId);
+      if (tenant) {
+        if (selectedLineId) {
+          const line = tenant.lines.find(l => l.lineId === selectedLineId);
+          if (line) products = line.products;
+        } else {
+          // All products from all lines in this tenant
+          products = tenant.lines.flatMap(l => l.products);
+        }
       }
-      return true;
-    });
-  },
+    } else {
+      // All products from all tenants
+      products = tenants.flatMap(t => t.lines.flatMap(l => l.products));
+    }
 
-  getProductById: (id) => get().products.find((p) => p.id === id),
-  getBrandById: (id) => get().brands.find((b) => b.id === id),
-  getLineById: (id) => get().lines.find((l) => l.id === id),
+    if (searchQuery) {
+      const q = searchQuery.toLowerCase();
+      products = products.filter(p => 
+        p.name.toLowerCase().includes(q) || 
+        p.sku.toLowerCase().includes(q)
+      );
+    }
+
+    return products;
+  }
 }));

@@ -3,17 +3,19 @@
 import React from 'react';
 import { Stage, Layer, Rect, Circle, Line } from 'react-konva';
 import { useEditorStore } from '../state/store';
+import { MovePlacementCommand } from '../commands/MovePlacementCommand';
 
 export const Editor2D = () => {
-  const { scene, movePlacement } = useEditorStore();
+  const { scene, executeCommand } = useEditorStore();
 
   return (
     <div className="w-full h-full bg-slate-50 relative overflow-hidden">
-      <Stage width={window.innerWidth} height={window.innerHeight}>
+      <Stage width={typeof window !== 'undefined' ? window.innerWidth : 800} height={typeof window !== 'undefined' ? window.innerHeight : 600}>
         <Layer>
           {/* Grid Background Pattern */}
           <Rect 
-            width={window.innerWidth} height={window.innerHeight} 
+            width={typeof window !== 'undefined' ? window.innerWidth : 800} 
+            height={typeof window !== 'undefined' ? window.innerHeight : 600} 
             fillPatternImage={createGridPattern() as any} 
           />
           
@@ -35,13 +37,13 @@ export const Editor2D = () => {
               key={placement.id}
               x={placement.position.x}
               y={placement.position.y}
-              width={60} // Placeholder for product width
-              height={60} // Placeholder for product depth
+              width={60} 
+              height={60} 
               fill="#3b82f6"
               rotation={placement.rotation.z}
               draggable
               onDragEnd={(e) => {
-                movePlacement(placement.id, e.target.x(), e.target.y(), 0);
+                executeCommand(new MovePlacementCommand(placement.id, { x: e.target.x(), y: e.target.y(), z: 0 }));
               }}
               shadowBlur={5}
             />
@@ -52,7 +54,6 @@ export const Editor2D = () => {
   );
 };
 
-// Simple utility to create a repeating grid pattern
 function createGridPattern() {
   if (typeof window === 'undefined') return undefined;
   const canvas = document.createElement('canvas');
