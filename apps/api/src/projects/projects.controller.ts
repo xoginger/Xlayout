@@ -33,4 +33,19 @@ export class ProjectsController {
   async getProjectQuotes(@Req() req: any, @Param('id') id: string) {
     return this.projectsService.getQuotes(req.tenantId, id);
   }
+
+  @Patch(':id')
+  async updateProject(@Req() req: any, @Param('id') id: string, @Body() body: { name?: string; description?: string }) {
+    return this.projectsService.updateProject(req.tenantId, id, body);
+  }
+
+  @Delete(':id')
+  async deleteProject(@Req() req: any, @Param('id') id: string) {
+    return this.projectsService.deleteProject(req.tenantId, id);
+  }
+
+  @Post(':id/duplicate')
+  async duplicateProject(@Req() req: any, @Param('id') id: string) {
+    return this.projectsService.duplicateProject(req.tenantId, req.user.sub, id);
+  }
 }

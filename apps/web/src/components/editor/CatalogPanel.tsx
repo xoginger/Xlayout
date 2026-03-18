@@ -111,6 +111,8 @@ export const CatalogPanel: React.FC = () => {
   } = useCatalogStore();
 
   const setCatalogPanelState = useEditorStore((s) => s.setCatalogPanelState);
+  const pendingOpeningType = useEditorStore((s) => s.pendingOpeningType);
+  const setPendingOpeningType = useEditorStore((s) => s.setPendingOpeningType);
   const [searchInput, setSearchInput] = useState('');
 
   useEffect(() => {
@@ -155,6 +157,38 @@ export const CatalogPanel: React.FC = () => {
             </button>
           </div>
         </div>
+      </div>
+
+      {/* ── Architecture Assets ── */}
+      <div className="p-2 border-b border-zinc-200 bg-amber-50/40">
+        <p className="text-[7.5px] font-black uppercase tracking-widest text-amber-700 mb-1.5 px-1">🏗️ Arquitectura</p>
+        <div className="grid grid-cols-3 gap-1.5">
+          {([
+            { type: 'door' as const,    icon: '🚪', label: 'Puerta',  desc: '0.9×2.1m' },
+            { type: 'window' as const,  icon: '🪟', label: 'Ventana', desc: '1.2×1.0m' },
+            { type: 'opening' as const, icon: '🔲', label: 'Hueco',   desc: '1.0×2.1m' },
+          ]).map(asset => (
+            <button
+              key={asset.type}
+              onClick={() => setPendingOpeningType(asset.type)}
+              className={`flex flex-col items-center p-2 rounded-lg border transition-all cursor-pointer active:scale-95 ${
+                pendingOpeningType === asset.type
+                  ? 'bg-amber-100 border-amber-400 shadow-md ring-1 ring-amber-300'
+                  : 'bg-white border-zinc-200 hover:border-amber-300 hover:shadow-sm'
+              }`}
+              title={`Insertar ${asset.label} — click sobre un muro`}
+            >
+              <span className="text-lg mb-0.5">{asset.icon}</span>
+              <span className="text-[7px] font-black text-zinc-700 uppercase tracking-tight">{asset.label}</span>
+              <span className="text-[6px] font-mono text-zinc-400">{asset.desc}</span>
+            </button>
+          ))}
+        </div>
+        {pendingOpeningType && (
+          <div className="mt-1.5 text-[7px] font-bold text-amber-600 text-center animate-pulse uppercase tracking-wider">
+            Click sobre un muro para colocar
+          </div>
+        )}
       </div>
 
       {/* ── Loading state ── */}

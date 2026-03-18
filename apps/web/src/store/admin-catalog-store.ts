@@ -39,6 +39,7 @@ export interface ProductAsset {
   thumbnailUrl?: string;
   footprint2dUrl?: string;
   model3dUrl?: string;
+  metadata?: Record<string, any>;
   product?: Product;
 }
 

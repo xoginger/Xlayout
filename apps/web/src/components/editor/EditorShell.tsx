@@ -12,6 +12,14 @@ import { useEditorStore } from '@/store/editor-store';
 export const EditorShell: React.FC = () => {
   const catalogPanelState = useEditorStore((s) => s.catalogPanelState);
   const setCatalogPanelState = useEditorStore((s) => s.setCatalogPanelState);
+  const saveToHistory = useEditorStore((s) => s.saveToHistory);
+  const history = useEditorStore((s) => s.history);
+
+  React.useEffect(() => {
+    if (history.length === 0) {
+      saveToHistory();
+    }
+  }, [history.length, saveToHistory]);
 
   return (
     <div className="flex h-screen w-screen flex-col overflow-hidden bg-white text-zinc-800 font-sans selection:bg-blue-500/30">

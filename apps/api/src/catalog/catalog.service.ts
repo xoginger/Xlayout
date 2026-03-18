@@ -221,6 +221,8 @@ export class CatalogService {
           lineName: line.name,
           products: line.products.map((product: any) => {
             const activePrice = product.prices[0];
+            const model3dAsset = product.assets.find((a: any) => a.assetType === 'model_3d');
+            
             return {
               productId: product.id,
               name: product.name,
@@ -230,7 +232,12 @@ export class CatalogService {
               height: product.height,
               price: access?.pricesEnabled && activePrice ? Number(activePrice.basePrice) : null,
               hasPriceAccess: access?.pricesEnabled ?? false,
-              thumbnail: product.assets.find((a: any) => a.assetType === 'thumbnail')?.fileUrl || null
+              thumbnail: product.assets.find((a: any) => a.assetType === 'thumbnail')?.fileUrl || null,
+              metadata: {
+                ...(product.metadata as any || {}),
+                ...(model3dAsset?.metadata as any || {}),
+                model3dUrl: model3dAsset?.model3dUrl
+              }
             };
           })
         }))

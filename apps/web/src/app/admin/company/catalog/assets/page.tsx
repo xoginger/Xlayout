@@ -129,15 +129,97 @@ export default function CompanyAssetsPage() {
           </div>
 
           {formData.assetType === 'model_3d' && (
-            <div>
-              <label className="block text-sm font-medium text-slate-700 mb-1">Model 3D URL</label>
-              <input 
-                type="url" required
-                className="w-full px-3 py-2 border border-slate-300 rounded-md focus:border-blue-500" 
-                placeholder="https://storage.xlayout.io/models/mesh.json"
-                value={formData.model3dUrl || ''}
-                onChange={(e) => setFormData({ ...formData, model3dUrl: e.target.value })}
-              />
+            <div className="space-y-4 pt-4 border-t border-slate-100">
+              <h4 className="text-xs font-bold text-slate-800 uppercase tracking-wider">3D Model Transformation</h4>
+              
+              <div>
+                <label className="block text-sm font-medium text-slate-700 mb-1">Model 3D URL</label>
+                <input 
+                  type="url" required
+                  className="w-full px-3 py-2 border border-slate-300 rounded-md focus:border-blue-500" 
+                  placeholder="https://storage.xlayout.io/models/mesh.glb"
+                  value={formData.model3dUrl || ''}
+                  onChange={(e) => setFormData({ ...formData, model3dUrl: e.target.value })}
+                />
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-xs font-bold text-slate-600 uppercase mb-1">Floor Anchor (0-1)</label>
+                  <input 
+                    type="number" step="0.1" min="0" max="1"
+                    className="w-full px-3 py-2 border border-slate-300 rounded-md text-sm" 
+                    value={formData.metadata?.floorAnchor ?? 0.5}
+                    onChange={(e) => setFormData({ 
+                      ...formData, 
+                      metadata: { ...formData.metadata, floorAnchor: parseFloat(e.target.value) } 
+                    })}
+                  />
+                  <p className="text-[10px] text-slate-400 mt-1">0=Base, 0.5=Center, 1=Top</p>
+                </div>
+                <div>
+                  <label className="block text-xs font-bold text-slate-600 uppercase mb-1">Scale Factor</label>
+                  <input 
+                    type="number" step="0.01" min="0.01"
+                    className="w-full px-3 py-2 border border-slate-300 rounded-md text-sm" 
+                    value={formData.metadata?.scaleFactor ?? 1.0}
+                    onChange={(e) => setFormData({ 
+                      ...formData, 
+                      metadata: { ...formData.metadata, scaleFactor: parseFloat(e.target.value) } 
+                    })}
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-xs font-bold text-slate-600 uppercase mb-1">Forward Axis</label>
+                  <select 
+                    className="w-full px-3 py-2 border border-slate-300 rounded-md text-sm" 
+                    value={formData.metadata?.forwardAxis ?? 'Z'}
+                    onChange={(e) => setFormData({ 
+                      ...formData, 
+                      metadata: { ...formData.metadata, forwardAxis: e.target.value } 
+                    })}
+                  >
+                    <option value="Z">Z-Forward (Standard)</option>
+                    <option value="-Z">-Z-Forward</option>
+                    <option value="X">X-Forward</option>
+                  </select>
+                </div>
+                <div className="flex items-end pb-3">
+                  <label className="flex items-center gap-2 cursor-pointer">
+                    <input 
+                      type="checkbox"
+                      checked={formData.metadata?.resizable ?? true}
+                      onChange={(e) => setFormData({ 
+                        ...formData, 
+                        metadata: { ...formData.metadata, resizable: e.target.checked } 
+                      })}
+                    />
+                    <span className="text-sm font-medium text-slate-700">Resizable</span>
+                  </label>
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-slate-600 uppercase mb-1">Snap Points (JSON)</label>
+                <textarea 
+                  className="w-full px-3 py-2 border border-slate-300 rounded-md text-xs font-mono" 
+                  rows={4}
+                  placeholder='[{"id": "s1", "name": "left", "localPosition": [-0.5, 0, 0], "normal": [-1, 0, 0]}]'
+                  value={formData.metadata?.snapPoints ? JSON.stringify(formData.metadata.snapPoints) : ''}
+                  onChange={(e) => {
+                    try {
+                      const snapPoints = JSON.parse(e.target.value);
+                      setFormData({ ...formData, metadata: { ...formData.metadata, snapPoints } });
+                    } catch (err) {
+                      // Allow typing invalid JSON temporarily
+                      setFormData({ ...formData, metadata: { ...formData.metadata, snapPointsStr: e.target.value } });
+                    }
+                  }}
+                />
+              </div>
             </div>
           )}
 

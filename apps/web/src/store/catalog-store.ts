@@ -13,6 +13,7 @@ export interface Product {
   price: number | null;
   hasPriceAccess: boolean;
   thumbnail: string | null;
+  metadata?: Record<string, any>;
 }
 
 export interface Line {

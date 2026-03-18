@@ -83,4 +83,45 @@ export class ProjectsService {
       include: { projectVersion: true }
     });
   }
+
+  async updateProject(tenantId: string, id: string, data: { name?: string; description?: string }) {
+    await this.getProjectById(tenantId, id);
+    return this.prisma.client.project.update({
+      where: { id },
+      data
+    });
+  }
+
+  async deleteProject(tenantId: string, id: string) {
+    await this.getProjectById(tenantId, id);
+    return this.prisma.client.project.delete({
+      where: { id }
+    });
+  }
+
+  async duplicateProject(tenantId: string, userId: string, id: string) {
+    const original = await this.getProjectById(tenantId, id);
+    
+    // Create new project
+    const duplicated = await this.prisma.client.project.create({
+      data: {
+        name: `${original.name} (Copy)`,
+        description: original.description,
+        tenantId,
+        creatorId: userId
+      }
+    });
+
+    // Copy latest version if exists
+    const latestVersion = await this.prisma.client.projectVersion.findFirst({
+      where: { projectId: id },
+      orderBy: { versionNum: 'desc' }
+    });
+
+    if (latestVersion) {
+      await this.saveLayoutVersion(tenantId, duplicated.id, latestVersion.sceneState);
+    }
+
+    return duplicated;
+  }
 }
