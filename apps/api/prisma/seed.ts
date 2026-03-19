@@ -1,40 +1,43 @@
 /**
  * XLayout Master SaaS Backend — Seed
- * Version: master-backend-v1 | Build: 2026-03-16
+ * Version: master-backend-v2 | Build: 2026-03-19
  * -----------------------------------------------
  * Seeds:
- *   - Platform user: Xocotzin (platform_owner)
- *   - Tenant: PM La Piedad (pm-lapiedad)
- *   - Tenant: Demo Brand (demo-brand)
- *   - CompanyUser: admin@pmlapiedad.com (tenant_admin)
- *   - CompanyUser: admin@demobrand.com  (tenant_admin)
- *   - ActivationCode: example code for PM La Piedad
- *   - ProductLines: Terra, Lockers, Archiveros, Racks for PM La Piedad
- *   - ProductLines: Office, Storage for Demo Brand
+ *   - PlatformUser: xocotzin@xlayout.io (PLATFORM_OWNER)
+ *   - Tenant: PM La Piedad / Demo Brand
+ *   - CompanyUsers: admin@pmlapiedad.com / admin@demobrand.io
+ *   - ProductLines por tenant
+ *   - ActivationCode: PMLAPIEDAD-DEMO
+ *
+ * Passwords hashed with bcrypt (rounds=10)
  */
 
 import 'dotenv/config';
 import { PrismaClient } from '@prisma/client';
+import * as bcrypt from 'bcryptjs';
 
 const prisma = new PrismaClient();
+const SALT_ROUNDS = 10;
 
 async function main() {
-  console.log('🌱 XLayout SaaS Seed — master-backend-v1');
+  console.log('🌱 XLayout SaaS Seed — master-backend-v2 (bcrypt)');
 
   // ── Platform Owner: Xocotzin ─────────────────────────────
   const xocotzin = await prisma.platformUser.upsert({
     where: { email: 'xocotzin@xlayout.io' },
-    update: {},
+    update: {
+      passwordHash: await bcrypt.hash('admin2026!', SALT_ROUNDS),
+    },
     create: {
       email: 'xocotzin@xlayout.io',
-      passwordHash: Buffer.from('admin2026!').toString('base64'), // Use bcrypt in production
+      passwordHash: await bcrypt.hash('admin2026!', SALT_ROUNDS),
       firstName: 'Xocotzin',
       lastName: 'Platform',
       role: 'PLATFORM_OWNER' as any,
       status: 'ACTIVE',
     },
   });
-  console.log('✓ PlatformUser: Xocotzin →', xocotzin.id);
+  console.log('✓ PlatformUser: xocotzin@xlayout.io →', xocotzin.id);
 
   // ── Tenant 1: PM La Piedad ───────────────────────────────
   const tenantPM = await prisma.tenant.upsert({
@@ -69,11 +72,13 @@ async function main() {
   // ── Company Users ────────────────────────────────────────
   const adminPM = await prisma.companyUser.upsert({
     where: { email: 'admin@pmlapiedad.com' },
-    update: {},
+    update: {
+      passwordHash: await bcrypt.hash('pmadmin2026!', SALT_ROUNDS),
+    },
     create: {
       tenantId: tenantPM.id,
       email: 'admin@pmlapiedad.com',
-      passwordHash: Buffer.from('pmadmin2026!').toString('base64'),
+      passwordHash: await bcrypt.hash('pmadmin2026!', SALT_ROUNDS),
       firstName: 'Admin',
       lastName: 'PM La Piedad',
       role: 'TENANT_ADMIN' as any,
@@ -84,11 +89,13 @@ async function main() {
 
   const adminDemo = await prisma.companyUser.upsert({
     where: { email: 'admin@demobrand.io' },
-    update: {},
+    update: {
+      passwordHash: await bcrypt.hash('demoadmin2026!', SALT_ROUNDS),
+    },
     create: {
       tenantId: tenantDemo.id,
       email: 'admin@demobrand.io',
-      passwordHash: Buffer.from('demoadmin2026!').toString('base64'),
+      passwordHash: await bcrypt.hash('demoadmin2026!', SALT_ROUNDS),
       firstName: 'Admin',
       lastName: 'Demo Brand',
       role: 'TENANT_ADMIN' as any,
@@ -143,18 +150,11 @@ async function main() {
   });
   console.log('✓ ActivationCode: PMLAPIEDAD-DEMO');
 
-  // ── Audit Log — seed action ──────────────────────────────
-  await prisma.auditLog.create({
-    data: {
-      actorType: 'PLATFORM_USER',
-      actorId: xocotzin.id,
-      action: 'SEED_COMPLETE',
-      entityType: 'system',
-      payload: { version: 'master-backend-v1', build: '2026-03-16' },
-    },
-  });
-
-  console.log('\n✅ Seed completed — Module: Master SaaS Backend | Version: master-backend-v1');
+  console.log('\n✅ Seed completado — Version: master-backend-v2');
+  console.log('\n📋 Credenciales DEV:');
+  console.log('   Platform Owner: xocotzin@xlayout.io    / admin2026!');
+  console.log('   Company Admin:  admin@pmlapiedad.com   / pmadmin2026!');
+  console.log('   Company Admin:  admin@demobrand.io     / demoadmin2026!');
 }
 
 main()

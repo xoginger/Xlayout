@@ -1,0 +1,64 @@
+version: '3.8'
+
+services:
+  postgres_dev:
+    image: postgres:15-alpine
+    container_name: xlayout_postgres_dev
+    env_file:
+      - .env.development
+    environment:
+      POSTGRES_USER: xlayout_user
+      POSTGRES_PASSWORD: xlayout_password
+      POSTGRES_DB: xlayout_dev
+    ports:
+      - "5432:5432"
+    volumes:
+      - xlayout_pgdata_dev:/var/lib/postgresql/data
+    networks:
+      - xlayout_net_dev
+
+  redis_dev:
+    image: redis:7-alpine
+    container_name: xlayout_redis_dev
+    ports:
+      - "6379:6379"
+    networks:
+      - xlayout_net_dev
+
+  api_dev:
+    build:
+      context: ./apps/api
+      dockerfile: Dockerfile
+    container_name: xlayout_api_dev
+    env_file:
+      - .env.development
+    environment:
+      NODE_ENV: production
+    ports:
+      - "3000:3000"
+    depends_on:
+      - postgres_dev
+      - redis_dev
+    networks:
+      - xlayout_net_dev
+
+  web_dev:
+    build:
+      context: ./apps/web
+      dockerfile: Dockerfile
+      args:
+        NEXT_PUBLIC_API_URL: http://217.77.3.204:3000/api
+    container_name: xlayout_web_dev
+    environment:
+      NODE_ENV: production
+    ports:
+      - "3001:3000"
+    networks:
+      - xlayout_net_dev
+
+networks:
+  xlayout_net_dev:
+    driver: bridge
+
+volumes:
+  xlayout_pgdata_dev:

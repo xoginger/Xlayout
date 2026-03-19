@@ -1,4 +1,6 @@
 import React, { useState, useEffect } from 'react';
+import { useRouter } from 'next/navigation';
+import { useAuthStore } from '@/store/auth-store';
 import { useEditorStore } from '@/store/editor-store';
 import { ProjectManager } from './ProjectManager';
 
@@ -14,14 +16,20 @@ const NavMenuItem: React.FC<{ label: string; active?: boolean; onClick?: () => v
 
 export const TopBar: React.FC = () => {
   const { 
-    project, activeTool, viewMode, setViewMode, 
+    project, viewMode, setViewMode, 
     undo, redo, historyIndex, history, setProjectName,
     saveProject, createNewProject
   } = useEditorStore();
 
+  const { user, logout } = useAuthStore();
+  // Role matching based on frontend store model
+  const isAdmin = user?.role === 'platform_admin' || user?.role === 'company_admin';
+
   const [isEditingName, setIsEditingName] = useState(false);
   const [isProjectManagerOpen, setIsProjectManagerOpen] = useState(false);
   const [activeMenu, setActiveMenu] = useState<string | null>(null);
+
+  const router = useRouter();
 
   // Simple Autosave logic (runs every 60s if dirty)
   useEffect(() => {
@@ -82,17 +90,16 @@ export const TopBar: React.FC = () => {
 
           <NavMenuItem label="View" />
 
-          <div className="relative">
-            <NavMenuItem label="Export" active={activeMenu === 'export'} onClick={() => handleMenuClick('export')} />
-            {activeMenu === 'export' && (
-              <div className="absolute top-full left-0 mt-2 w-48 bg-white border border-zinc-200 rounded-xl shadow-2xl z-[101] p-1.5 overflow-hidden ring-1 ring-black/5 animate-in fade-in slide-in-from-top-2">
-                <MenuAction label="2D Snapshot (.png)" icon={<ImageIcon />} onClick={() => { useEditorStore.getState().triggerExport('image'); setActiveMenu(null); }} />
-                <MenuAction label="3D Model (.glb)" icon={<BoxIcon />} onClick={() => { useEditorStore.getState().triggerExport('glb'); setActiveMenu(null); }} />
-                <MenuDivider />
-                <MenuAction label="PDF Quote" icon={<PdfIcon />} onClick={() => { useEditorStore.getState().triggerExport('pdf'); setActiveMenu(null); }} />
-              </div>
-            )}
-          </div>
+          {/* Role-based Dynamic Modules */}
+          <div className="h-6 w-px bg-zinc-200 mx-2" />
+          <NavMenuItem label="Editor" active />
+          {isAdmin && (
+            <>
+              <NavMenuItem label="Admin" onClick={() => router.push('/admin/platform/overview')} />
+              <NavMenuItem label="Dashboard" onClick={() => router.push('/admin/company/dashboard')} />
+              <NavMenuItem label="Catálogo" onClick={() => router.push('/admin/company/catalog/products')} />
+            </>
+          )}
         </nav>
       </div>
 
@@ -165,6 +172,16 @@ export const TopBar: React.FC = () => {
         <button className="px-6 py-2.5 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-[10px] font-black uppercase tracking-[0.2em] transition-all shadow-xl shadow-blue-500/20 active:scale-95 flex items-center gap-2">
           <span>EXPORT</span>
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" className="w-3 h-3"><path d="M7 17l9.2-9.2M17 17V7H7"/></svg>
+        </button>
+
+        <div className="h-8 w-px bg-zinc-200 mx-1" />
+
+        <button 
+          onClick={() => { logout(); router.push('/login'); }}
+          className="w-10 h-10 rounded-full bg-zinc-100 flex items-center justify-center text-zinc-500 hover:text-red-500 hover:bg-red-50 transition-all border border-zinc-200"
+          title="Cerrar Sesión"
+        >
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" className="w-4 h-4"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4M16 17l5-5-5-5M21 12H9"/></svg>
         </button>
       </div>
 

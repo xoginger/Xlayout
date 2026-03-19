@@ -1,0 +1,65 @@
+version: '3.8'
+
+services:
+  postgres_prod:
+    image: postgres:15-alpine
+    container_name: xlayout_postgres_prod
+    env_file:
+      - .env.production
+    environment:
+      POSTGRES_USER: xlayout_user
+      POSTGRES_PASSWORD: xlayout_password
+      POSTGRES_DB: xlayout_prod
+    volumes:
+      - xlayout_pgdata_prod:/var/lib/postgresql/data
+    networks:
+      - xlayout_net_prod
+
+  redis_prod:
+    image: redis:7-alpine
+    container_name: xlayout_redis_prod
+    networks:
+      - xlayout_net_prod
+
+  api_prod:
+    build:
+      context: ./apps/api
+      dockerfile: Dockerfile
+    container_name: xlayout_api_prod
+    env_file:
+      - .env.production
+    depends_on:
+      - postgres_prod
+      - redis_prod
+    networks:
+      - xlayout_net_prod
+
+  web_prod:
+    build:
+      context: ./apps/web
+      dockerfile: Dockerfile
+    container_name: xlayout_web_prod
+    env_file:
+      - .env.production
+    networks:
+      - xlayout_net_prod
+
+  nginx_prod:
+    image: nginx:alpine
+    container_name: xlayout_nginx_prod
+    ports:
+      - "80:80"
+    volumes:
+      - ./nginx.prod.conf:/etc/nginx/nginx.conf:ro
+    depends_on:
+      - web_prod
+      - api_prod
+    networks:
+      - xlayout_net_prod
+
+networks:
+  xlayout_net_prod:
+    driver: bridge
+
+volumes:
+  xlayout_pgdata_prod:

@@ -23,11 +23,8 @@ export default function LoginPage() {
       const res = await api.post<{ access_token: string, user: any }>('/auth/login', { email, password });
       setAuth(res.access_token, res.user);
       
-      if (res.user.userType === 'PLATFORM_USER') {
-        router.push('/admin/platform/overview');
-      } else {
-        router.push('/admin/company/dashboard');
-      }
+      // Always redirect to editor as requested for professional flow
+      router.push('/editor');
     } catch (err: any) {
       setError(err.message || 'Login failed. Please check your credentials.');
     } finally {

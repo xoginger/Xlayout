@@ -1,6 +1,7 @@
 import { Injectable, UnauthorizedException } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import { PrismaService } from '../prisma/prisma.service';
+import * as bcrypt from 'bcryptjs';
 
 @Injectable()
 export class AuthService {
@@ -10,20 +11,23 @@ export class AuthService {
   ) {}
 
   async validateUser(email: string, pass: string): Promise<any> {
+    // Check PlatformUser
     const platformUser = await this.prisma.client.platformUser.findUnique({ where: { email } });
-    if (platformUser && platformUser.passwordHash === Buffer.from(pass).toString('base64')) {
+    if (platformUser && await bcrypt.compare(pass, platformUser.passwordHash)) {
       const { passwordHash, ...result } = platformUser;
       return { ...result, userType: 'PLATFORM_USER' };
     }
 
+    // Check CompanyUser
     const companyUser = await this.prisma.client.companyUser.findUnique({ where: { email } });
-    if (companyUser && companyUser.passwordHash === Buffer.from(pass).toString('base64')) {
+    if (companyUser && await bcrypt.compare(pass, companyUser.passwordHash)) {
       const { passwordHash, ...result } = companyUser;
       return { ...result, userType: 'COMPANY_USER' };
     }
 
+    // Check EndUser
     const endUser = await this.prisma.client.endUser.findUnique({ where: { email } });
-    if (endUser && endUser.passwordHash === Buffer.from(pass).toString('base64')) {
+    if (endUser && await bcrypt.compare(pass, endUser.passwordHash)) {
       const { passwordHash, ...result } = endUser;
       return { ...result, userType: 'END_USER' };
     }
@@ -32,11 +36,11 @@ export class AuthService {
   }
 
   async login(user: any) {
-    const payload = { 
-      email: user.email, 
-      sub: user.id, 
+    const payload = {
+      email: user.email,
+      sub: user.id,
       userType: user.userType,
-      tenantId: user.tenantId || null 
+      tenantId: user.tenantId || null,
     };
     return {
       access_token: this.jwtService.sign(payload),
@@ -60,15 +64,15 @@ export class AuthService {
         tenants: tenants.map((t: any) => ({
           tenantId: t.id,
           tenantName: t.name,
-          access: { pricesEnabled: true, conditionsEnabled: true }
-        }))
+          access: { pricesEnabled: true, conditionsEnabled: true },
+        })),
       };
     }
 
     if (userType === 'COMPANY_USER') {
-      const user = await this.prisma.client.companyUser.findUnique({ 
+      const user = await this.prisma.client.companyUser.findUnique({
         where: { id: userId },
-        include: { tenant: true }
+        include: { tenant: true },
       });
       if (!user) throw new UnauthorizedException();
       return {
@@ -78,20 +82,20 @@ export class AuthService {
         tenants: [{
           tenantId: user.tenantId,
           tenantName: (user as any).tenant.name,
-          access: { pricesEnabled: true, conditionsEnabled: true }
-        }]
+          access: { pricesEnabled: true, conditionsEnabled: true },
+        }],
       };
     }
 
     if (userType === 'END_USER') {
-      const user = await this.prisma.client.endUser.findUnique({ 
+      const user = await this.prisma.client.endUser.findUnique({
         where: { id: userId },
-        include: { 
-          catalogAccesses: { 
+        include: {
+          catalogAccesses: {
             where: { active: true },
-            include: { tenant: true }
-          }
-        }
+            include: { tenant: true },
+          },
+        },
       });
       if (!user) throw new UnauthorizedException();
       return {
@@ -101,11 +105,11 @@ export class AuthService {
         tenants: (user as any).catalogAccesses.map((ca: any) => ({
           tenantId: ca.tenantId,
           tenantName: ca.tenant.name,
-          access: { 
-            pricesEnabled: ca.pricesEnabled, 
-            conditionsEnabled: ca.conditionsEnabled 
-          }
-        }))
+          access: {
+            pricesEnabled: ca.pricesEnabled,
+            conditionsEnabled: ca.conditionsEnabled,
+          },
+        })),
       };
     }
 

@@ -1,0 +1,67 @@
+version: '3.8'
+
+services:
+  postgres_staging:
+    image: postgres:15-alpine
+    container_name: xlayout_postgres_staging
+    env_file:
+      - .env.staging
+    environment:
+      POSTGRES_USER: xlayout_user
+      POSTGRES_PASSWORD: xlayout_password
+      POSTGRES_DB: xlayout_staging
+    ports:
+      - "5433:5432"
+    volumes:
+      - xlayout_pgdata_staging:/var/lib/postgresql/data
+    networks:
+      - xlayout_net_staging
+
+  redis_staging:
+    image: redis:7-alpine
+    container_name: xlayout_redis_staging
+    networks:
+      - xlayout_net_staging
+
+  api_staging:
+    build:
+      context: ./apps/api
+      dockerfile: Dockerfile
+    container_name: xlayout_api_staging
+    env_file:
+      - .env.staging
+    depends_on:
+      - postgres_staging
+      - redis_staging
+    networks:
+      - xlayout_net_staging
+
+  web_staging:
+    build:
+      context: ./apps/web
+      dockerfile: Dockerfile
+    container_name: xlayout_web_staging
+    env_file:
+      - .env.staging
+    networks:
+      - xlayout_net_staging
+
+  nginx_staging:
+    image: nginx:alpine
+    container_name: xlayout_nginx_staging
+    ports:
+      - "8081:80"
+    volumes:
+      - ./nginx.staging.conf:/etc/nginx/nginx.conf:ro
+    depends_on:
+      - web_staging
+      - api_staging
+    networks:
+      - xlayout_net_staging
+
+networks:
+  xlayout_net_staging:
+    driver: bridge
+
+volumes:
+  xlayout_pgdata_staging:
