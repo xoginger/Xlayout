@@ -1,42 +1,135 @@
 import type { SceneItemType } from '@/store/editor-store';
+import * as THREE from 'three';
+
+// ─── Types ──────────────────────────────────────────────────────────────────
+export type InferenceType = 'endpoint' | 'midpoint' | 'center' | 'axis' | 'grid' | 'none';
+
+export interface SnapInference {
+  point: [number, number, number];
+  type: InferenceType;
+  color: string;
+  axis?: 'x' | 'y' | 'z';
+  label?: string;
+}
+
+// ─── Axis Colors (SketchUp Style) ──────────────────────────────────────────
+export const AXIS_COLORS = {
+  x: '#ff4444', // Red
+  y: '#44ff44', // Green
+  z: '#4444ff', // Blue
+  none: '#ffffff'
+};
 
 // ─── Floor Alignment Utilities ──────────────────────────────────────────────
-// Every asset uses BoxGeometry whose center is the pivot.  
-// To rest on Y=0 the position.y must equal half the box height.
-// These values MUST match the BoxGeometry args in SceneItemObject (Viewport.tsx).
 const ITEM_HALF_HEIGHTS: Record<SceneItemType | 'default', number> = {
-  rack:          1.000,   // BoxGeometry [1, 2, 0.5]    → h/2 = 1.0
-  shelf:         0.900,   // BoxGeometry [1, 1.8, 0.4]  → h/2 = 0.9
-  desk:          0.375,   // BoxGeometry [1.5, 0.75, 0.8] → h/2 = 0.375
-  cabinet:       0.600,   // BoxGeometry [0.8, 1.2, 0.6] → h/2 = 0.6
-  'catalog-item': 0.500, // fallback — catalog items use their boundingBox.height
+  rack:          1.000,
+  shelf:         0.900,
+  desk:          0.375,
+  cabinet:       0.600,
+  'catalog-item': 0.500,
   default:       0.500,
 };
 
-/** Returns the Y position where the pivot must sit so the item base touches Y=0. */
 export const getItemHalfHeight = (type: string): number =>
   ITEM_HALF_HEIGHTS[type as SceneItemType] ?? ITEM_HALF_HEIGHTS.default;
 
-/** Returns the item with position.y adjusted so its base rests on Y=0. */
-export const placeOnFloor = <T extends { type: string; position: [number, number, number] }>(
-  item: T
-): T => ({
-  ...item,
-  position: [item.position[0], getItemHalfHeight(item.type), item.position[2]] as [number, number, number],
-});
-
-/** Clamps an item's Y so it never drops below the floor. */
-export const clampToFloor = <T extends { type: string; position: [number, number, number] }>(
-  item: T
-): T => {
-  const minY = getItemHalfHeight(item.type);
-  if (item.position[1] < minY) {
-    return { ...item, position: [item.position[0], minY, item.position[2]] as [number, number, number] };
-  }
-  return item;
+export const calculateDistance = (p1: [number, number, number], p2: [number, number, number]): number => {
+  const dx = p2[0] - p1[0];
+  const dy = p2[1] - p1[1];
+  const dz = p2[2] - p1[2];
+  return Math.sqrt(dx * dx + dy * dy + dz * dz);
 };
 
-// ─── Grid Snapping ───────────────────────────────────────────────────────────
+// ─── Advanced Inference Engine ───────────────────────────────────────────────
+
+/** Detects if a point is aligned with a major axis relative to a start point. */
+export const getAxisInference = (
+  start: [number, number, number], 
+  current: [number, number, number],
+  lockedAxis: 'x' | 'y' | 'z' | null = null,
+  tolerance: number = 0.05
+): SnapInference | null => {
+  const dx = current[0] - start[0];
+  const dy = current[1] - start[1];
+  const dz = current[2] - start[2];
+
+  const absX = Math.abs(dx);
+  const absY = Math.abs(dy);
+  const absZ = Math.abs(dz);
+
+  // If locked, project the current point onto that axis
+  if (lockedAxis === 'x') {
+    return { point: [current[0], start[1], start[2]], type: 'axis', axis: 'x', color: AXIS_COLORS.x, label: 'Eje X' };
+  }
+  if (lockedAxis === 'y') {
+    return { point: [start[0], current[1], start[2]], type: 'axis', axis: 'y', color: AXIS_COLORS.y, label: 'Eje Y' };
+  }
+  if (lockedAxis === 'z') {
+    return { point: [start[0], start[1], current[2]], type: 'axis', axis: 'z', color: AXIS_COLORS.z, label: 'Eje Z' };
+  }
+
+  // Automatic inference based on proximity
+  // We check which axis has the smallest relative difference
+  if (absX > tolerance && absY < tolerance && absZ < tolerance) {
+    return { point: [current[0], start[1], start[2]], type: 'axis', axis: 'x', color: AXIS_COLORS.x, label: 'Eje X' };
+  }
+  if (absY > tolerance && absX < tolerance && absZ < tolerance) {
+    return { point: [start[0], current[1], start[2]], type: 'axis', axis: 'y', color: AXIS_COLORS.y, label: 'Eje Y' };
+  }
+  if (absZ > tolerance && absX < tolerance && absY < tolerance) {
+    return { point: [start[0], start[1], current[2]], type: 'axis', axis: 'z', color: AXIS_COLORS.z, label: 'Eje Z' };
+  }
+
+  return null;
+};
+
+export const findInference = (
+  point: [number, number, number],
+  segments: { start: [number, number, number], end: [number, number, number] }[],
+  threshold: number = 0.2, // Slightly tighter threshold for professional feel
+  startPoint: [number, number, number] | null = null,
+  lockedAxis: 'x' | 'y' | 'z' | null = null
+): SnapInference => {
+  // 1. Locked Axis (Highest Priority if provided)
+  if (startPoint && lockedAxis) {
+    const axisInf = getAxisInference(startPoint, point, lockedAxis);
+    if (axisInf) return axisInf;
+  }
+
+  // 2. Check Endpoints
+  for (const seg of segments) {
+    if (calculateDistance(point, seg.start) < threshold) {
+      return { point: seg.start, type: 'endpoint', color: '#3b82f6', label: 'Punto Final' };
+    }
+    if (calculateDistance(point, seg.end) < threshold) {
+      return { point: seg.end, type: 'endpoint', color: '#3b82f6', label: 'Punto Final' };
+    }
+  }
+
+  // 3. Check Midpoints
+  for (const seg of segments) {
+    const mid: [number, number, number] = [
+      (seg.start[0] + seg.end[0]) / 2,
+      (seg.start[1] + seg.end[1]) / 2,
+      (seg.start[2] + seg.end[2]) / 2
+    ];
+    if (calculateDistance(point, mid) < threshold) {
+      return { point: mid, type: 'midpoint', color: '#10b981', label: 'Punto Medio' };
+    }
+  }
+
+  // 4. Check Axis Inference (if not locked, do auto-detection)
+  if (startPoint) {
+    const axisInf = getAxisInference(startPoint, point);
+    if (axisInf) return axisInf;
+  }
+
+  // 5. Fallback
+  return { point, type: 'none', color: '#ffffff' };
+};
+
+// ─── Geometry Utilities ──────────────────────────────────────────────────────
+
 export const snapToGrid = (value: number, gridSize: number = 0.5): number => {
   return Math.round(value / gridSize) * gridSize;
 };
@@ -47,13 +140,6 @@ export const snapPointToGrid = (point: [number, number, number], gridSize: numbe
     snapToGrid(point[1], gridSize),
     snapToGrid(point[2], gridSize)
   ];
-};
-
-export const calculateDistance = (p1: [number, number, number], p2: [number, number, number]): number => {
-  const dx = p2[0] - p1[0];
-  const dy = p2[1] - p1[1];
-  const dz = p2[2] - p1[2];
-  return Math.sqrt(dx * dx + dy * dy + dz * dz);
 };
 
 export const getWallAngle = (start: [number, number, number], end: [number, number, number]): number => {
@@ -68,70 +154,19 @@ export const getWallCenter = (start: [number, number, number], end: [number, num
   ];
 };
 
-export const getNearestPointOnSegment = (
-  point: [number, number, number],
-  start: [number, number, number],
-  end: [number, number, number]
-): [number, number, number] => {
-  const dx = end[0] - start[0];
-  const dz = end[2] - start[2];
-  const l2 = dx * dx + dz * dz;
-  if (l2 === 0) return start;
-  let t = ((point[0] - start[0]) * dx + (point[2] - start[2]) * dz) / l2;
-  t = Math.max(0, Math.min(1, t));
-  return [start[0] + t * dx, 0, start[2] + t * dz];
-};
-
-export const findNearestEndpoint = (
-  point: [number, number, number],
-  segments: { start: [number, number, number], end: [number, number, number] }[],
-  threshold: number = 0.3
-): [number, number, number] | null => {
-  for (const seg of segments) {
-    if (calculateDistance(point, seg.start) < threshold) return seg.start;
-    if (calculateDistance(point, seg.end) < threshold) return seg.end;
-  }
-  return null;
-};
-
-export const findNearestMidpoint = (
-  point: [number, number, number],
-  segments: { start: [number, number, number], end: [number, number, number] }[],
-  threshold: number = 0.3
-): [number, number, number] | null => {
-  for (const seg of segments) {
-    const midpoint: [number, number, number] = [
-      (seg.start[0] + seg.end[0]) / 2,
-      (seg.start[1] + seg.end[1]) / 2,
-      (seg.start[2] + seg.end[2]) / 2
-    ];
-    if (calculateDistance(point, midpoint) < threshold) return midpoint;
-  }
-  return null;
-};
-
 export const getOrthogonalPoint = (
   start: [number, number, number],
   current: [number, number, number]
 ): [number, number, number] => {
   const dx = Math.abs(current[0] - start[0]);
   const dz = Math.abs(current[2] - start[2]);
-  
-  if (dx > dz) {
-    return [current[0], start[1], start[2]];
-  } else {
-    return [start[0], start[1], current[2]];
-  }
+  return dx > dz ? [current[0], start[1], start[2]] : [start[0], start[1], current[2]];
 };
 
-/**
- * Basic loop detection for 2D floor plan segments.
- * Returns arrays of points forming closed loops.
- */
+/** Detects loops for auto-face generation. */
 export const detectClosedLoops = (
   segments: { start: [number, number, number], end: [number, number, number] }[]
 ): [number, number, number][][] => {
-  // Simple graph representation
   const graph: Map<string, [number, number, number][]> = new Map();
   const pointToCoord: Map<string, [number, number, number]> = new Map();
 
@@ -145,7 +180,6 @@ export const detectClosedLoops = (
     const r1 = getRef(seg.start);
     const r2 = getRef(seg.end);
     if (r1 === r2) continue;
-
     if (!graph.has(r1)) graph.set(r1, []);
     if (!graph.has(r2)) graph.set(r2, []);
     graph.get(r1)!.push(pointToCoord.get(r2)!);
@@ -154,12 +188,8 @@ export const detectClosedLoops = (
 
   const loops: [number, number, number][][] = [];
   const visited = new Set<string>();
-
-  // This is a very simplified cycle detection for planar graphs.
-  // In a professional CAD, we'd use a more robust winged-edge or half-edge data structure.
-  // For this task, we'll try to find simple cycles.
   
-  const findCycles = (node: string, path: string[], coords: [number, number, number][]) => {
+  const findCycles = (node: string, path: string[], coords: [number, number, number][], parent: string | null) => {
     visited.add(node);
     path.push(node);
     coords.push(pointToCoord.get(node)!);
@@ -167,24 +197,19 @@ export const detectClosedLoops = (
     const neighbors = graph.get(node) || [];
     for (const neighbor of neighbors) {
       const neighborRef = getRef(neighbor);
-      if (path.length > 2 && neighborRef === path[0]) {
-        // Cycle found!
+      if (neighborRef === parent) continue;
+      if (neighborRef === path[0] && path.length >= 3) {
         loops.push([...coords]);
         continue;
       }
       if (!visited.has(neighborRef)) {
-        findCycles(neighborRef, [...path], [...coords]);
+        findCycles(neighborRef, [...path], [...coords], node);
       }
     }
   };
 
-  // We only care about loops with >= 3 points
   for (const node of graph.keys()) {
-    if (!visited.has(node)) {
-      findCycles(node, [], []);
-    }
+    if (!visited.has(node)) findCycles(node, [], [], null);
   }
-
-  // Filter and deduplicate loops
   return loops.filter(l => l.length >= 3);
 };

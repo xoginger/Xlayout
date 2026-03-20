@@ -2,38 +2,40 @@
 
 import React, { Suspense, useState, useRef, useMemo, useEffect } from 'react';
 import { Canvas, useThree } from '@react-three/fiber';
-import { 
-  OrbitControls, 
-  Grid, 
-  TransformControls, 
-  OrthographicCamera, 
-  PerspectiveCamera, 
-  Line, 
+import {
+  OrbitControls,
+  Grid,
+  TransformControls,
+  OrthographicCamera,
+  PerspectiveCamera,
+  Line,
   Html,
   useGLTF,
   useTexture
 } from '@react-three/drei';
-import { 
-  useEditorStore, 
-  SceneItem, 
-  Wall, 
-  DimensionLine, 
-  Opening, 
-  LineEntity, 
-  RectangleEntity, 
-  FaceEntity, 
-  VolumeEntity 
+import {
+  useEditorStore,
+  SceneItem,
+  Wall,
+  DimensionLine,
+  Opening,
+  LineEntity,
+  RectangleEntity,
+  FaceEntity,
+  VolumeEntity,
+  Scene,
+  Layer
 } from '@/store/editor-store';
-import { 
-  snapPointToGrid, 
-  getWallAngle, 
-  getWallCenter, 
-  calculateDistance, 
-  getNearestPointOnSegment,
-  findNearestEndpoint,
-  findNearestMidpoint,
+import {
+  snapPointToGrid,
+  getWallAngle,
+  getWallCenter,
+  calculateDistance,
   getOrthogonalPoint,
   detectClosedLoops,
+  getAxisInference,
+  findInference,
+  SnapInference
 } from '@/utils/cad-math';
 import { findNearestWall } from '@/editor/utils/wall-snap';
 import { findModularSnap, SnapResult } from '@/utils/snap-engine';
@@ -71,7 +73,7 @@ const RectangleObject: React.FC<{ rect: RectangleEntity }> = ({ rect }) => {
   );
 };
 
-const LineObject: React.FC<{ line: LineEntity }> = ({ line }) => {
+const LineCADObject: React.FC<{ line: LineEntity }> = ({ line }) => {
   const select = useEditorStore((state) => state.select);
   const selectedId = useEditorStore((state) => state.selectedId);
   const isSelected = selectedId === line.id;
@@ -119,6 +121,29 @@ const OpeningObject: React.FC<{ opening: Opening }> = ({ opening }) => {
   );
 };
 
+const InferenceIndicator: React.FC<{ inference: SnapInference }> = ({ inference }) => {
+  if (inference.type === 'none') return null;
+
+  return (
+    <group position={inference.point}>
+      {/* Small square/circle for the point */}
+      <mesh renderOrder={1000}>
+        {inference.type === 'midpoint' ? <boxGeometry args={[0.06, 0.06, 0.06]} /> : <sphereGeometry args={[0.04, 8, 8]} />}
+        <meshBasicMaterial color={inference.color} depthTest={false} transparent opacity={0.8} />
+      </mesh>
+      
+      {/* Label */}
+      {inference.label && (
+        <Html distanceFactor={10} position={[0, 0.1, 0]}>
+          <div className="bg-zinc-900 text-white text-[8px] px-1 py-0.5 rounded border border-zinc-700 whitespace-nowrap shadow-xl pointer-events-none uppercase font-black tracking-tighter">
+            {inference.label}
+          </div>
+        </Html>
+      )}
+    </group>
+  );
+};
+
 const SnapPointIndicator: React.FC<{ position: [number, number, number]; active: boolean }> = ({ position, active }) => (
   <mesh position={position} renderOrder={1000}>
     <sphereGeometry args={[0.04, 8, 8]} />
@@ -152,22 +177,31 @@ const SceneItemObject: React.FC<{ item: SceneItem }> = ({ item }) => {
   const isSelected = selectedId === item.id;
   const [activeSnap, setActiveSnap] = useState<SnapResult | null>(null);
 
-  const handleTransform = () => {
-    const controls = transformRef.current;
-    if (!controls || !controls.object) return;
+  // groupRef is the actual THREE.Group for this item.
+  // TransformControls uses object={groupRef} to attach directly to it,
+  // so the gizmo appears at the group's real world position (item.position).
+  const groupRef = useRef<THREE.Group>(null!);
+  const transformRef = useRef<any>(null);
+  // isDragging ref: no store writes during drag — core crash-loop fix.
+  const isDragging = useRef(false);
 
-    const { position, rotation, scale } = controls.object;
-    
+  const commitTransform = () => {
+    const group = groupRef.current;
+    if (!group) return;
+
+    const pos = group.position;
+    const rot = group.rotation;
+    const scale = group.scale;
+
     // Professional Floor Alignment
     const currentHeight = item.height * scale.y;
     const minY = currentHeight * (item.floorAnchor ?? 0.5);
-    let safeY = Math.max(position.y, minY);
+    let safeY = Math.max(pos.y, minY);
 
-    // Absolute Grid Snapping for Move tool
-    let finalX = position.x;
-    let finalZ = position.z;
-    
-    // 1. Modular Snap (Priority)
+    let finalX = pos.x;
+    let finalZ = pos.z;
+
+    // 1. Modular Snap (Priority) — evaluated only at drop time
     const modularSnap = findModularSnap(item, items, 0.4);
     if (modularSnap) {
       finalX = modularSnap.snappedPosition[0];
@@ -176,21 +210,29 @@ const SceneItemObject: React.FC<{ item: SceneItem }> = ({ item }) => {
       setActiveSnap(modularSnap);
     } else {
       setActiveSnap(null);
-      // 2. Grid Snap (Fallback)
-      if (snapEnabled && activeTool === 'move') {
-        finalX = Math.round(position.x / gridSize) * gridSize;
-        finalZ = Math.round(position.z / gridSize) * gridSize;
+      // 2. Grid Snap (Fallback) — only when Three.js built-in snap is off
+      if (snapEnabled && activeTool === 'move' && !(transformRef.current?.translationSnap)) {
+        finalX = Math.round(pos.x / gridSize) * gridSize;
+        finalZ = Math.round(pos.z / gridSize) * gridSize;
       }
     }
-    
+
+    // Snap correction: push the final snapped position back to the Three.js object
+    // so the gizmo is aligned after commit (before React reconciliation)
+    group.position.set(finalX, safeY, finalZ);
+
+    // Single store write — happens only on drag-end
     updateItem(item.id, {
       position: [finalX, safeY, finalZ],
-      rotation: [rotation.x, rotation.y, rotation.z],
+      rotation: [rot.x, rot.y, rot.z],
       scale: [scale.x, scale.y, scale.z],
     });
   };
 
-  const transformRef = useRef<any>(null);
+  const isInTransformMode = isSelected && ['move', 'rotate', 'scale'].includes(activeTool);
+  // Skip scale gizmo if item is not resizable
+  const isInTransformModeFinal = isInTransformMode && !(activeTool === 'scale' && item.resizable === false);
+  const mode = activeTool === 'move' ? 'translate' : activeTool === 'rotate' ? 'rotate' : 'scale';
 
   const color = isSelected ? '#3b82f6' : '#64748b';
 
@@ -213,80 +255,87 @@ const SceneItemObject: React.FC<{ item: SceneItem }> = ({ item }) => {
     </>
   );
 
-  const mesh = (
-    <group
-      position={item.position}
-      rotation={item.rotation}
-      // Note: we don't apply scale to the outer group to avoid gizmo distortion
-      // Scale is applied to the individual mesh/model components
-      onClick={(e) => { e.stopPropagation(); select(item.id, 'item'); }}
-    >
-      <Suspense fallback={placeholder}>
-        {item.model3dUrl ? (
-          <GltfModel url={item.model3dUrl} item={item} />
-        ) : (
-          placeholder
-        )}
-      </Suspense>
-
-      {/* Visualizers for Snap Points */}
-      {isSelected && item.snapPoints?.map(sp => (
-        <SnapPointIndicator 
-          key={sp.id} 
-          position={sp.localPosition} 
-          active={activeSnap?.movingSnapPoint.id === sp.id} 
-        />
-      ))}
-
-      {viewMode === '2D' && item.label && (
-        <Html position={[0, item.height * (1 - (item.floorAnchor ?? 0.5)) + 0.12, 0]} center>
-          <div className={`text-[7px] font-black uppercase tracking-tight px-1.5 py-0.5 rounded shadow whitespace-nowrap ${
-            isSelected ? 'bg-blue-600 text-white' : 'bg-zinc-800/80 text-zinc-100'
-          }`}>
-            {item.label}
-          </div>
-        </Html>
-      )}
-
-      {viewMode === '2D' && (
-        <Line
-          points={[
-            [-item.width/2, 0.001, -item.depth/2],
-            [ item.width/2, 0.001, -item.depth/2],
-            [ item.width/2, 0.001,  item.depth/2],
-            [-item.width/2, 0.001,  item.depth/2],
-            [-item.width/2, 0.001, -item.depth/2],
-          ]}
-          color={isSelected ? '#3b82f6' : '#475569'}
-          lineWidth={isSelected ? 2 : 1.2}
-        />
-      )}
-    </group>
-  );
-
-  if (isSelected && ['move', 'rotate', 'scale'].includes(activeTool)) {
-    // If not resizable, don't show Scale gizmo
-    if (activeTool === 'scale' && item.resizable === false) return mesh;
-
-    const mode = activeTool === 'move' ? 'translate' : activeTool === 'rotate' ? 'rotate' : 'scale';
-    
-    return (
-      <TransformControls 
-        ref={transformRef}
-        mode={mode as any} 
-        onChange={handleTransform}
-        onMouseDown={() => useEditorStore.getState().saveToHistory()}
-        onMouseUp={() => useEditorStore.getState().saveToHistory()}
-        translationSnap={snapEnabled && mode === 'translate' ? gridSize : null}
-        rotationSnap={snapEnabled && mode === 'rotate' ? Math.PI / 12 : null} // 15 degrees snap
-        size={0.75}
+  return (
+    <>
+      {/*
+        The group is ALWAYS rendered in the scene at item.position.
+        When TransformControls is active it uses object={groupRef} to attach
+        directly to this group — gizmo appears at the group's real world position.
+        We do NOT wrap this group inside TransformControls children to avoid the
+        drei inner-wrapper-at-origin bug.
+      */}
+      <group
+        ref={groupRef}
+        position={item.position}
+        rotation={item.rotation}
+        onClick={(e) => { e.stopPropagation(); select(item.id, 'item'); }}
       >
-        {mesh}
-      </TransformControls>
-    );
-  }
-  return mesh;
+        <Suspense fallback={placeholder}>
+          {item.model3dUrl ? (
+            <GltfModel url={item.model3dUrl} item={item} />
+          ) : (
+            placeholder
+          )}
+        </Suspense>
+
+        {/* Visualizers for Snap Points */}
+        {isSelected && item.snapPoints?.map(sp => (
+          <SnapPointIndicator
+            key={sp.id}
+            position={sp.localPosition}
+            active={activeSnap?.movingSnapPoint.id === sp.id}
+          />
+        ))}
+
+        {viewMode === '2D' && item.label && (
+          <Html position={[0, item.height * (1 - (item.floorAnchor ?? 0.5)) + 0.12, 0]} center>
+            <div className={`text-[7px] font-black uppercase tracking-tight px-1.5 py-0.5 rounded shadow whitespace-nowrap ${
+              isSelected ? 'bg-blue-600 text-white' : 'bg-zinc-800/80 text-zinc-100'
+            }`}>
+              {item.label}
+            </div>
+          </Html>
+        )}
+
+        {viewMode === '2D' && (
+          <Line
+            points={[
+              [-item.width/2, 0.001, -item.depth/2],
+              [ item.width/2, 0.001, -item.depth/2],
+              [ item.width/2, 0.001,  item.depth/2],
+              [-item.width/2, 0.001,  item.depth/2],
+              [-item.width/2, 0.001, -item.depth/2],
+            ]}
+            color={isSelected ? '#3b82f6' : '#475569'}
+            lineWidth={isSelected ? 2 : 1.2}
+          />
+        )}
+      </group>
+
+      {isInTransformModeFinal && (
+        <TransformControls
+          ref={transformRef}
+          object={groupRef}
+          mode={mode as any}
+          // No onChange — no store writes during drag. Core crash-loop fix preserved.
+          onMouseDown={() => {
+            isDragging.current = true;
+            useEditorStore.getState().saveToHistory();
+          }}
+          onMouseUp={() => {
+            isDragging.current = false;
+            commitTransform();
+          }}
+          translationSnap={snapEnabled && mode === 'translate' ? gridSize : null}
+          rotationSnap={snapEnabled && mode === 'rotate' ? Math.PI / 12 : null}
+          size={0.75}
+        />
+      )}
+    </>
+  );
 };
+
+
 
 const DimensionLineObject: React.FC<{ dim: DimensionLine }> = ({ dim }) => {
   const select = useEditorStore((state) => state.select);
@@ -356,27 +405,68 @@ const WallObject: React.FC<{ wall: Wall }> = ({ wall }) => {
   );
 };
 
-const HUD: React.FC<{ point: [number, number, number]; start?: [number, number, number] | null; tool: string }> = ({ point, start, tool }) => {
+const HUD: React.FC<{ 
+  point: [number, number, number]; 
+  start?: [number, number, number] | null; 
+  tool: string;
+  vcbValue: string;
+  activeInference: SnapInference;
+}> = ({ point, start, tool, vcbValue, activeInference }) => {
   if (tool === 'select') return null;
   const distance = start ? calculateDistance(start, point) : 0;
   
   return (
-    <Html position={point} center style={{ pointerEvents: 'none' }}>
-      <div className="flex flex-col items-center gap-1 -translate-y-12">
-        <div className="bg-zinc-900/90 backdrop-blur-md border border-zinc-700 px-3 py-1.5 rounded-full shadow-2xl flex items-center gap-2">
-          <span className="text-[10px] font-black text-blue-400 uppercase tracking-widest">{tool}</span>
-          {start && (
-            <>
-              <div className="w-px h-3 bg-zinc-700"></div>
-              <span className="text-xs font-mono text-white font-bold">{distance.toFixed(2)}m</span>
-            </>
-          )}
+    <>
+      {/* 1. Floating Cursor Info */}
+      <Html position={point} center style={{ pointerEvents: 'none' }}>
+        <div className="flex flex-col items-center gap-1 -translate-y-12 transition-all duration-75">
+          <div className="bg-zinc-950/80 backdrop-blur-md border border-zinc-700/50 px-2 py-1 rounded shadow-2xl flex items-center gap-2 ring-1 ring-white/10">
+            <span className="text-[9px] font-black text-blue-400 tracking-widest uppercase">{tool}</span>
+            {start && (
+              <>
+                <div className="w-px h-3 bg-zinc-700/50"></div>
+                <span className="text-[11px] font-mono text-white font-bold">{distance.toFixed(3)}m</span>
+              </>
+            )}
+            {activeInference.type !== 'none' && (
+              <div 
+                className="ml-2 px-1.5 py-0.5 rounded text-[9px] font-black uppercase tracking-tighter"
+                style={{ backgroundColor: activeInference.color, color: '#fff' }}
+              >
+                {activeInference.label || activeInference.type}
+              </div>
+            )}
+          </div>
         </div>
-        <div className="text-[9px] font-mono text-zinc-500 bg-white/50 px-1.5 py-0.5 rounded border border-zinc-200 shadow-sm leading-none">
-          {point[0].toFixed(2)} / {point[2].toFixed(2)}
+      </Html>
+
+      {/* 2. Fixed VCB (SketchUp Style) */}
+      <Html fullscreen style={{ pointerEvents: 'none' }}>
+        <div className="absolute bottom-4 right-4 flex flex-col items-end gap-2 p-2">
+          <div className="bg-white border border-zinc-200 shadow-2xl rounded-lg overflow-hidden flex divide-x divide-zinc-100 min-w-[120px] ring-1 ring-black/5">
+            <div className="px-3 py-2 bg-zinc-50 flex items-center gap-2">
+              <span className="text-[10px] font-black text-zinc-400 uppercase tracking-tighter">Medidas</span>
+            </div>
+            <div className="px-4 py-2 flex items-center bg-white min-w-[80px]">
+              <span className="text-sm font-mono font-bold text-zinc-800">
+                {vcbValue || (start ? distance.toFixed(3) : "0.000")}
+              </span>
+              <span className="ml-1 text-[10px] text-zinc-400 font-bold">m</span>
+              {vcbValue && <div className="ml-2 w-1.5 h-4 bg-blue-500 animate-pulse rounded-full" />}
+            </div>
+          </div>
+          
+          <div className="flex gap-2">
+            <div className="bg-zinc-900/90 text-[8px] font-black text-zinc-400 px-2 py-0.5 rounded border border-zinc-800 uppercase tracking-tighter">
+              X: {point[0].toFixed(3)}
+            </div>
+            <div className="bg-zinc-900/90 text-[8px] font-black text-zinc-400 px-2 py-0.5 rounded border border-zinc-800 uppercase tracking-tighter">
+              Z: {point[2].toFixed(3)}
+            </div>
+          </div>
         </div>
-      </div>
-    </Html>
+      </Html>
+    </>
   );
 };
 
@@ -416,7 +506,9 @@ const FaceObject: React.FC<{ face: FaceEntity }> = ({ face }) => {
 const VolumeObject: React.FC<{ volume: VolumeEntity }> = ({ volume }) => {
   const { select, selectedId, activeTool, updateVolume } = useEditorStore();
   const isSelected = selectedId === volume.id;
+  const volumeGroupRef = useRef<THREE.Group>(null!);
   const transformRef = useRef<any>(null);
+  const isDraggingVol = useRef(false);
 
   const shape = useMemo(() => {
     const s = new THREE.Shape();
@@ -429,52 +521,59 @@ const VolumeObject: React.FC<{ volume: VolumeEntity }> = ({ volume }) => {
     return s;
   }, [volume.basePoints]);
 
-  const handleTransform = () => {
-    if (!transformRef.current) return;
-    const { position } = transformRef.current.object;
+  const commitVolumeTransform = () => {
+    const group = volumeGroupRef.current;
+    if (!group) return;
+    const { position } = group;
     updateVolume(volume.id, { position: [position.x, position.y, position.z] });
   };
 
-  const mesh = (
-    <group 
-      position={volume.position}
-      onClick={(e) => { e.stopPropagation(); select(volume.id, 'volume'); }}
-    >
-      <mesh castShadow receiveShadow>
-        <extrudeGeometry 
-          args={[shape, { depth: volume.height, bevelEnabled: false }]} 
-        />
-        <meshStandardMaterial 
-          color={isSelected ? '#3b82f6' : '#64748b'} 
-          metalness={0.1}
-          roughness={0.7}
-          transparent
-          opacity={isSelected ? 0.8 : 0.6}
-        />
-      </mesh>
-      <mesh rotation={[-Math.PI / 2, 0, 0]}>
-        <extrudeGeometry args={[shape, { depth: volume.height, bevelEnabled: false }]} />
-        <meshBasicMaterial color={isSelected ? '#93c5fd' : '#475569'} wireframe />
-      </mesh>
-    </group>
-  );
-
-  if (isSelected && activeTool === 'move') {
-    return (
-      <TransformControls 
-        ref={transformRef}
-        mode="translate" 
-        onChange={handleTransform}
-        onMouseDown={() => useEditorStore.getState().saveToHistory()}
-        onMouseUp={() => useEditorStore.getState().saveToHistory()}
+  return (
+    <>
+      {/* Group always in scene; object={volumeGroupRef} on TransformControls
+          ensures the gizmo attaches to the real world position, not origin. */}
+      <group
+        ref={volumeGroupRef}
+        position={volume.position}
+        onClick={(e) => { e.stopPropagation(); select(volume.id, 'volume'); }}
       >
-        {mesh}
-      </TransformControls>
-    );
-  }
+        <mesh castShadow receiveShadow>
+          <extrudeGeometry
+            args={[shape, { depth: volume.height, bevelEnabled: false }]}
+          />
+          <meshStandardMaterial
+            color={isSelected ? '#3b82f6' : '#64748b'}
+            metalness={0.1}
+            roughness={0.7}
+            transparent
+            opacity={isSelected ? 0.8 : 0.6}
+          />
+        </mesh>
+        <mesh rotation={[-Math.PI / 2, 0, 0]}>
+          <extrudeGeometry args={[shape, { depth: volume.height, bevelEnabled: false }]} />
+          <meshBasicMaterial color={isSelected ? '#93c5fd' : '#475569'} wireframe />
+        </mesh>
+      </group>
 
-  return mesh;
+      {isSelected && activeTool === 'move' && (
+        <TransformControls
+          ref={transformRef}
+          object={volumeGroupRef}
+          mode="translate"
+          onMouseDown={() => {
+            isDraggingVol.current = true;
+            useEditorStore.getState().saveToHistory();
+          }}
+          onMouseUp={() => {
+            isDraggingVol.current = false;
+            commitVolumeTransform();
+          }}
+        />
+      )}
+    </>
+  );
 };
+
 
 const BlueprintRenderer: React.FC<{ blueprint: any }> = ({ blueprint }) => {
   const texture = useTexture(blueprint.url) as any;
@@ -541,48 +640,172 @@ const ExportManager: React.FC = () => {
   return null;
 };
 
+// ─── Grid Helper for 3D mode ─────────────────────────────────────────────────
+// Always visible in 3D view regardless of showGrid toggle.
+const Grid3DHelper: React.FC<{ gridSize: number }> = ({ gridSize }) => {
+  const size = 50;
+  const divisions = Math.round(size / gridSize);
+
+  return (
+    <>
+      <gridHelper
+        args={[size, divisions, '#94a3b8', '#e2e8f0']}
+        position={[0, 0, 0]}
+      />
+      {/* Very subtle floor plane for depth reference */}
+      <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, -0.001, 0]} receiveShadow>
+        <planeGeometry args={[size, size]} />
+        <meshStandardMaterial color="#f8fafc" transparent opacity={0.5} depthWrite={false} />
+      </mesh>
+    </>
+  );
+};
+
 export const Viewport: React.FC = () => {
   const { 
     items, walls, openings, dimensions, lines, rectangles, faces, volumes, layers, 
-    select, activeTool, viewMode,
+    select, activeTool, viewMode, selectedId,
     addWall, addDimension, addOpening, addLine, addRectangle, addFace, addVolume,
-    updateWall, updateLine, updateRectangle,
+    updateWall, updateLine, updateRectangle, updateItem,
     gridSize, snapEnabled, showGrid,
     pendingOpeningType, insertStructuralAsset, setPendingOpeningType,
-    blueprint, updateBlueprint, setActiveTool
+    blueprint, updateBlueprint, setActiveTool,
+    guides, addGuide, removeGuide, clearGuides,
+    duplicateItem, removeItem
   } = useEditorStore();
 
   const [drawingStart, setDrawingStart] = useState<[number, number, number] | null>(null);
   const [mousePos, setMousePos] = useState<[number, number, number]>([0,0,0]);
+  const [activeInference, setActiveInference] = useState<SnapInference>({ point: [0,0,0], type: 'none', color: '#ffffff' });
+  const [lockedAxis, setLockedAxis] = useState<'x' | 'y' | 'z' | null>(null);
   const [highlightedWallId, setHighlightedWallId] = useState<string | null>(null);
   const [extrudingFaceId, setExtrudingFaceId] = useState<string | null>(null);
   const [extrusionHeight, setExtrusionHeight] = useState<number>(0);
+  // For extrude: track screen Y at drag start to compute vertical delta
+  const extrudeStartScreenY = useRef<number | null>(null);
+  const extrudeBaseHeight = useRef<number>(0.1);
+  const [vcbInput, setVcbInput] = useState('');
+  const [isShiftPressed, setIsShiftPressed] = useState(false);
+  const [isCtrlPressed, setIsCtrlPressed] = useState(false);
+  const [transformStart, setTransformStart] = useState<[number, number, number] | null>(null);
+  const [isCopyMode, setIsCopyMode] = useState(false);
   
-  const allSegments = useMemo(() => [
-    ...walls.map(w => ({ start: w.start, end: w.end })),
-    ...lines.map(l => ({ start: l.start, end: l.end }))
-  ], [walls, lines]);
+  const allSegments = useMemo(() => {
+    // Collect all geometrical segments for snapping
+    const segs: { start: [number, number, number], end: [number, number, number] }[] = [];
+    
+    walls.forEach(w => segs.push({ start: w.start, end: w.end }));
+    lines.forEach(l => segs.push({ start: l.start, end: l.end }));
+    rectangles.forEach(r => {
+      const p1 = [r.start[0], 0, r.start[2]] as [number, number, number];
+      const p2 = [r.start[0] + r.width, 0, r.start[2]] as [number, number, number];
+      const p3 = [r.start[0] + r.width, 0, r.start[2] + r.depth] as [number, number, number];
+      const p4 = [r.start[0], 0, r.start[2] + r.depth] as [number, number, number];
+      segs.push({ start: p1, end: p2 }, { start: p2, end: p3 }, { start: p3, end: p4 }, { start: p4, end: p1 });
+    });
+
+    // Also include snap points from scene items
+    items.forEach(item => {
+      if (item.snapPoints) {
+        item.snapPoints.forEach(sp => {
+          const worldPos = new THREE.Vector3(...sp.localPosition)
+            .multiply(new THREE.Vector3(...item.scale))
+            .applyEuler(new THREE.Euler(...item.rotation))
+            .add(new THREE.Vector3(...item.position))
+            .toArray() as [number, number, number];
+          // We treat snap points as zero-length segments for the endpoint snapping
+          segs.push({ start: worldPos, end: worldPos });
+        });
+      }
+    });
+
+    return segs;
+  }, [walls, lines, rectangles, items]);
+
+  const confirmVCB = (value: number) => {
+    if (!drawingStart) return;
+    
+    // Direction is either from mouse to start, or along the active inference axis
+    const currentPoint = activeInference.type !== 'none' ? activeInference.point : mousePos;
+    const dir = new THREE.Vector3().fromArray(currentPoint).sub(new THREE.Vector3().fromArray(drawingStart)).normalize();
+    
+    // If no clear direction yet, and we have an axis lock, use that axis
+    if (dir.lengthSq() < 0.0001 && lockedAxis) {
+      if (lockedAxis === 'x') dir.set(1, 0, 0);
+      else if (lockedAxis === 'y') dir.set(0, 1, 0);
+      else if (lockedAxis === 'z') dir.set(0, 0, 1);
+    }
+    
+    const newPointArr = new THREE.Vector3().fromArray(drawingStart).add(dir.multiplyScalar(value)).toArray() as [number, number, number];
+    
+    const fakeEvent = { 
+      button: 0, 
+      forcedPoint: newPointArr,
+      point: { x: newPointArr[0], y: newPointArr[1], z: newPointArr[2] }
+    };
+    handlePointerDown(fakeEvent);
+  };
+
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Shift') {
+        setIsShiftPressed(true);
+        if (activeInference.type === 'axis' && activeInference.axis) {
+          setLockedAxis(activeInference.axis);
+        }
+      }
+
+      // Input Numerical
+      if (/^[0-9.]$/.test(e.key)) {
+        setVcbInput(prev => prev + e.key);
+        return;
+      }
+      if (e.key === 'Backspace') {
+        setVcbInput(prev => prev.slice(0, -1));
+        return;
+      }
+      if (e.key === 'Enter' && vcbInput) {
+        confirmVCB(parseFloat(vcbInput));
+        setVcbInput('');
+        return;
+      }
+
+      if (e.key === 'Escape') {
+        if (vcbInput) {
+          setVcbInput('');
+        } else if (lockedAxis) {
+          setLockedAxis(null);
+        } else if (drawingStart) {
+          setDrawingStart(null);
+        } else {
+          select(null);
+        }
+      }
+    };
+
+    const handleKeyUp = (e: KeyboardEvent) => {
+      if (e.key === 'Shift') {
+        setIsShiftPressed(false);
+        setLockedAxis(null);
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    window.addEventListener('keyup', handleKeyUp);
+    return () => {
+      window.removeEventListener('keydown', handleKeyDown);
+      window.removeEventListener('keyup', handleKeyUp);
+    };
+  }, [drawingStart, vcbInput, mousePos, activeInference, lockedAxis]);
 
   const handlePointerDown = (e: any) => {
     if (e.button !== 0) return;
     
-    let point = [e.point.x, 0, e.point.z] as [number, number, number];
-    if (snapEnabled) {
-      const snappedToEndpoint = findNearestEndpoint(point, allSegments);
-      const snappedToMidpoint = findNearestMidpoint(point, allSegments);
-      point = snappedToEndpoint || snappedToMidpoint || snapPointToGrid(point, gridSize);
-      
-      if (drawingStart && e.shiftKey) {
-        point = getOrthogonalPoint(drawingStart, point);
-      }
-    }
-
-    if (activeTool === 'extrude') {
-      // Find if we clicked a face
-      // Since Three.js raycasting handles clicks, we rely on FaceObject's onClick
-      // but for "drag-extrude" we might need to intercept it here or in FaceObject.
-      // For now, let's assume the user selects a face first, OR we detect it here.
-      return; 
+    let point: [number, number, number] = e.forcedPoint || activeInference.point;
+    
+    // Grid snap fallback if no geometric inference
+    if (snapEnabled && activeInference.type === 'none') {
+      point = snapPointToGrid(point, gridSize);
     }
 
     if (activeTool === 'wall') {
@@ -592,18 +815,6 @@ export const Viewport: React.FC = () => {
         if (calculateDistance(drawingStart, point) > 0.05) {
           const id = Math.random().toString(36).substr(2, 9);
           addWall({ id, start: drawingStart, end: point, thickness: 0.15, height: 2.70 });
-          
-          const currentSegments = [
-            ...walls.map(w => ({ start: w.start, end: w.end })),
-            ...lines.map(l => ({ start: l.start, end: l.end })),
-            { start: drawingStart, end: point }
-          ];
-          const loops = detectClosedLoops(currentSegments);
-          if (loops.length > 0) {
-            const loop = loops[loops.length - 1];
-            addFace({ id: Math.random().toString(36).substr(2, 9), points: loop, type: 'face' });
-          }
-
           setDrawingStart(point);
         }
       }
@@ -611,26 +822,26 @@ export const Viewport: React.FC = () => {
       if (!drawingStart) {
         setDrawingStart(point);
       } else {
-        if (calculateDistance(drawingStart, point) > 0.01) {
-          const id = Math.random().toString(36).substr(2, 9);
-          addLine({ id, start: drawingStart, end: point, type: 'line' });
+        if (calculateDistance(drawingStart, point) > 0.001) {
+          const newLine: LineEntity = { 
+            id: Math.random().toString(36).substr(2, 9), 
+            start: drawingStart, 
+            end: point, 
+            type: 'line' 
+          };
+          addLine(newLine);
           
-          const currentSegments = [
-            ...walls.map(w => ({ start: w.start, end: w.end })),
-            ...lines.map(l => ({ start: l.start, end: l.end })),
-            { start: drawingStart, end: point }
-          ];
-          const loops = detectClosedLoops(currentSegments);
-          if (loops.length > 0) {
-            const loop = loops[loops.length - 1];
-            addFace({
-              id: Math.random().toString(36).substr(2, 9),
-              points: loop,
-              type: 'face'
-            });
-          }
+          // SketchUp-style: Detect closed loops
+          const allLineSegments = [...lines, newLine].map(l => ({ start: l.start, end: l.end }));
+          const loops = detectClosedLoops(allLineSegments);
           
-          setDrawingStart(point);
+          loops.forEach(loopPoints => {
+            const faceId = 'face-' + Math.random().toString(36).substr(2, 5);
+            addFace({ id: faceId, points: loopPoints, type: 'face' });
+          });
+
+          setDrawingStart(point); // Continuous chain
+          setLockedAxis(null); // Release lock after click
         }
       }
     } else if (activeTool === 'rectangle') {
@@ -640,16 +851,8 @@ export const Viewport: React.FC = () => {
         const width = point[0] - drawingStart[0];
         const depth = point[2] - drawingStart[2];
         const id = Math.random().toString(36).substr(2, 9);
-        addRectangle({
-          id,
-          start: drawingStart,
-          end: point,
-          width,
-          depth,
-          type: 'rectangle'
-        });
-
-        // For rectangles, we can directly add a face
+        addRectangle({ id, start: drawingStart, end: point, width, depth, type: 'rectangle' });
+        
         const rectPoints: [number, number, number][] = [
           [drawingStart[0], 0, drawingStart[2]],
           [drawingStart[0] + width, 0, drawingStart[2]],
@@ -657,7 +860,6 @@ export const Viewport: React.FC = () => {
           [drawingStart[0], 0, drawingStart[2] + depth]
         ];
         addFace({ id: 'face-' + id, points: rectPoints, type: 'face' });
-        
         setDrawingStart(null);
       }
     } else if (activeTool === 'dimension') {
@@ -667,84 +869,116 @@ export const Viewport: React.FC = () => {
         addDimension({ id: Math.random().toString(36).substr(2, 9), start: drawingStart, end: point });
         setDrawingStart(null);
       }
+    } else if (activeTool === 'circle') {
+      if (!drawingStart) {
+        setDrawingStart(point);
+      } else {
+        const radius = calculateDistance(drawingStart, point);
+        const segments = 32;
+        const circlePoints: [number, number, number][] = [];
+        for (let i = 0; i < segments; i++) {
+          const angle = (i / segments) * Math.PI * 2;
+          circlePoints.push([
+            drawingStart[0] + Math.cos(angle) * radius,
+            0,
+            drawingStart[2] + Math.sin(angle) * radius
+          ]);
+        }
+        addFace({ id: 'circle-' + Math.random().toString(36).substr(2, 5), points: circlePoints, type: 'face' });
+        setDrawingStart(null);
+      }
     } else if (activeTool === 'place-opening' && pendingOpeningType) {
       const snap = findNearestWall(walls, point, 2.0);
       if (snap) {
         insertStructuralAsset(pendingOpeningType, snap.wall.id, snap.offset);
         setHighlightedWallId(null);
       }
-    } else if (activeTool === 'scale-blueprint') {
+    } else if (activeTool === 'tape') {
       if (!drawingStart) {
         setDrawingStart(point);
       } else {
-        const pixelDist = calculateDistance(drawingStart, point);
-        const realDistStr = prompt("Enter real distance between these points (meters):", "5");
-        if (realDistStr) {
-          const realDist = parseFloat(realDistStr);
-          if (!isNaN(realDist) && pixelDist > 0) {
-            // NewScale = CurrentScale * (RealDist / PixelDist)
-            const newScale = blueprint.scale * (realDist / pixelDist);
-            updateBlueprint({ scale: newScale });
-            setActiveTool('select');
-          }
-        }
+        const axisInf = getAxisInference(drawingStart, point);
+        addGuide({
+          id: Math.random().toString(36).substr(2, 9),
+          start: drawingStart,
+          end: point,
+          type: axisInf ? 'infinite' : 'segment'
+        });
         setDrawingStart(null);
       }
     }
   };
 
   const handlePointerMove = (e: any) => {
-    let point = [e.point.x, e.point.y, e.point.z] as [number, number, number];
+    const rawPoint = [e.point.x, 0, e.point.z] as [number, number, number];
     
     if (extrudingFaceId) {
-      // Logic for vertical extrusion height
-      // We use the Y difference or just mouse Y if possible
-      const height = Math.max(0.1, e.point.y);
-      setExtrusionHeight(height);
+      // Use screen-space Y delta to compute extrusion height.
+      // e.nativeEvent.clientY gives us pixel coordinates.
+      const clientY = e.nativeEvent?.clientY ?? e.clientY;
+      if (extrudeStartScreenY.current !== null && clientY !== undefined) {
+        // Moving mouse UP (smaller clientY) = increase height
+        // Scale: 1px ≈ 0.02m (adjustable sensitivity)
+        const deltaY = extrudeStartScreenY.current - clientY;
+        const newHeight = Math.max(0.05, extrudeBaseHeight.current + deltaY * 0.03);
+        setExtrusionHeight(newHeight);
+      }
       return;
     }
 
-    const groundPoint = [e.point.x, 0, e.point.z] as [number, number, number];
-    if (snapEnabled) {
-      const snappedToEndpoint = findNearestEndpoint(groundPoint, allSegments);
-      const snappedToMidpoint = findNearestMidpoint(groundPoint, allSegments);
-      point = snappedToEndpoint || snappedToMidpoint || snapPointToGrid(groundPoint, gridSize);
-      
-      if (drawingStart && e.shiftKey) {
-        point = getOrthogonalPoint(drawingStart, point);
-      }
-    } else {
-      point = groundPoint;
-    }
+    // 1. Detection of Inferences
+    const inf = snapEnabled 
+      ? findInference(rawPoint, allSegments, 0.25, drawingStart, lockedAxis) 
+      : { point: rawPoint, type: 'none', color: '#ffffff' } as SnapInference;
+    
+    const point = inf.point;
+
+    // 2. Move/Rotate/Scale: TransformControls owns all pointer interaction — skip canvas logic
+    // Note: the gizmo's dragging-changed event already disables OrbitControls (makeDefault)
+
+    // 3. Update States
+    setActiveInference(inf);
     setMousePos(point);
 
     if (activeTool === 'place-opening') {
-      const snap = findNearestWall(walls, point, 2.0);
-      setHighlightedWallId(snap ? snap.wall.id : null);
-    } else if (highlightedWallId) {
-      setHighlightedWallId(null);
+      const wallSnap = findNearestWall(walls, point, 2.0);
+      setHighlightedWallId(wallSnap ? wallSnap.wall.id : null);
     }
   };
 
-  const handlePointerUp = () => {
+  const handlePointerUp = (e?: any) => {
     if (extrudingFaceId) {
       const face = faces.find(f => f.id === extrudingFaceId);
-      if (face) {
-        const center = face.points.reduce((acc, p) => [acc[0] + p[0], 0, acc[2] + p[2]], [0, 0, 0]);
+      const finalHeight = Math.max(0.05, extrusionHeight);
+      if (face && finalHeight > 0.05) {
+        // Compute centroid as position anchor for the volume
         const count = face.points.length;
-        const avgCenter = [center[0] / count, 0, center[2] / count] as [number, number, number];
+        const sum = face.points.reduce(
+          (acc, p) => [acc[0] + p[0], 0, acc[2] + p[2]],
+          [0, 0, 0] as [number, number, number]
+        );
+        const avgCenter: [number, number, number] = [
+          sum[0] / count,
+          0,
+          sum[2] / count,
+        ];
 
         addVolume({
           id: Math.random().toString(36).substr(2, 9),
           basePoints: face.points,
-          height: extrusionHeight,
+          height: finalHeight,
           type: 'volume',
-          position: avgCenter
+          position: avgCenter,
         });
+        // Remove the source face so volumes replace it cleanly
         useEditorStore.getState().removeItem(extrudingFaceId);
+        useEditorStore.getState().saveToHistory();
       }
+      // Always reset extrude state on pointer up
       setExtrudingFaceId(null);
       setExtrusionHeight(0);
+      extrudeStartScreenY.current = null;
+      extrudeBaseHeight.current = 0.1;
     }
   };
 
@@ -754,6 +988,9 @@ export const Viewport: React.FC = () => {
       <group onPointerDown={(e) => {
         if (activeTool === 'extrude') {
           e.stopPropagation();
+          // Record the screen Y position at drag start for height delta calculation
+          extrudeStartScreenY.current = e.nativeEvent?.clientY ?? null;
+          extrudeBaseHeight.current = 0.1;
           setExtrudingFaceId(face.id);
           setExtrusionHeight(0.1);
         }
@@ -764,23 +1001,82 @@ export const Viewport: React.FC = () => {
   };
 
   React.useEffect(() => {
+    // Reset interaction states when tool changes
+    setDrawingStart(null);
+    setExtrudingFaceId(null);
+    setHighlightedWallId(null);
+    setExtrusionHeight(0);
+    setVcbInput('');
+    setLockedAxis(null);
+  }, [activeTool]);
+
+  useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
+      // 1. Shift for Axis Lock
+      if (e.key === 'Shift') {
+        setIsShiftPressed(true);
+        if (activeInference.type === 'axis' && activeInference.axis) {
+          setLockedAxis(activeInference.axis);
+        }
+      }
+      
+      // 2. Control for Copy Mode (used elsewhere but handled here)
+      if (e.key === 'Control') setIsCtrlPressed(true);
+
+      // 3. Numerical Capture for VCB
+      if (/^[0-9.]$/.test(e.key)) {
+        setVcbInput(prev => prev + e.key);
+        return;
+      }
+      if (e.key === 'Backspace' && vcbInput) {
+        setVcbInput(prev => prev.slice(0, -1));
+        return;
+      }
+      if (e.key === 'Enter' && vcbInput) {
+        const val = parseFloat(vcbInput);
+        if (!isNaN(val)) confirmVCB(val);
+        setVcbInput("");
+        return;
+      }
+
+      // 4. Escape / Enter for Tool State Control
       if (e.key === 'Escape') {
-        setDrawingStart(null);
-        setExtrudingFaceId(null);
-        select(null);
+        if (vcbInput) {
+          setVcbInput('');
+        } else if (lockedAxis) {
+          setLockedAxis(null);
+        } else if (drawingStart) {
+          setDrawingStart(null);
+        } else {
+          select(null);
+        }
       }
-      if (e.key === 'Enter') {
-        setDrawingStart(null);
+      
+      if (e.key === 'Enter' && !vcbInput && drawingStart) {
+        setDrawingStart(null); // Finish chain
       }
-      if (e.key === 'Delete' || e.key === 'Backspace') {
-        const { selectedId, removeItem } = useEditorStore.getState();
+
+      // 5. Delete selection
+      if (e.key === 'Delete' || (e.key === 'Backspace' && !vcbInput)) {
         if (selectedId) removeItem(selectedId);
       }
     };
+
+    const handleKeyUp = (e: KeyboardEvent) => {
+      if (e.key === 'Shift') {
+        setIsShiftPressed(false);
+        setLockedAxis(null);
+      }
+      if (e.key === 'Control') setIsCtrlPressed(false);
+    };
+
     window.addEventListener('keydown', handleKeyDown);
-    return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [select, activeTool]);
+    window.addEventListener('keyup', handleKeyUp);
+    return () => {
+      window.removeEventListener('keydown', handleKeyDown);
+      window.removeEventListener('keyup', handleKeyUp);
+    };
+  }, [drawingStart, vcbInput, mousePos, activeInference, lockedAxis, selectedId, activeTool]);
 
   const layerVisible = (id: string) => layers.find(l => l.id === id)?.visible !== false;
 
@@ -792,7 +1088,16 @@ export const Viewport: React.FC = () => {
         if (e.key === 'Escape') setDrawingStart(null);
       }}
     >
-      <Canvas shadows onPointerMissed={() => select(null)} onPointerUp={handlePointerUp}>
+      <Canvas
+        shadows
+        onPointerMissed={() => {
+          // Don't deselect if TransformControls is active — clicking gizmo arrows
+          // fires onPointerMissed because they don't hit any scene mesh.
+          if (['move', 'rotate', 'scale'].includes(activeTool) && selectedId) return;
+          select(null);
+        }}
+        onPointerUp={handlePointerUp}
+      >
         <Suspense fallback={null}>
           {viewMode === '2D' ? (
             <OrthographicCamera makeDefault position={[0, 50, 0]} zoom={80} rotation={[-Math.PI / 2, 0, 0]} />
@@ -803,23 +1108,51 @@ export const Viewport: React.FC = () => {
           <OrbitControls 
             makeDefault 
             enableRotate={viewMode === '3D' && !extrudingFaceId} 
-            screenSpacePanning={viewMode === '2D'}
+            screenSpacePanning={true}
+            mouseButtons={{
+              LEFT: activeTool === 'select' ? THREE.MOUSE.ROTATE : undefined, 
+              MIDDLE: THREE.MOUSE.ROTATE,
+              RIGHT: THREE.MOUSE.PAN
+            }}
           />
 
           <ambientLight intensity={0.6} />
           <directionalLight position={[10, 20, 10]} intensity={1.2} castShadow />
           
-          {showGrid && <Grid infiniteGrid cellSize={gridSize} sectionSize={gridSize * 5} sectionColor="#cbd5e1" cellColor="#f1f5f9" fadeDistance={100} />}
+          {/* 2D: Grid drei suave */}
+          {viewMode === '2D' && showGrid && (
+            <Grid infiniteGrid cellSize={gridSize} sectionSize={gridSize * 5} sectionColor="#cbd5e1" cellColor="#f1f5f9" fadeDistance={100} />
+          )}
+          {/* 3D: GridHelper nativo con plano de referencia visible */}
+          {viewMode === '3D' && (
+            <Grid3DHelper gridSize={gridSize} />
+          )}
 
           <ExportManager />
           <BlueprintObject />
 
           <group>
+            {/* Environment Guides */}
+            {guides.map(g => (
+              <Line 
+                key={g.id} 
+                points={g.type === 'infinite' ? [
+                  new THREE.Vector3().fromArray(g.start).add(new THREE.Vector3(g.end[0]-g.start[0], 0, g.end[2]-g.start[2]).normalize().multiplyScalar(-100)).toArray() as [number, number, number],
+                  new THREE.Vector3().fromArray(g.start).add(new THREE.Vector3(g.end[0]-g.start[0], 0, g.end[2]-g.start[2]).normalize().multiplyScalar(100)).toArray() as [number, number, number]
+                ] : [g.start, g.end]}
+                color="#94a3b8"
+                lineWidth={1}
+                dashed
+                dashSize={0.2}
+                gapSize={0.1}
+              />
+            ))}
+
             {layerVisible('walls') && walls.map(w => <WallObject key={w.id} wall={w} />)}
             {layerVisible('openings') && openings.map(o => <OpeningObject key={o.id} opening={o} />)}
             {layerVisible('assets') && items.map((i: SceneItem) => <SceneItemObject key={i.id} item={i} />)}
             {layerVisible('dimensions') && dimensions.map(d => <DimensionLineObject key={d.id} dim={d} />)}
-            {layerVisible('lines') && lines.map(l => <LineObject key={l.id} line={l} />)}
+            {layerVisible('lines') && lines.map(l => <LineCADObject key={l.id} line={l} />)}
             {layerVisible('rectangles') && rectangles.map(r => <RectangleObject key={r.id} rect={r} />)}
             {layerVisible('faces') && faces.map(f => <FaceWithExtrude key={f.id} face={f} />)}
             {layerVisible('volumes') && volumes.map(v => <VolumeObject key={v.id} volume={v} />)}
@@ -827,10 +1160,38 @@ export const Viewport: React.FC = () => {
             {/* Real-time Preview */}
             {drawingStart && (
               <group>
-                <Line points={[drawingStart, mousePos]} color="#3b82f6" lineWidth={2} dashed />
+                <Line 
+                  points={[drawingStart, mousePos]} 
+                  color={activeInference.type === 'axis' ? activeInference.color : "#3b82f6"} 
+                  lineWidth={activeInference.type === 'axis' ? 3 : 2} 
+                  dashed={activeInference.type !== 'axis'} 
+                />
+                
+                {/* Axis Guide Line (Infinite feel) */}
+                {activeInference.type === 'axis' && (
+                  <Line 
+                    points={[
+                      new THREE.Vector3().fromArray(drawingStart).add(new THREE.Vector3(
+                        activeInference.axis === 'x' ? -100 : 0,
+                        activeInference.axis === 'y' ? -100 : 0,
+                        activeInference.axis === 'z' ? -100 : 0
+                      )).toArray() as [number, number, number],
+                      new THREE.Vector3().fromArray(drawingStart).add(new THREE.Vector3(
+                        activeInference.axis === 'x' ? 100 : 0,
+                        activeInference.axis === 'y' ? 100 : 0,
+                        activeInference.axis === 'z' ? 100 : 0
+                      )).toArray() as [number, number, number]
+                    ]}
+                    color={activeInference.color}
+                    lineWidth={1}
+                    transparent
+                    opacity={0.3}
+                  />
+                )}
+
                 <mesh position={drawingStart}>
                   <sphereGeometry args={[0.03, 8, 8]} />
-                  <meshBasicMaterial color="#3b82f6" />
+                  <meshBasicMaterial color={activeInference.type === 'axis' ? activeInference.color : "#3b82f6"} />
                 </mesh>
                 {activeTool === 'rectangle' && (
                   <mesh 
@@ -863,13 +1224,28 @@ export const Viewport: React.FC = () => {
               );
             })()}
 
-            <HUD point={mousePos} start={drawingStart || (extrudingFaceId ? [0,0,0] : null)} tool={activeTool} />
+            <HUD 
+              point={mousePos} 
+              start={drawingStart || (extrudingFaceId ? [0,0,0] : null)} 
+              tool={activeTool} 
+              vcbValue={vcbInput}
+              activeInference={activeInference}
+            />
 
-            <mesh 
-              position={[0, -0.01, 0]} 
-              rotation={[-Math.PI / 2, 0, 0]} 
-              onPointerDown={handlePointerDown} 
-              onPointerMove={handlePointerMove}
+            <mesh
+              position={[0, -0.01, 0]}
+              rotation={[-Math.PI / 2, 0, 0]}
+              onPointerDown={(e) => {
+                // When TransformControls is active for a selected item, let the gizmo
+                // exclusively own pointer events — do NOT forward to drawing tools.
+                if (['move', 'rotate', 'scale'].includes(activeTool) && selectedId) return;
+                handlePointerDown(e);
+              }}
+              onPointerMove={(e) => {
+                // Same guard for move: skip canvas drag logic while gizmo is in control.
+                if (['move', 'rotate', 'scale'].includes(activeTool) && selectedId) return;
+                handlePointerMove(e);
+              }}
             >
               <planeGeometry args={[1000, 1000]} />
               <meshBasicMaterial transparent opacity={0} visible={false} />

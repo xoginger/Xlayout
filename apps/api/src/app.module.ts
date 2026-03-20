@@ -20,6 +20,7 @@ import { AuditModule } from './audit/audit.module';
 import { PlatformInfoModule } from './platform-info/platform-info.module';
 import { CompanyInfoModule } from './company-info/company-info.module';
 import { TenantMiddleware } from './prisma/tenant.middleware';
+import { HealthModule } from './health/health.module';
 
 @Module({
   imports: [
@@ -47,6 +48,7 @@ import { TenantMiddleware } from './prisma/tenant.middleware';
     AuditModule,
     PlatformInfoModule,
     CompanyInfoModule,
+    HealthModule,
   ],
   controllers: [AppController],
   providers: [AppService],

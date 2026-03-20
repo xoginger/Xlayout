@@ -5,7 +5,12 @@ export type SceneItemType = 'rack' | 'shelf' | 'desk' | 'cabinet' | 'catalog-ite
 export type OpeningType = 'door' | 'window' | 'opening';
 export type OpeningDirection = 'left' | 'right' | 'inward' | 'outward';
 export type ViewMode = '2D' | '3D';
-export type ToolType = 'select' | 'pan' | 'zoom' | 'move' | 'rotate' | 'scale' | 'wall' | 'room' | 'place-opening' | 'product' | 'measure' | 'dimension' | 'delete' | 'duplicate' | 'line' | 'rectangle' | 'extrude' | 'scale-blueprint';
+export type ToolType = 
+  | 'select' | 'pan' | 'zoom' | 'move' | 'rotate' | 'scale' 
+  | 'line' | 'rectangle' | 'circle' | 'arc' | 'freehand' | 'wall' 
+  | 'extrude' | 'offset' | 'follow-me' 
+  | 'tape' | 'paint' | 'eraser' | 'dimension' 
+  | 'delete' | 'duplicate' | 'scale-blueprint' | 'place-opening' | 'product';
 
 export interface SnapPoint {
   id: string;
@@ -56,6 +61,13 @@ export interface LineEntity {
   end: [number, number, number];
   type: 'line';
   layerId?: string;
+}
+
+export interface Guide {
+  id: string;
+  start: [number, number, number];
+  end: [number, number, number];
+  type: 'infinite' | 'segment';
 }
 
 export interface FaceEntity {
@@ -156,6 +168,7 @@ interface EditorState {
   volumes: VolumeEntity[];
   layers: Layer[];
   scenes: Scene[];
+  guides: Guide[];
   
   activeLayerId: string;
   selectedId: string | null;
@@ -183,6 +196,10 @@ interface EditorState {
   updateScene: (id: string, updates: Partial<Scene>) => void;
   removeScene: (id: string) => void;
   applyScene: (id: string) => void;
+  
+  addGuide: (guide: Guide) => void;
+  removeGuide: (id: string) => void;
+  clearGuides: () => void;
   
   updateOpening: (id: string, updates: Partial<Opening>) => void;
   insertStructuralAsset: (type: OpeningType, wallId: string, offset?: number) => void;
@@ -239,6 +256,7 @@ export const useEditorStore = create<EditorState>((set, get) => ({
   faces: [],
   volumes: [],
   scenes: [],
+  guides: [],
   layers: [
     { id: 'walls', name: 'Walls', visible: true, locked: false },
     { id: 'openings', name: 'Openings', visible: true, locked: false },
@@ -447,6 +465,17 @@ export const useEditorStore = create<EditorState>((set, get) => ({
   },
 
   updateItem: (id, updates) => {
+    // Epsilon guard: skip store update if the new values are identical to the
+    // current ones within floating-point noise (< 1e-6 delta per component).
+    // This prevents any accidental no-op re-renders from external callers.
+    const current = get().items.find(it => it.id === id);
+    if (current) {
+      const EPS = 1e-6;
+      const posOk = !updates.position || updates.position.every((v, i) => Math.abs(v - current.position[i]) > EPS);
+      const rotOk = !updates.rotation || updates.rotation.every((v, i) => Math.abs(v - current.rotation[i]) > EPS);
+      const scaleOk = !updates.scale || updates.scale.every((v, i) => Math.abs(v - current.scale[i]) > EPS);
+      if (!posOk && !rotOk && !scaleOk) return; // nothing changed — skip
+    }
     set((state) => ({
       items: state.items.map((it) => it.id === id ? { ...it, ...updates } : it)
     }));
@@ -660,6 +689,10 @@ export const useEditorStore = create<EditorState>((set, get) => ({
 
   triggerExport: (type) => set({ exportRequest: type }),
   clearExportRequest: () => set({ exportRequest: null }),
+
+  addGuide: (guide) => set((state) => ({ guides: [...state.guides, guide] })),
+  removeGuide: (id) => set((state) => ({ guides: state.guides.filter(g => g.id !== id) })),
+  clearGuides: () => set({ guides: [] }),
 
   updateBlueprint: (data) => set((state) => ({ 
     blueprint: { ...state.blueprint, ...data } 
