@@ -1,17 +1,19 @@
 import React, { useState } from 'react';
 import { useEditorStore, Scene, Layer } from '@/store/editor-store';
 import { calculateDistance } from '@/utils/cad-math';
+import { extractFirstPageAsImage } from '@/utils/pdf-extractor';
 
 export const RightInspector: React.FC = () => {
   const { 
     selectedId, selectedType, items, walls, openings, dimensions, lines, rectangles, faces, volumes, layers, scenes,
-    activeLayerId, project,
+    activeLayerId, project, blueprint, activeTool,
     updateItem, updateWall, updateOpening, updateLine, updateRectangle, updateFace, updateVolume,
-    removeItem, toggleLayer, updateLayer, addLayer, setActiveLayer,
-    addScene, updateScene, removeScene, applyScene, setProjectName
+    removeItem, toggleLayer, updateLayer, addLayer, setActiveLayer, duplicateItem,
+    addScene, updateScene, removeScene, applyScene, setProjectName, updateBlueprint, setActiveTool
   } = useEditorStore();
 
   const [activeTab, setActiveTab] = useState<'properties' | 'scene' | 'layers' | 'components' | 'blueprint'>('properties');
+  const [isCollapsed, setIsCollapsed] = useState(false);
 
   const selectedItem = items.find(i => i.id === selectedId);
   const selectedWall = walls.find(w => w.id === selectedId);
@@ -38,21 +40,21 @@ export const RightInspector: React.FC = () => {
       <div className="animate-in fade-in slide-in-from-right-3 duration-500">
         <div className="p-4 bg-zinc-50 border-b border-zinc-200/50 flex flex-col gap-1">
           <span className="text-[9px] font-black text-blue-500 uppercase tracking-widest">
-            Configuración de {selectedType || 'Entidad'}
+            {selectedType || 'Entidad'}
           </span>
-          <h2 className="text-lg font-black text-zinc-900 uppercase tracking-tighter">
+          <h2 className="text-sm font-black text-zinc-900 uppercase tracking-tighter truncate">
             {selectedType === 'wall' ? 'Muro Estructural' : 
-             selectedType === 'item' ? 'Instancia de Activo' : 
+             selectedType === 'item' ? selectedItem?.label || 'Instancia de Activo' : 
              selectedType === 'opening' ? 'Vano / Apertura' : 
              selectedType === 'rectangle' ? 'Área Arquitectónica' : 
              selectedType === 'line' ? 'Línea de Trazo' : 
              selectedType === 'face' ? 'Superficie Generada' :
-             selectedType === 'volume' ? 'Objeto 3D Volumétrico' : 'Medición'}
+             selectedType === 'volume' ? 'Objeto Volumétrico' : 'Medición'}
           </h2>
-          <span className="text-[8px] font-mono text-zinc-700 uppercase">UUID: {selectedId}</span>
+          <span className="text-[8px] font-mono text-zinc-500 uppercase">UUID: {selectedId}</span>
         </div>
 
-        <div className="p-5 space-y-8">
+        <div className="p-4 space-y-6">
           {selectedWall && (
             <section className="space-y-4">
               <h3 className="text-[10px] font-black text-zinc-600 uppercase tracking-widest flex items-center gap-3">
@@ -180,6 +182,28 @@ export const RightInspector: React.FC = () => {
               </div>
             </section>
           )}
+
+          {/* Acciones Rápidas del panel */}
+          <section className="space-y-4 pt-4 border-t border-zinc-200/50">
+            <h3 className="text-[10px] font-black text-zinc-600 uppercase tracking-widest flex items-center gap-3">
+              ACCIÓN RÁPIDA <div className="h-px flex-1 bg-zinc-200"></div>
+            </h3>
+            <div className="flex gap-2">
+               <button 
+                 onClick={() => { duplicateItem(selectedId); }}
+                 className="flex-1 py-2 bg-zinc-100 text-zinc-700 hover:bg-zinc-200 rounded-lg text-[9px] font-black uppercase tracking-widest transition-all"
+               >
+                 Duplicar
+               </button>
+               <button 
+                 onClick={() => { removeItem(selectedId); }}
+                 className="flex-1 py-2 bg-red-50 text-red-600 hover:bg-red-500 hover:text-white rounded-lg text-[9px] font-black uppercase tracking-widest transition-all shadow-sm"
+               >
+                 Eliminar
+               </button>
+            </div>
+          </section>
+
         </div>
       </div>
     );
@@ -362,7 +386,21 @@ export const RightInspector: React.FC = () => {
   };
 
   const renderBlueprint = () => {
-    const { blueprint, updateBlueprint, setActiveTool } = useEditorStore();
+    if (!blueprint) {
+      return (
+        <div className="p-8 h-full flex flex-col items-center justify-center opacity-40 grayscale space-y-4">
+           <div className="text-5xl">📄</div>
+           <p className="text-[10px] text-zinc-600 font-black uppercase tracking-[0.2em] text-center max-w-[140px] leading-relaxed">
+             SISTEMA DE PLANOS NO INICIALIZADO
+           </p>
+        </div>
+      );
+    }
+
+    const pos = blueprint.position || [0, -0.01, 0];
+    const scaleFactor = typeof blueprint.scale === 'number' && !isNaN(blueprint.scale) ? blueprint.scale : 1;
+    const rotationRad = typeof blueprint.rotation === 'number' && !isNaN(blueprint.rotation) ? blueprint.rotation : 0;
+    const opacityVal = typeof blueprint.opacity === 'number' && !isNaN(blueprint.opacity) ? blueprint.opacity : 0.5;
 
     return (
       <div className="p-5 space-y-6 animate-in fade-in slide-in-from-right-3">
@@ -376,22 +414,32 @@ export const RightInspector: React.FC = () => {
               <div className="group relative h-40 border-2 border-dashed border-zinc-200 rounded-2xl flex flex-col items-center justify-center hover:border-blue-500 hover:bg-blue-50/30 transition-all cursor-pointer overflow-hidden p-4 text-center">
                 <input 
                   type="file" 
-                  accept="image/*" 
+                  accept="image/png, image/jpeg, image/webp, application/pdf" 
                   className="absolute inset-0 opacity-0 cursor-pointer z-10"
-                  onChange={(e) => {
+                  onChange={async (e) => {
                     const file = e.target.files?.[0];
-                    if (file) {
-                      const reader = new FileReader();
-                      reader.onload = (rev) => {
-                        updateBlueprint({ url: rev.target?.result as string });
-                      };
-                      reader.readAsDataURL(file);
+                    if (!file) return;
+                    try {
+                      if (file.type === 'application/pdf') {
+                        const dataUrl = await extractFirstPageAsImage(file);
+                        updateBlueprint({ url: dataUrl, visible: true });
+                      } else if (file.type.startsWith('image/')) {
+                        const reader = new FileReader();
+                        reader.onload = (rev) => {
+                          updateBlueprint({ url: rev.target?.result as string, visible: true });
+                        };
+                        reader.readAsDataURL(file);
+                      }
+                    } catch (err) {
+                      console.error('Error importando:', err);
+                      // Fallback visual en caso de error
+                      alert('Error al leer el archivo. Intenta con una imagen válida o un PDF distinto.');
                     }
                   }}
                 />
                 <span className="text-2xl mb-2 group-hover:scale-125 transition-transform">📄</span>
-                <span className="text-[9px] font-black text-zinc-500 uppercase tracking-widest group-hover:text-blue-600 transition-colors">Importar Imagen de Plano</span>
-                <span className="text-[8px] text-zinc-400 mt-1 uppercase font-mono">(JPG, PNG, WEBP)</span>
+                <span className="text-[9px] font-black text-zinc-500 uppercase tracking-widest group-hover:text-blue-600 transition-colors">Importar Plano</span>
+                <span className="text-[8px] text-zinc-400 mt-1 uppercase font-mono">(PDF, JPG, PNG, WEBP)</span>
               </div>
             ) : (
               <div className="space-y-4">
@@ -409,58 +457,63 @@ export const RightInspector: React.FC = () => {
                     <span className="text-[9px] font-black text-zinc-600 uppercase">Visibility</span>
                     <button 
                       onClick={() => updateBlueprint({ visible: !blueprint.visible })}
-                      className={`px-3 py-1 rounded-full text-[8px] font-black uppercase tracking-widest transition-all ${blueprint.visible ? 'bg-blue-600 text-white shadow-md' : 'bg-zinc-200 text-zinc-500'}`}
+                      className={`px-3 py-1 rounded-full text-[8px] font-black uppercase tracking-widest transition-all ${blueprint.visible !== false ? 'bg-blue-600 text-white shadow-md' : 'bg-zinc-200 text-zinc-500'}`}
                     >
-                      {blueprint.visible ? 'Visible' : 'Hidden'}
+                      {blueprint.visible !== false ? 'Visible' : 'Hidden'}
                     </button>
                   </div>
                   
                   <div className="space-y-2">
                     <div className="flex justify-between">
                       <label className="text-[9px] font-black text-zinc-600 uppercase">Opacity</label>
-                      <span className="text-[9px] font-mono text-blue-600 font-black">{Math.round(blueprint.opacity * 100)}%</span>
+                      <span className="text-[9px] font-mono text-blue-600 font-black">{Math.round(opacityVal * 100)}%</span>
                     </div>
-                    <input type="range" min="0" max="1" step="0.01" value={blueprint.opacity} onChange={(e) => updateBlueprint({ opacity: parseFloat(e.target.value) })} className="w-full h-1.5 bg-zinc-200 rounded-lg appearance-none cursor-pointer accent-blue-600" />
+                    <input type="range" min="0" max="1" step="0.01" value={opacityVal} onChange={(e) => updateBlueprint({ opacity: parseFloat(e.target.value) })} className="w-full h-1.5 bg-zinc-200 rounded-lg appearance-none cursor-pointer accent-blue-600" />
                   </div>
 
                   <div className="space-y-2">
                     <div className="flex justify-between">
                       <label className="text-[9px] font-black text-zinc-600 uppercase">Scale Factor</label>
-                      <span className="text-[9px] font-mono text-blue-600 font-black">×{blueprint.scale.toFixed(2)}</span>
+                      <span className="text-[9px] font-mono text-blue-600 font-black">×{scaleFactor.toFixed(2)}</span>
                     </div>
                     <div className="flex gap-2">
-                      <button onClick={() => updateBlueprint({ scale: blueprint.scale * 0.9 })} className="flex-1 py-1.5 bg-white border border-zinc-200 rounded-lg text-[9px] font-black hover:bg-zinc-100 active:scale-95 transition-all">-</button>
-                      <button onClick={() => updateBlueprint({ scale: blueprint.scale * 1.1 })} className="flex-1 py-1.5 bg-white border border-zinc-200 rounded-lg text-[9px] font-black hover:bg-zinc-100 active:scale-95 transition-all">+</button>
+                      <button onClick={() => updateBlueprint({ scale: scaleFactor * 0.9 })} className="flex-1 py-1.5 bg-white border border-zinc-200 rounded-lg text-[9px] font-black hover:bg-zinc-100 active:scale-95 transition-all">-</button>
+                      <button onClick={() => updateBlueprint({ scale: scaleFactor * 1.1 })} className="flex-1 py-1.5 bg-white border border-zinc-200 rounded-lg text-[9px] font-black hover:bg-zinc-100 active:scale-95 transition-all">+</button>
                     </div>
                   </div>
 
                   <div className="space-y-2">
                     <div className="flex justify-between">
                       <label className="text-[9px] font-black text-zinc-600 uppercase">Rotation</label>
-                      <span className="text-[9px] font-mono text-blue-600 font-black">{Math.round((blueprint.rotation * 180) / Math.PI)}°</span>
+                      <span className="text-[9px] font-mono text-blue-600 font-black">{Math.round((rotationRad * 180) / Math.PI)}°</span>
                     </div>
-                    <input type="range" min={-Math.PI} max={Math.PI} step={0.01} value={blueprint.rotation} onChange={(e) => updateBlueprint({ rotation: parseFloat(e.target.value) })} className="w-full h-1.5 bg-zinc-200 rounded-lg appearance-none cursor-pointer accent-blue-600" />
+                    <input type="range" min={-Math.PI} max={Math.PI} step={0.01} value={rotationRad} onChange={(e) => updateBlueprint({ rotation: parseFloat(e.target.value) })} className="w-full h-1.5 bg-zinc-200 rounded-lg appearance-none cursor-pointer accent-blue-600" />
                   </div>
                 </div>
 
                 <div className="flex gap-2">
                    <div className="flex-1 space-y-1">
                       <label className="text-[7px] font-mono text-zinc-400 uppercase">POS X</label>
-                      <input type="number" step="0.1" value={blueprint.position[0]} onChange={(e) => updateBlueprint({ position: [parseFloat(e.target.value), blueprint.position[1], blueprint.position[2]] })} className="w-full bg-zinc-50 border border-zinc-200 rounded px-1.5 py-1 text-[10px] font-mono" />
+                      <input type="number" step="0.1" value={pos[0]} onChange={(e) => updateBlueprint({ position: [parseFloat(e.target.value) || 0, pos[1], pos[2]] })} className="w-full bg-zinc-50 border border-zinc-200 rounded px-1.5 py-1 text-[10px] font-mono" />
                    </div>
                    <div className="flex-1 space-y-1">
                       <label className="text-[7px] font-mono text-zinc-400 uppercase">POS Z</label>
-                      <input type="number" step="0.1" value={blueprint.position[2]} onChange={(e) => updateBlueprint({ position: [blueprint.position[0], blueprint.position[1], parseFloat(e.target.value)] })} className="w-full bg-zinc-50 border border-zinc-200 rounded px-1.5 py-1 text-[10px] font-mono" />
+                      <input type="number" step="0.1" value={pos[2]} onChange={(e) => updateBlueprint({ position: [pos[0], pos[1], parseFloat(e.target.value) || 0] })} className="w-full bg-zinc-50 border border-zinc-200 rounded px-1.5 py-1 text-[10px] font-mono" />
                    </div>
                 </div>
 
-                <button 
-                  onClick={() => setActiveTool('scale-blueprint')}
-                  className="w-full py-3.5 bg-zinc-900 text-white rounded-xl text-[10px] font-black uppercase tracking-[0.15em] hover:bg-blue-600 transition-all shadow-xl flex items-center justify-center gap-2 group ring-1 ring-white/10"
-                >
-                  <span className="group-hover:scale-125 transition-transform">📏</span>
-                  CALIBRAR ESCALA DEL PLANO
-                </button>
+                <div className="pt-2 border-t border-zinc-200/50">
+                  <button 
+                    onClick={() => setActiveTool('scale-blueprint')}
+                    className="w-full py-3 bg-zinc-900 text-white rounded-xl text-[10px] font-black uppercase tracking-[0.1em] hover:bg-blue-600 transition-all shadow-lg flex items-center justify-center gap-2 group ring-1 ring-zinc-900/5"
+                  >
+                    <span className="group-hover:scale-125 transition-transform">📏</span>
+                    Calibrar Escala del Plano
+                  </button>
+                  <p className="text-[8px] text-zinc-400 text-center mt-2 leading-relaxed px-2">
+                    Haz clic en dos puntos del plano e ingresa la distancia real para re-escalar automáticamente.
+                  </p>
+                </div>
               </div>
             )}
           </div>
@@ -470,63 +523,39 @@ export const RightInspector: React.FC = () => {
   };
 
   return (
-    <aside className="w-80 flex flex-col border-l border-zinc-200 bg-white shrink-0 z-40 overflow-hidden shadow-2xl">
-      <div className="flex border-b border-zinc-200 bg-zinc-50 p-1">
-        <button 
-          onClick={() => setActiveTab('properties')}
-          className={`flex-1 py-2 text-[9px] font-black uppercase tracking-widest transition-all rounded-md
-            ${activeTab === 'properties' ? 'text-zinc-900 bg-white border border-zinc-200 shadow-sm ring-1 ring-white/5' : 'text-zinc-400 hover:text-zinc-600'}`}
-        >
-          Propiedades
-        </button>
-        <button 
-          onClick={() => setActiveTab('scene')}
-          className={`flex-1 py-2 text-[9px] font-black uppercase tracking-widest transition-all rounded-md
-            ${activeTab === 'scene' ? 'text-zinc-900 bg-white border border-zinc-200 shadow-sm ring-1 ring-white/5' : 'text-zinc-400 hover:text-zinc-600'}`}
-        >
-          Escenas
-        </button>
-        <button 
-          onClick={() => setActiveTab('layers')}
-          className={`flex-1 py-2 text-[9px] font-black uppercase tracking-widest transition-all rounded-md
-            ${activeTab === 'layers' ? 'text-zinc-900 bg-white border border-zinc-200 shadow-sm ring-1 ring-white/5' : 'text-zinc-400 hover:text-zinc-600'}`}
-        >
-          Capas
-        </button>
-        <button 
-          onClick={() => setActiveTab('components')}
-          className={`flex-1 py-2 text-[9px] font-black uppercase tracking-widest transition-all rounded-md
-            ${activeTab === 'components' ? 'text-zinc-900 bg-white border border-zinc-200 shadow-sm ring-1 ring-white/5' : 'text-zinc-400 hover:text-zinc-600'}`}
-        >
-          Cuentas
-        </button>
-        <button 
-          onClick={() => setActiveTab('blueprint')}
-          className={`flex-1 py-2 text-[9px] font-black uppercase tracking-widest transition-all rounded-md
-            ${activeTab === 'blueprint' ? 'text-zinc-900 bg-white border border-zinc-200 shadow-sm ring-1 ring-white/5' : 'text-zinc-400 hover:text-zinc-600'}`}
-        >
-          Plano
-        </button>
-      </div>
+    <aside 
+      className={`absolute top-4 right-4 z-40 flex flex-col bg-white/95 backdrop-blur-xl rounded-2xl shadow-2xl ring-1 ring-zinc-900/5 transition-all duration-300 ease-in-out overflow-hidden
+        ${isCollapsed ? 'w-12 h-12 justify-center items-center cursor-pointer hover:bg-zinc-50' : 'w-72 bottom-4'}`}
+    >
+      {isCollapsed ? (
+        <div onClick={() => setIsCollapsed(false)} className="w-full h-full flex items-center justify-center text-zinc-600 hover:text-blue-600" title="Expandir Inspector">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" className="w-5 h-5"><path d="M4 6h16M4 12h16M4 18h7"/></svg>
+        </div>
+      ) : (
+        <>
+          <div className="flex items-center justify-between px-4 py-3 border-b border-zinc-200/50 bg-white/50 shrink-0">
+            <span className="text-[10px] font-black uppercase tracking-widest text-zinc-800">Inspector</span>
+            <button onClick={() => setIsCollapsed(true)} className="w-6 h-6 flex items-center justify-center rounded hover:bg-zinc-100 text-zinc-400 hover:text-zinc-800 transition-colors" title="Contraer">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" className="w-4 h-4"><path d="M18 6L6 18M6 6l12 12"/></svg>
+            </button>
+          </div>
 
-      <div className="flex-1 overflow-y-auto custom-scrollbar">
-        {activeTab === 'properties' && renderProperties()}
-        {activeTab === 'scene' && renderScene()}
-        {activeTab === 'layers' && renderLayers()}
-        {activeTab === 'components' && renderComponents()}
-        {activeTab === 'blueprint' && renderBlueprint()}
-      </div>
+          <div className="flex border-b border-zinc-200/50 bg-zinc-50/50 p-1 shrink-0 overflow-x-auto custom-scrollbar">
+            <button onClick={() => setActiveTab('properties')} className={`flex-1 py-1.5 px-2 text-[9px] font-black uppercase tracking-widest transition-all rounded-md whitespace-nowrap ${activeTab === 'properties' ? 'text-zinc-900 bg-white border border-zinc-200 shadow-sm' : 'text-zinc-400 hover:text-zinc-600'}`}>Props</button>
+            <button onClick={() => setActiveTab('scene')} className={`flex-1 py-1.5 px-2 text-[9px] font-black uppercase tracking-widest transition-all rounded-md whitespace-nowrap ${activeTab === 'scene' ? 'text-zinc-900 bg-white border border-zinc-200 shadow-sm' : 'text-zinc-400 hover:text-zinc-600'}`}>Visuales</button>
+            <button onClick={() => setActiveTab('layers')} className={`flex-1 py-1.5 px-2 text-[9px] font-black uppercase tracking-widest transition-all rounded-md whitespace-nowrap ${activeTab === 'layers' ? 'text-zinc-900 bg-white border border-zinc-200 shadow-sm' : 'text-zinc-400 hover:text-zinc-600'}`}>Capas</button>
+            <button onClick={() => setActiveTab('blueprint')} className={`flex-1 py-1.5 px-2 text-[9px] font-black uppercase tracking-widest transition-all rounded-md whitespace-nowrap ${activeTab === 'blueprint' ? 'text-zinc-900 bg-white border border-zinc-200 shadow-sm' : 'text-zinc-400 hover:text-zinc-600'}`}>Plano</button>
+          </div>
 
-      <div className="p-4 border-t border-zinc-200 bg-white flex flex-col gap-3">
-         <button 
-           disabled={!selectedId}
-           onClick={() => selectedId && removeItem(selectedId)}
-           className="w-full py-3 bg-red-600 text-white rounded-xl text-[10px] font-black uppercase tracking-widest transition-all border border-red-700 disabled:opacity-20 shadow-lg shadow-red-500/20 active:scale-95 flex items-center justify-center gap-2 group"
-         >
-           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" className="w-4 h-4 group-hover:rotate-12 transition-transform"><path d="M3 6h18M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>
-           Eliminar Selección
-         </button>
-      </div>
+          <div className="flex-1 overflow-y-auto custom-scrollbar bg-white">
+            {activeTab === 'properties' && renderProperties()}
+            {activeTab === 'scene' && renderScene()}
+            {activeTab === 'layers' && renderLayers()}
+            {activeTab === 'components' && renderComponents()}
+            {activeTab === 'blueprint' && renderBlueprint()}
+          </div>
+        </>
+      )}
     </aside>
   );
 };

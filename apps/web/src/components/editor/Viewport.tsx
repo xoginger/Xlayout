@@ -575,7 +575,7 @@ const VolumeObject: React.FC<{ volume: VolumeEntity }> = ({ volume }) => {
 };
 
 
-const BlueprintRenderer: React.FC<{ blueprint: any }> = ({ blueprint }) => {
+const BlueprintRenderer: React.FC<{ blueprint: any; onPointerDown?: any; onPointerMove?: any }> = ({ blueprint, onPointerDown, onPointerMove }) => {
   const texture = useTexture(blueprint.url) as any;
   const { width, height } = texture.image;
   const aspect = width / height;
@@ -587,6 +587,8 @@ const BlueprintRenderer: React.FC<{ blueprint: any }> = ({ blueprint }) => {
     <mesh 
       position={blueprint.position} 
       rotation={[-Math.PI / 2, 0, blueprint.rotation]}
+      onPointerDown={onPointerDown}
+      onPointerMove={onPointerMove}
     >
       <planeGeometry args={[baseWidth, baseHeight]} />
       <meshBasicMaterial 
@@ -600,13 +602,13 @@ const BlueprintRenderer: React.FC<{ blueprint: any }> = ({ blueprint }) => {
   );
 };
 
-const BlueprintObject: React.FC = () => {
+const BlueprintObject: React.FC<{ onPointerDown?: any; onPointerMove?: any }> = ({ onPointerDown, onPointerMove }) => {
   const { blueprint } = useEditorStore();
   if (!blueprint.url || !blueprint.visible) return null;
 
   return (
     <Suspense fallback={null}>
-      <BlueprintRenderer blueprint={blueprint} />
+      <BlueprintRenderer blueprint={blueprint} onPointerDown={onPointerDown} onPointerMove={onPointerMove} />
     </Suspense>
   );
 };
@@ -801,6 +803,40 @@ export const Viewport: React.FC = () => {
   const handlePointerDown = (e: any) => {
     if (e.button !== 0) return;
     
+    // -----------------------------------------------------------------
+    // 🚧 CALIBRATOR OVERRIDE: Strict absolute precision on Blueprint
+    // -----------------------------------------------------------------
+    if (activeTool === 'scale-blueprint') {
+      e.stopPropagation(); // Ignore Floor and under-objects
+      const exactPoint = [e.point.x, e.point.y, e.point.z] as [number, number, number];
+
+      if (!drawingStart) {
+        setDrawingStart(exactPoint);
+      } else {
+        const measuredDist = calculateDistance(drawingStart, exactPoint);
+        const realDistStr = prompt(
+          `Distancia medida actual: ${measuredDist.toFixed(3)}m\n\nIngresa la distancia real (en metros) para calibrar el plano:`,
+          measuredDist.toFixed(3)
+        );
+        
+        if (realDistStr !== null) {
+          let realDist = parseFloat(realDistStr.replace(',', '.')); // Soporte para comas
+          if (!isNaN(realDist) && realDist > 0 && measuredDist > 0) {
+            const factor = realDist / measuredDist;
+            const store = useEditorStore.getState();
+            store.updateBlueprint({ scale: store.blueprint.scale * factor });
+          } else {
+            alert('Valor ingresado inválido. La calibración ha sido cancelada.');
+          }
+        }
+        
+        setDrawingStart(null);
+        useEditorStore.getState().setActiveTool('select');
+      }
+      return; // End early. Mathematical purity achieved.
+    }
+    // -----------------------------------------------------------------
+
     let point: [number, number, number] = e.forcedPoint || activeInference.point;
     
     // Grid snap fallback if no geometric inference
@@ -910,6 +946,20 @@ export const Viewport: React.FC = () => {
   };
 
   const handlePointerMove = (e: any) => {
+    // -----------------------------------------------------------------
+    // 🚧 CALIBRATOR OVERRIDE: Floating mouse tracking without Snap
+    // -----------------------------------------------------------------
+    if (activeTool === 'scale-blueprint') {
+      e.stopPropagation();
+      const exactPoint = [e.point.x, e.point.y, e.point.z] as [number, number, number];
+      
+      // Update state manually to skip R3F's inference snap logic
+      setActiveInference({ point: exactPoint, type: 'none', color: '#ec4899' }); // Magenta
+      setMousePos(exactPoint);
+      return;
+    }
+    // -----------------------------------------------------------------
+
     const rawPoint = [e.point.x, 0, e.point.z] as [number, number, number];
     
     if (extrudingFaceId) {
@@ -1129,7 +1179,10 @@ export const Viewport: React.FC = () => {
           )}
 
           <ExportManager />
-          <BlueprintObject />
+          <BlueprintObject 
+            onPointerDown={handlePointerDown} 
+            onPointerMove={handlePointerMove} 
+          />
 
           <group>
             {/* Environment Guides */}
@@ -1162,9 +1215,9 @@ export const Viewport: React.FC = () => {
               <group>
                 <Line 
                   points={[drawingStart, mousePos]} 
-                  color={activeInference.type === 'axis' ? activeInference.color : "#3b82f6"} 
-                  lineWidth={activeInference.type === 'axis' ? 3 : 2} 
-                  dashed={activeInference.type !== 'axis'} 
+                  color={activeTool === 'scale-blueprint' ? "#ec4899" : (activeInference.type === 'axis' ? activeInference.color : "#3b82f6")} 
+                  lineWidth={activeInference.type === 'axis' || activeTool === 'scale-blueprint' ? 3 : 2} 
+                  dashed={activeInference.type !== 'axis' && activeTool !== 'scale-blueprint'} 
                 />
                 
                 {/* Axis Guide Line (Infinite feel) */}
@@ -1190,8 +1243,8 @@ export const Viewport: React.FC = () => {
                 )}
 
                 <mesh position={drawingStart}>
-                  <sphereGeometry args={[0.03, 8, 8]} />
-                  <meshBasicMaterial color={activeInference.type === 'axis' ? activeInference.color : "#3b82f6"} />
+                  <sphereGeometry args={[activeTool === 'scale-blueprint' ? 0.015 : 0.03, 8, 8]} />
+                  <meshBasicMaterial color={activeTool === 'scale-blueprint' ? "#ec4899" : (activeInference.type === 'axis' ? activeInference.color : "#3b82f6")} />
                 </mesh>
                 {activeTool === 'rectangle' && (
                   <mesh 

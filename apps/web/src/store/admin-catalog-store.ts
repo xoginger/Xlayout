@@ -22,12 +22,18 @@ export interface Product {
   id: string;
   sku: string;
   name: string;
+  description?: string;
   lineId: string;
-  categoryId: string;
+  categoryId?: string;
   width: number;
   depth: number;
   height: number;
   active: boolean;
+  status: 'DRAFT' | 'PUBLISHED' | 'ARCHIVED';
+  // Joined from includes
+  line?: ProductLine;
+  prices?: ProductPrice[];
+  assets?: ProductAsset[];
 }
 
 export interface ProductAsset {
@@ -39,6 +45,11 @@ export interface ProductAsset {
   thumbnailUrl?: string;
   footprint2dUrl?: string;
   model3dUrl?: string;
+  // ── Conversion pipeline ──
+  originalFileUrl?: string;
+  originalFormat?: string;
+  conversionStatus?: string;
+  conversionError?: string;
   metadata?: Record<string, any>;
   product?: Product;
 }
@@ -78,6 +89,7 @@ interface CatalogState {
 
   fetchLines: () => Promise<void>;
   createLine: (name: string) => Promise<ProductLine>;
+  updateLineStatus: (id: string, active: boolean) => Promise<void>;
   
   fetchCategories: () => Promise<void>;
   createCategory: (name: string, parentId?: string) => Promise<ProductCategory>;
@@ -86,11 +98,14 @@ interface CatalogState {
   fetchProducts: (filters?: any) => Promise<void>;
   createProduct: (data: Partial<Product>) => Promise<Product>;
   updateProductStatus: (id: string, active: boolean) => Promise<void>;
-  
-  updateLineStatus: (id: string, active: boolean) => Promise<void>;
+  publishProduct: (id: string) => Promise<void>;
+  unpublishProduct: (id: string) => Promise<void>;
 
   fetchAssets: () => Promise<void>;
   createAsset: (data: Partial<ProductAsset>) => Promise<ProductAsset>;
+  uploadAsset: (file: File, productId: string) => Promise<ProductAsset>;
+  retryConversion: (assetId: string) => Promise<void>;
+  deleteAsset: (id: string) => Promise<void>;
 
   fetchConditions: () => Promise<void>;
   createCondition: (data: Partial<ProductCondition>) => Promise<ProductCondition>;
@@ -124,6 +139,13 @@ export const useAdminCatalogStore = create<CatalogState>((set) => ({
     const newLine = await api.post<ProductLine>('/catalog/lines', { name });
     set((state) => ({ lines: [...state.lines, newLine] }));
     return newLine;
+  },
+
+  updateLineStatus: async (id, active) => {
+    await api.patch(`/catalog/lines/${id}/status`, { active });
+    set((state) => ({
+      lines: state.lines.map(l => l.id === id ? { ...l, active } : l)
+    }));
   },
 
   fetchCategories: async () => {
@@ -167,10 +189,17 @@ export const useAdminCatalogStore = create<CatalogState>((set) => ({
     }));
   },
 
-  updateLineStatus: async (id, active) => {
-    await api.patch(`/catalog/lines/${id}/status`, { active });
+  publishProduct: async (id) => {
+    await api.patch(`/catalog/products/${id}/publish`, {});
     set((state) => ({
-      lines: state.lines.map(l => l.id === id ? { ...l, active } : l)
+      products: state.products.map(p => p.id === id ? { ...p, status: 'PUBLISHED', active: true } : p)
+    }));
+  },
+
+  unpublishProduct: async (id) => {
+    await api.patch(`/catalog/products/${id}/unpublish`, {});
+    set((state) => ({
+      products: state.products.map(p => p.id === id ? { ...p, status: 'DRAFT', active: false } : p)
     }));
   },
 
@@ -189,6 +218,32 @@ export const useAdminCatalogStore = create<CatalogState>((set) => ({
     set((state) => ({ assets: [...state.assets, newAsset] }));
     return newAsset;
   },
+
+  deleteAsset: async (id) => {
+    await api.delete(`/catalog/assets/${id}`);
+    set((state) => ({
+      assets: state.assets.filter(a => a.id !== id)
+    }));
+  },
+
+  uploadAsset: async (file, productId) => {
+    const formData = new FormData();
+    formData.append('file', file);
+    formData.append('productId', productId);
+    const newAsset = await api.post<ProductAsset>('/catalog/assets/upload', formData);
+    set((state) => ({ assets: [newAsset, ...state.assets] }));
+    return newAsset;
+  },
+
+  retryConversion: async (assetId) => {
+    await api.post(`/catalog/assets/${assetId}/retry-conversion`, {});
+    set((state) => ({
+      assets: state.assets.map(a =>
+        a.id === assetId ? { ...a, conversionStatus: 'uploaded', conversionError: undefined } : a
+      ),
+    }));
+  },
+
 
   fetchConditions: async () => {
     set({ isLoading: true });

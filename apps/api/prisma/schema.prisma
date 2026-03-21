@@ -3,8 +3,9 @@
 // Architecture: Multi-tenant, single schema, tenant_id column strategy
 
 generator client {
-  provider = "prisma-client-js"
-  engineType = "binary"
+  provider      = "prisma-client-js"
+  engineType    = "binary"
+  binaryTargets = ["native", "debian-openssl-3.0.x"]
 }
 
 datasource db {
@@ -235,16 +236,21 @@ model Product {
 }
 
 model ProductAsset {
-  id             String   @id @default(uuid())
-  tenantId       String   @map("tenant_id")
-  productId      String   @map("product_id")
-  assetType      String   // 'image' | 'model_3d' | 'footprint_svg' | 'thumbnail'
-  fileUrl        String?  @map("file_url")
-  thumbnailUrl   String?  @map("thumbnail_url")
-  footprint2dUrl String?  @map("footprint_2d_url")
-  model3dUrl     String?  @map("model_3d_url")
-  metadata       Json?
-  createdAt      DateTime @default(now()) @map("created_at")
+  id                String   @id @default(uuid())
+  tenantId          String   @map("tenant_id")
+  productId         String   @map("product_id")
+  assetType         String   // 'image' | 'model_3d' | 'footprint_svg' | 'thumbnail'
+  fileUrl           String?  @map("file_url")
+  thumbnailUrl      String?  @map("thumbnail_url")
+  footprint2dUrl    String?  @map("footprint_2d_url")
+  model3dUrl        String?  @map("model_3d_url")
+  // ── Conversion Pipeline ─────────────────────────────────────────────────
+  originalFileUrl   String?  @map("original_file_url")   // path to uploaded source file
+  originalFormat    String?  @map("original_format")      // 'glb' | 'obj' | 'dae' | 'fbx' | ...
+  conversionStatus  String   @default("pending") @map("conversion_status")  // pending|processing|converted|validated|failed|url_only
+  conversionError   String?  @map("conversion_error")
+  metadata          Json?    // technical: triangles, materials, bbox, fileSize, validationStatus
+  createdAt         DateTime @default(now()) @map("created_at")
 
   tenant  Tenant  @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   product Product @relation(fields: [productId], references: [id], onDelete: Cascade)

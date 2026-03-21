@@ -294,8 +294,8 @@ export const useEditorStore = create<EditorState>((set, get) => ({
   setDirty: (isDirty) => set((state) => ({ project: { ...state.project, isDirty } })),
 
   saveToHistory: () => {
-    const { items, walls, openings, dimensions, lines, rectangles, faces, volumes, layers, scenes, project } = get();
-    const currentState = JSON.stringify({ items, walls, openings, dimensions, lines, rectangles, faces, volumes, layers, scenes, project });
+    const { items, walls, openings, dimensions, lines, rectangles, faces, volumes, layers, scenes, project, blueprint } = get();
+    const currentState = JSON.stringify({ items, walls, openings, dimensions, lines, rectangles, faces, volumes, layers, scenes, project, blueprint });
     
     const { history, historyIndex } = get();
     const newHistory = history.slice(0, historyIndex + 1);
@@ -588,13 +588,13 @@ export const useEditorStore = create<EditorState>((set, get) => ({
 
 
   saveProject: async () => {
-    const { project, items, walls, openings, dimensions, lines, rectangles, faces, volumes, layers, scenes } = get();
+    const { project, items, walls, openings, dimensions, lines, rectangles, faces, volumes, layers, scenes, blueprint } = get();
     if (project.isSaving) return;
 
     set((state) => ({ project: { ...state.project, isSaving: true } }));
 
     try {
-      const sceneState = { items, walls, openings, dimensions, lines, rectangles, faces, volumes, layers, scenes };
+      const sceneState = { items, walls, openings, dimensions, lines, rectangles, faces, volumes, layers, scenes, blueprint };
       
       let projectId = project.id;
       if (projectId === 'default') {
@@ -632,6 +632,7 @@ export const useEditorStore = create<EditorState>((set, get) => ({
         const state = latestVersion.sceneState;
         set({
           ...state,
+          blueprint: state.blueprint || { url: null, position: [0, -0.01, 0], scale: 1, rotation: 0, opacity: 0.5, locked: false, visible: true },
           project: {
             id: projectData.id,
             name: projectData.name,

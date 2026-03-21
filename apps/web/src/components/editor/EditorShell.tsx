@@ -2,7 +2,8 @@
 
 import React from 'react';
 import { AppShell } from '@/components/nav/AppShell';
-import { EditorToolbar } from '@/components/editor/EditorToolbar';
+import { ContextBar } from '@/components/nav/ContextBar';
+import { ActionBar } from '@/components/nav/ActionBar';
 import { LeftToolbar } from '@/components/editor/LeftToolbar';
 import { CatalogPanel } from '@/components/editor/CatalogPanel';
 import { Viewport } from '@/components/editor/Viewport';
@@ -15,10 +16,11 @@ import { useEditorStore } from '@/store/editor-store';
  *
  * Árbol de alturas (sin h-screen aquí — AppShell es el dueño):
  *   AppShell (h-screen)
- *   ├── GlobalNavBar (h-14)
+ *   ├── TopBar (h-14)
  *   └── slot flex-1 min-h-0
  *       └── EditorShell: flex-col flex-1 min-h-0
- *           ├── EditorToolbar (h-12, contextual del editor)
+ *           ├── ContextBar (h-10)
+ *           ├── ActionBar (h-12, contextual del editor)
  *           └── área principal flex-1 min-h-0
  *               ├── LeftToolbar
  *               ├── CatalogPanel (animado)
@@ -45,8 +47,9 @@ export const EditorShell: React.FC = () => {
       */}
       <div className="flex flex-col flex-1 min-h-0 overflow-hidden bg-white text-zinc-800 font-sans selection:bg-blue-500/30">
 
-        {/* Barra contextual del editor: File/Edit · Undo/Redo · Nombre · 2D/3D · Export */}
-        <EditorToolbar />
+        {/* Barras separadas: Contexto primero y luego el ActionBar local */}
+        <ContextBar />
+        <ActionBar />
 
         {/* Área principal: herramientas, catálogo, canvas, inspector */}
         <div className="flex flex-1 min-h-0 overflow-hidden relative">

@@ -1,4 +1,4 @@
-import { Injectable, ForbiddenException } from '@nestjs/common';
+import { Injectable, ForbiddenException, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 
 @Injectable()
@@ -35,15 +35,12 @@ export class CatalogService {
     });
   }
 
-  async updateProductLine(tenantId: string, id: string, data: { active?: boolean }) {
+  async updateProductLine(tenantId: string, id: string, data: { active?: boolean; name?: string; description?: string }) {
     const line = await this.prisma.client.productLine.findUnique({ where: { id } });
     if (!line || line.tenantId !== tenantId) {
       throw new ForbiddenException('You can only update your own product lines');
     }
-    return this.prisma.client.productLine.update({
-      where: { id },
-      data,
-    });
+    return this.prisma.client.productLine.update({ where: { id }, data });
   }
 
   async createCategory(tenantId: string, name: string, parentId?: string) {
@@ -65,10 +62,7 @@ export class CatalogService {
     if (!category || category.tenantId !== tenantId) {
       throw new ForbiddenException('You can only update your own categories');
     }
-    return this.prisma.client.productCategory.update({
-      where: { id },
-      data,
-    });
+    return this.prisma.client.productCategory.update({ where: { id }, data });
   }
 
   async createProduct(tenantId: string, data: any) {
@@ -76,9 +70,44 @@ export class CatalogService {
     if (!line || line.tenantId !== tenantId) {
       throw new ForbiddenException('You can only create products for your own lines');
     }
-
     return this.prisma.client.product.create({
       data: { ...data, tenantId: tenantId || undefined },
+    });
+  }
+
+  async updateProduct(tenantId: string, id: string, data: any) {
+    const product = await this.prisma.client.product.findUnique({ where: { id } });
+    if (!product || product.tenantId !== tenantId) {
+      throw new ForbiddenException('You can only update your own products');
+    }
+    // Strip relation fields that shouldn't be passed directly
+    const { tenantId: _t, assets, prices, line, category, conditions, ...updateData } = data;
+    return this.prisma.client.product.update({
+      where: { id },
+      data: updateData,
+      include: { line: true, category: true, prices: { where: { active: true } }, assets: true },
+    });
+  }
+
+  async publishProduct(tenantId: string, id: string) {
+    const product = await this.prisma.client.product.findUnique({ where: { id } });
+    if (!product || product.tenantId !== tenantId) {
+      throw new ForbiddenException('You can only publish your own products');
+    }
+    return this.prisma.client.product.update({
+      where: { id },
+      data: { status: 'PUBLISHED', active: true },
+    });
+  }
+
+  async unpublishProduct(tenantId: string, id: string) {
+    const product = await this.prisma.client.product.findUnique({ where: { id } });
+    if (!product || product.tenantId !== tenantId) {
+      throw new ForbiddenException('You can only update your own products');
+    }
+    return this.prisma.client.product.update({
+      where: { id },
+      data: { status: 'DRAFT', active: false },
     });
   }
 
@@ -87,7 +116,6 @@ export class CatalogService {
     if (!product || product.tenantId !== tenantId) {
       throw new ForbiddenException('You can only create prices for your own products');
     }
-
     return this.prisma.client.productPrice.create({
       data: { ...data, tenantId: tenantId || undefined, productId },
     });
@@ -96,8 +124,13 @@ export class CatalogService {
   async getProducts(tenantId: string, filters?: any) {
     return this.prisma.client.product.findMany({
       where: { tenantId: tenantId || undefined, ...filters },
-      orderBy: { createdAt: 'desc' },
-      include: { line: true, category: true, prices: true },
+      orderBy: { sku: 'asc' },
+      include: {
+        line: true,
+        category: true,
+        prices: { where: { active: true }, orderBy: { createdAt: 'desc' }, take: 1 },
+        assets: { where: { assetType: 'model_3d' } }
+      },
     });
   }
 
@@ -106,10 +139,7 @@ export class CatalogService {
     if (!product || product.tenantId !== tenantId) {
       throw new ForbiddenException('You can only update your own products');
     }
-    return this.prisma.client.product.update({
-      where: { id },
-      data,
-    });
+    return this.prisma.client.product.update({ where: { id }, data });
   }
 
   async getAssets(tenantId: string) {
@@ -130,6 +160,57 @@ export class CatalogService {
     });
   }
 
+  async deleteAsset(tenantId: string, id: string) {
+    const asset = await this.prisma.client.productAsset.findUnique({ where: { id } });
+    if (!asset || asset.tenantId !== tenantId) {
+      throw new ForbiddenException('You can only delete your own assets');
+    }
+    return this.prisma.client.productAsset.delete({ where: { id } });
+  }
+
+  // Called by upload endpoint — stores uploaded file metadata, no URL yet
+  async createAssetFromUpload(tenantId: string, data: any) {
+    const product = await this.prisma.client.product.findUnique({ where: { id: data.productId } });
+    if (!product || product.tenantId !== tenantId) {
+      throw new ForbiddenException('You can only add assets to your own products');
+    }
+    return this.prisma.client.productAsset.create({
+      data: { ...data, tenantId: tenantId || undefined },
+      include: { product: true },
+    });
+  }
+
+  // Reset status and re-enqueue conversion job for a failed asset
+  async retryAssetConversion(tenantId: string, id: string, conversionService: any) {
+    const asset = await this.prisma.client.productAsset.findUnique({ where: { id } });
+    if (!asset || asset.tenantId !== tenantId) {
+      throw new ForbiddenException('Access denied');
+    }
+    if (!asset.originalFileUrl) {
+      throw new ForbiddenException('No original file to convert. Re-upload the asset.');
+    }
+
+    await this.prisma.client.productAsset.update({
+      where: { id },
+      data: { conversionStatus: 'uploaded', conversionError: null },
+    });
+
+    // Reconstruct absolute path from relative public URL
+    const storageDir = process.env.UPLOAD_DIR || '/app/storage';
+    const relativePath = asset.originalFileUrl.replace('/storage/', '');
+    const absolutePath = `${storageDir}/${relativePath}`;
+
+    await conversionService.retryConversion({
+      assetId: id,
+      originalFilePath: absolutePath,
+      originalFormat: asset.originalFormat || 'glb',
+      tenantId,
+    });
+
+    return { message: 'Conversion job re-queued', assetId: id };
+  }
+
+
   async getConditions(tenantId: string) {
     return this.prisma.client.productCondition.findMany({
       where: { tenantId: tenantId || undefined },
@@ -149,10 +230,7 @@ export class CatalogService {
     if (!condition || condition.tenantId !== tenantId) {
       throw new ForbiddenException('You can only update your own conditions');
     }
-    return this.prisma.client.productCondition.update({
-      where: { id },
-      data,
-    });
+    return this.prisma.client.productCondition.update({ where: { id }, data });
   }
 
   async getPrices(tenantId: string) {
@@ -168,12 +246,10 @@ export class CatalogService {
     if (!price || price.tenantId !== tenantId) {
       throw new ForbiddenException('You can only update your own prices');
     }
-    return this.prisma.client.productPrice.update({
-      where: { id },
-      data,
-    });
+    return this.prisma.client.productPrice.update({ where: { id }, data });
   }
 
+  // ─── Editor Catalog — filters by PUBLISHED status ─────────────────────────
   async getAvailableCatalog(userId: string, userType: string) {
     let tenantAccessMap = new Map<string, { pricesEnabled: boolean }>();
 
@@ -198,11 +274,14 @@ export class CatalogService {
       include: {
         productLines: {
           where: { active: true },
+          orderBy: { name: 'asc' },
           include: {
             products: {
-              where: { active: true },
+              // KEY FIX: only show PUBLISHED products in the editor catalog
+              where: { status: 'PUBLISHED', active: true },
+              orderBy: { name: 'asc' },
               include: {
-                prices: { where: { active: true } },
+                prices: { where: { active: true }, orderBy: { createdAt: 'desc' }, take: 1 },
                 assets: true
               }
             }
@@ -211,37 +290,40 @@ export class CatalogService {
       }
     });
 
-    return tenantsData.map((tenant: any) => {
-      const access = tenantAccessMap.get(tenant.id);
-      return {
-        tenantId: tenant.id,
-        tenantName: tenant.name,
-        lines: tenant.productLines.map((line: any) => ({
-          lineId: line.id,
-          lineName: line.name,
-          products: line.products.map((product: any) => {
-            const activePrice = product.prices[0];
-            const model3dAsset = product.assets.find((a: any) => a.assetType === 'model_3d');
-            
-            return {
-              productId: product.id,
-              name: product.name,
-              sku: product.sku,
-              width: product.width,
-              depth: product.depth,
-              height: product.height,
-              price: access?.pricesEnabled && activePrice ? Number(activePrice.basePrice) : null,
-              hasPriceAccess: access?.pricesEnabled ?? false,
-              thumbnail: product.assets.find((a: any) => a.assetType === 'thumbnail')?.fileUrl || null,
-              metadata: {
-                ...(product.metadata as any || {}),
-                ...(model3dAsset?.metadata as any || {}),
-                model3dUrl: model3dAsset?.model3dUrl
-              }
-            };
-          })
-        }))
-      };
-    });
+    // Filter out lines with no published products
+    return tenantsData
+      .map((tenant: any) => {
+        const access = tenantAccessMap.get(tenant.id);
+        const linesWithProducts = tenant.productLines
+          .filter((line: any) => line.products.length > 0)
+          .map((line: any) => ({
+            lineId: line.id,
+            lineName: line.name,
+            products: line.products.map((product: any) => {
+              const activePrice = product.prices[0];
+              const model3dAsset = product.assets.find((a: any) => a.assetType === 'model_3d');
+              return {
+                productId: product.id,
+                name: product.name,
+                sku: product.sku,
+                width: product.width,
+                depth: product.depth,
+                height: product.height,
+                price: access?.pricesEnabled && activePrice ? Number(activePrice.basePrice) : null,
+                currency: activePrice?.currency || 'MXN',
+                hasPriceAccess: access?.pricesEnabled ?? false,
+                thumbnail: product.assets.find((a: any) => a.assetType === 'thumbnail')?.fileUrl || null,
+                metadata: {
+                  ...(product.metadata as any || {}),
+                  ...(model3dAsset?.metadata as any || {}),
+                  model3dUrl: model3dAsset?.model3dUrl || null,
+                }
+              };
+            })
+          }));
+
+        return { tenantId: tenant.id, tenantName: tenant.name, lines: linesWithProducts };
+      })
+      .filter((t: any) => t.lines.length > 0);
   }
 }
