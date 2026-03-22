@@ -1,3 +1,8 @@
+/**
+ * Creado y diseñado por XO
+ * XLayout System
+ */
+
 import { Injectable, NestMiddleware } from '@nestjs/common';
 import { Request, Response, NextFunction } from 'express';
 import { PrismaService } from './prisma.service';
@@ -17,7 +22,7 @@ export class TenantMiddleware implements NestMiddleware {
           const decoded = jwt.verify(token, secret) as any;
           tenantId = decoded.tenantId;
         } catch (e) {
-          // Ignore invalid tokens here
+          // Ignorar tokens inválidos aquí
         }
       }
     }

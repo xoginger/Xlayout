@@ -1,3 +1,7 @@
+/**
+ * Creado y diseñado por XO
+ */
+
 "use client";
 
 import React, { useState, useEffect, useRef } from 'react';
@@ -11,7 +15,7 @@ import { CustomizeToolbarModal } from '@/components/editor/CustomizeToolbarModal
 import { extractFirstPageAsImage } from '@/utils/pdf-extractor';
 import { getNavModulesForRole } from '@/lib/nav-permissions';
 
-// ─── Dropdown System ───
+// ─── Sistema de Menús Desplegables ───
 
 const MenuBtn: React.FC<{ label: React.ReactNode; active?: boolean; onClick?: () => void; isBrand?: boolean }> = ({ label, active, onClick, isBrand }) => (
   <button
@@ -52,7 +56,7 @@ const MenuAction: React.FC<{
 
 const MenuDivider = () => <div className="h-px bg-zinc-100 my-1 mx-1 border-t border-zinc-200/50" />;
 
-// ─── Icons ───
+// ─── Iconos ───
 const SaveIcon    = () => <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" className="w-3.5 h-3.5"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/></svg>;
 const UndoIcon    = () => <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" className="w-3.5 h-3.5"><path d="M9 14 4 9l5-5"/><path d="M4 9h10.5a5.5 5.5 0 0 1 5.5 5.5v0a5.5 5.5 0 0 1-5.5 5.5H11"/></svg>;
 const RedoIcon    = () => <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" className="w-3.5 h-3.5"><path d="m15 4 5 5-5 5"/><path d="M20 9H9.5A5.5 5.5 0 0 0 4 14.5v0A5.5 5.5 0 0 0 9.5 20H13"/></svg>;
@@ -64,7 +68,7 @@ const ChevronDown = () => <svg viewBox="0 0 24 24" fill="none" stroke="currentCo
 const MonitorIcon = () => <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="w-3.5 h-3.5"><rect x="2" y="3" width="20" height="14" rx="2" ry="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></svg>;
 const LogoutIcon  = () => <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="w-3.5 h-3.5"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4M16 17l5-5-5-5M21 12H9"/></svg>;
 
-// ─── Main GlobalHeader ───
+// ─── Cabecera Global Principal ───
 
 export const GlobalHeader: React.FC<{ pathname: string }> = ({ pathname }) => {
   const router = useRouter();
@@ -202,7 +206,7 @@ export const GlobalHeader: React.FC<{ pathname: string }> = ({ pathname }) => {
               {activeMenu === 'file' && (
                  <div className="absolute top-full left-0 mt-1.5 w-56 bg-white border border-zinc-200 rounded-lg shadow-xl p-1.5 z-50">
                    <MenuAction label="Nuevo Proyecto" icon={<PlusIcon />} onClick={() => { 
-                     const name = prompt('NOMBRE DEL PROYECTO:', 'NUEVO LAYOUT');
+                     const name = prompt('NOMBRE DEL PROYECTO:', 'NUEVO DISEÑO');
                      if (name) createNewProject(name); 
                      setActiveMenu(null); 
                    }} />

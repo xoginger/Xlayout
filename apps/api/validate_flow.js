@@ -1,4 +1,9 @@
-// Native fetch is available in Node 22
+/**
+ * Creado y diseñado por XO
+ * XLayout System
+ *
+ * La funcionalidad nativa fetch está disponible en Node 22
+ */
 
 const API_URL = 'http://localhost:3000';
 

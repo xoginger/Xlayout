@@ -1,3 +1,8 @@
+/**
+ * Creado y diseñado por XO
+ * XLayout System
+ */
+
 import { Processor, WorkerHost } from '@nestjs/bullmq';
 import { Job } from 'bullmq';
 import { PrismaService } from '../prisma/prisma.service';
@@ -40,7 +45,7 @@ export class ImportsProcessor extends WorkerHost {
         let rowsInserted = 0;
 
         for (const row of records as any[]) {
-          // Columns expected: sku, name, line_slug, width, depth, height, price_a, price_b, price_c, price_d, price_e
+          // Columnas esperadas: sku, name, line_slug, width, depth, height, price_a, price_b, price_c, price_d, price_e
           if (!row.sku || !row.name || !row.line_slug) continue;
 
           let line = await this.prisma.client.productLine.findFirst({
@@ -109,7 +114,7 @@ export class ImportsProcessor extends WorkerHost {
         await job.updateProgress(100);
         return { success: true, rowsInserted, type: 'catalog' };
       } catch (err: any) {
-        throw new Error(`Import failed: ${err.message}`);
+        throw new Error(`Falló la importación: ${err.message}`);
       }
     } 
     else if (type === 'prices') {
@@ -117,6 +122,6 @@ export class ImportsProcessor extends WorkerHost {
       return { success: true, rulesUpdated: 0, type: 'prices' };
     }
 
-    throw new Error('Unknown import type');
+    throw new Error('Tipo de importación desconocido');
   }
 }

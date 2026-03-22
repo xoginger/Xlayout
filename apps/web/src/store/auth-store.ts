@@ -1,3 +1,7 @@
+/**
+ * Creado y diseñado por XO
+ */
+
 "use client";
 
 import { create } from 'zustand';
@@ -85,14 +89,14 @@ export const useAuthStore = create<AuthState>()(
         
         const newPrefs = { ...currentUser.preferences, ...prefs };
         
-        // Optimistic update
+        // Actualización optimista
         set({ user: { ...currentUser, preferences: newPrefs } });
         
         try {
           await api.post('/auth/preferences', newPrefs);
         } catch (err) {
           console.error("Failed to save preferences", err);
-          // Rollback if needed
+          // Revertir si es necesario
           set({ user: currentUser });
         }
       },

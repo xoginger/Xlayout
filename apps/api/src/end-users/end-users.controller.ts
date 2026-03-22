@@ -1,3 +1,8 @@
+/**
+ * Creado y diseñado por XO
+ * XLayout System
+ */
+
 import { Controller, Post, Get, Param, Body, UseGuards } from '@nestjs/common';
 import { EndUsersService } from './end-users.service';
 
@@ -5,7 +10,7 @@ import { EndUsersService } from './end-users.service';
 export class EndUsersController {
   constructor(private readonly service: EndUsersService) {}
 
-  /** POST /end-users/register — Free self-registration */
+  /** POST /end-users/register — Auto-registro gratuito */
   @Post('register')
   register(
     @Body() body: {
@@ -22,19 +27,19 @@ export class EndUsersController {
     return this.service.register(body);
   }
 
-  /** GET /end-users/:id — Get end user profile */
+  /** GET /end-users/:id — Obtener perfil de usuario final */
   @Get(':id')
   findOne(@Param('id') id: string) {
     return this.service.findById(id);
   }
 
-  /** GET /end-users/:id/catalogs — List all accessible catalogs */
+  /** GET /end-users/:id/catalogs — Listar todos los catálogos accesibles */
   @Get(':id/catalogs')
   getCatalogs(@Param('id') id: string) {
     return this.service.getAccessibleCatalogs(id);
   }
 
-  /** POST /end-users/:id/activate — Activate access with a code */
+  /** POST /end-users/:id/activate — Activar acceso con un código */
   @Post(':id/activate')
   activate(@Param('id') id: string, @Body() body: { code: string }) {
     return this.service.activateWithCode(id, body.code);

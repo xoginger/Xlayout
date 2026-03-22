@@ -1,3 +1,7 @@
+/**
+ * Creado y diseñado por XO
+ */
+
 "use client";
 
 import { create } from 'zustand';
@@ -79,62 +83,34 @@ export const useCatalogStore = create<CatalogState>((set, get) => ({
   getFilteredProducts: () => {
     const { tenants, selectedTenantId, selectedLineId, searchQuery } = get();
     
-    // Si hay búsqueda global, ignoramos todos los filtros e inspeccionamos todo el catálogo.
+    // Si no hay tenant seleccionado, no hay nada que mostrar en Nivel 3.
+    if (!selectedTenantId) return [];
+    
+    const tenant = tenants.find(t => t.tenantId === selectedTenantId);
+    if (!tenant) return [];
+    
+    // Si no hay línea, usar la primera por defecto si existe
+    const activeLineId = selectedLineId || (tenant.lines.length > 0 ? tenant.lines[0].lineId : null);
+    if (!activeLineId) return [];
+    
+    const line = tenant.lines.find(l => l.lineId === activeLineId);
+    if (!line) return [];
+    
+    // Extraemos solo los productos del contexto activo Exacto (Marca > Línea)
+    let products = line.products.map(p => ({
+        ...p, 
+        _tenant: { id: tenant.tenantId, name: tenant.tenantName }, 
+        _line: { id: line.lineId, name: line.lineName }
+    }));
+    
+    // Si hay búsqueda, filtra SOLO dentro del contexto activo para no romper la navegación visual (Figma Style)
     if (searchQuery) {
-      const q = searchQuery.toLowerCase();
-      const allProducts = tenants.flatMap((t) =>
-        t.lines.flatMap((l) =>
-          l.products.map((p) => ({
-            ...p,
-            _tenant: { id: t.tenantId, name: t.tenantName },
-            _line: { id: l.lineId, name: l.lineName },
-          }))
-        )
-      );
-
-      return allProducts.filter(
-        (p) =>
-          p.name.toLowerCase().includes(q) ||
-          p.sku.toLowerCase().includes(q) ||
-          p._tenant.name.toLowerCase().includes(q) ||
-          p._line.name.toLowerCase().includes(q)
-      );
-    }
-
-    // Flujo normal con filtros
-    let products: any[] = [];
-    if (selectedTenantId) {
-      const tenant = tenants.find(t => t.tenantId === selectedTenantId);
-      if (tenant) {
-        if (selectedLineId) {
-          const line = tenant.lines.find(l => l.lineId === selectedLineId);
-          if (line) {
-            products = line.products.map(p => ({
-                 ...p, 
-                 _tenant: { id: tenant.tenantId, name: tenant.tenantName }, 
-                 _line: { id: line.lineId, name: line.lineName }
-            }));
-          }
-        } else {
-          products = tenant.lines.flatMap(l => 
-            l.products.map(p => ({
-               ...p, 
-               _tenant: { id: tenant.tenantId, name: tenant.tenantName }, 
-               _line: { id: l.lineId, name: l.lineName }
-            }))
-          );
-        }
-      }
-    } else {
-      products = tenants.flatMap(t => 
-        t.lines.flatMap(l => 
-          l.products.map(p => ({
-             ...p, 
-             _tenant: { id: t.tenantId, name: t.tenantName }, 
-             _line: { id: l.lineId, name: l.lineName }
-          }))
-        )
-      );
+        const q = searchQuery.toLowerCase();
+        products = products.filter(
+            (p) =>
+                p.name.toLowerCase().includes(q) ||
+                p.sku.toLowerCase().includes(q)
+        );
     }
 
     return products;

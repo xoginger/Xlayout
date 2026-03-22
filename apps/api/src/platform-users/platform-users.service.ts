@@ -1,3 +1,8 @@
+/**
+ * Creado y diseñado por XO
+ * XLayout System
+ */
+
 import { Injectable, ConflictException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 
@@ -13,7 +18,7 @@ export class PlatformUsersService {
     role?: 'PLATFORM_ADMIN' | 'PLATFORM_OWNER';
   }) {
     const existing = await this.prisma.client.platformUser.findUnique({ where: { email: data.email } });
-    if (existing) throw new ConflictException('Email already exists');
+    if (existing) throw new ConflictException('El correo ya existe');
     const passwordHash = Buffer.from(data.password).toString('base64');
     return this.prisma.client.platformUser.create({
       data: { ...data, passwordHash, role: data.role ?? 'PLATFORM_ADMIN' },

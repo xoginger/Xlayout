@@ -1,3 +1,7 @@
+/**
+ * Creado y diseñado por XO
+ */
+
 "use client";
 
 import { create } from 'zustand';
@@ -30,7 +34,7 @@ export interface Product {
   height: number;
   active: boolean;
   status: 'DRAFT' | 'PUBLISHED' | 'ARCHIVED';
-  // Joined from includes
+  // Unido desde includes
   line?: ProductLine;
   prices?: ProductPrice[];
   assets?: ProductAsset[];
@@ -45,7 +49,7 @@ export interface ProductAsset {
   thumbnailUrl?: string;
   footprint2dUrl?: string;
   model3dUrl?: string;
-  // ── Conversion pipeline ──
+  // ── Pipeline de conversión ──
   originalFileUrl?: string;
   originalFormat?: string;
   conversionStatus?: string;

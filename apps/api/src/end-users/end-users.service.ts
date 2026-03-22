@@ -1,3 +1,8 @@
+/**
+ * Creado y diseñado por XO
+ * XLayout System
+ */
+
 import { Injectable, NotFoundException, ConflictException, ForbiddenException, BadRequestException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 
@@ -5,7 +10,7 @@ import { PrismaService } from '../prisma/prisma.service';
 export class EndUsersService {
   constructor(private readonly prisma: PrismaService) {}
 
-  /** Self-registration by end user (architect, designer, distributor) */
+  /** Auto-registro por parte del usuario final (arquitecto, diseñador, distribuidor) */
   async register(data: {
     email: string;
     password: string;
@@ -17,9 +22,9 @@ export class EndUsersService {
     country?: string;
   }) {
     const existing = await this.prisma.client.endUser.findUnique({ where: { email: data.email } });
-    if (existing) throw new ConflictException('Email already registered');
+    if (existing) throw new ConflictException('El correo ya está registrado');
 
-    // In production, use bcrypt here
+    // En producción, usar bcrypt aquí
     const passwordHash = Buffer.from(data.password).toString('base64');
 
     return this.prisma.client.endUser.create({
@@ -47,11 +52,11 @@ export class EndUsersService {
         },
       },
     });
-    if (!user) throw new NotFoundException(`EndUser '${id}' not found`);
+    if (!user) throw new NotFoundException(`EndUser '${id}' no encontrado`);
     return user;
   }
 
-  /** List all tenant catalogs this end user has access to */
+  /** Listar todos los catálogos de tenant a los que este usuario final tiene acceso */
   async getAccessibleCatalogs(endUserId: string) {
     return this.prisma.client.catalogAccess.findMany({
       where: { endUserId, active: true },
@@ -61,25 +66,25 @@ export class EndUsersService {
     });
   }
 
-  /** Activate catalog access using a code */
+  /** Activar acceso al catálogo mediante un código */
   async activateWithCode(endUserId: string, code: string) {
     const activationCode = await this.prisma.client.activationCode.findUnique({ where: { code } });
     if (!activationCode || !activationCode.active) {
-      throw new BadRequestException('Invalid or expired activation code');
+      throw new BadRequestException('Código de activación inválido o expirado');
     }
     if (activationCode.expiresAt && activationCode.expiresAt < new Date()) {
-      throw new BadRequestException('Activation code has expired');
+      throw new BadRequestException('El código de activación ha expirado');
     }
     if (activationCode.maxUses && activationCode.usedCount >= activationCode.maxUses) {
-      throw new BadRequestException('Activation code has reached its maximum uses');
+      throw new BadRequestException('El código de activación ha alcanzado su máximo de usos');
     }
 
-    // Check if access already exists
+    // Verificar si el acceso ya existe
     const existing = await this.prisma.client.catalogAccess.findUnique({
       where: { tenantId_endUserId: { tenantId: activationCode.tenantId, endUserId } },
     });
     if (existing) {
-      // Update existing access if code grants more permissions
+      // Actualizar acceso existente si el código otorga más permisos
       return this.prisma.client.$transaction([
         this.prisma.client.catalogAccess.update({
           where: { tenantId_endUserId: { tenantId: activationCode.tenantId, endUserId } },

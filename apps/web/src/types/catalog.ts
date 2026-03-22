@@ -1,4 +1,5 @@
 /**
+ * Creado y diseñado por XO
  * XLayout Catalog Type System — Scalable 4-Layer Architecture
  * -----------------------------------------------------------
  * Layer 1: Brand (empresa / marca)

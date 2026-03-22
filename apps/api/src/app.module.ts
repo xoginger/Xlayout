@@ -1,3 +1,8 @@
+/**
+ * Creado y diseñado por XO
+ * XLayout System
+ */
+
 import { Module, NestModule, MiddlewareConsumer } from '@nestjs/common';
 import { AppController } from './app.controller';
 import { AppService } from './app.service';
@@ -9,7 +14,7 @@ import { CatalogModule } from './catalog/catalog.module';
 import { PricingModule } from './pricing/pricing.module';
 import { ProjectsModule } from './projects/projects.module';
 import { ImportsModule } from './imports/imports.module';
-// ── Master SaaS Backend Modules (master-backend-v1) ────────
+// ── Módulos Master SaaS Backend (master-backend-v1) ────────
 import { PlatformUsersModule } from './platform-users/platform-users.module';
 import { TenantsModule } from './tenants/tenants.module';
 import { CompanyUsersModule } from './company-users/company-users.module';
@@ -31,7 +36,7 @@ import { HealthModule } from './health/health.module';
         port: parseInt(process.env.REDIS_PORT || '6379', 10),
       },
     }),
-    // ── Legacy / existing modules ───────
+    // ── Módulos legados o existentes ───────
     AuthModule,
     OrganizationsModule,
     CatalogModule,

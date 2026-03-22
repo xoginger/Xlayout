@@ -1,3 +1,7 @@
+/**
+ * Creado y diseñado por XO
+ */
+
 "use client";
 
 import React, { Suspense, useState, useRef, useMemo, useEffect } from 'react';
@@ -33,6 +37,8 @@ import {
   calculateDistance,
   getOrthogonalPoint,
   detectClosedLoops,
+  ensureCounterClockwise,
+  ensureCCW2D,
   getAxisInference,
   findInference,
   SnapInference
@@ -44,8 +50,8 @@ import * as THREE from 'three';
 
 const RectangleObject: React.FC<{ rect: RectangleEntity }> = ({ rect }) => {
   const select = useEditorStore((state) => state.select);
-  const selectedId = useEditorStore((state) => state.selectedId);
-  const isSelected = selectedId === rect.id;
+  const selectedIds = useEditorStore((state) => state.selectedIds);
+  const isSelected = selectedIds.includes(rect.id);
 
   const points = [
     [rect.start[0], 0, rect.start[2]],
@@ -56,7 +62,7 @@ const RectangleObject: React.FC<{ rect: RectangleEntity }> = ({ rect }) => {
   ] as [number, number, number][];
 
   return (
-    <group onClick={(e) => { e.stopPropagation(); select(rect.id, 'rectangle'); }}>
+    <group onClick={(e) => { e.stopPropagation(); select(rect.id, 'rectangle', e.shiftKey); }}>
       <Line
         points={points}
         color={isSelected ? '#3b82f6' : '#a1a1aa'}
@@ -67,7 +73,7 @@ const RectangleObject: React.FC<{ rect: RectangleEntity }> = ({ rect }) => {
         rotation={[-Math.PI / 2, 0, 0]}
       >
         <planeGeometry args={[Math.abs(rect.width), Math.abs(rect.depth)]} />
-        <meshBasicMaterial color={isSelected ? '#3b82f6' : '#27272a'} transparent opacity={0.1} side={THREE.DoubleSide} />
+        <meshBasicMaterial color={isSelected ? '#3b82f6' : '#27272a'} transparent opacity={0.1} />
       </mesh>
     </group>
   );
@@ -75,11 +81,11 @@ const RectangleObject: React.FC<{ rect: RectangleEntity }> = ({ rect }) => {
 
 const LineCADObject: React.FC<{ line: LineEntity }> = ({ line }) => {
   const select = useEditorStore((state) => state.select);
-  const selectedId = useEditorStore((state) => state.selectedId);
-  const isSelected = selectedId === line.id;
+  const selectedIds = useEditorStore((state) => state.selectedIds);
+  const isSelected = selectedIds.includes(line.id);
 
   return (
-    <group onClick={(e) => { e.stopPropagation(); select(line.id, 'line'); }}>
+    <group onClick={(e) => { e.stopPropagation(); select(line.id, 'line', e.shiftKey); }}>
       <Line
         points={[line.start, line.end]}
         color={isSelected ? '#3b82f6' : '#a1a1aa'}
@@ -92,8 +98,8 @@ const LineCADObject: React.FC<{ line: LineEntity }> = ({ line }) => {
 const OpeningObject: React.FC<{ opening: Opening }> = ({ opening }) => {
   const wall = useEditorStore((state) => state.walls.find(w => w.id === opening.wallId));
   const select = useEditorStore((state) => state.select);
-  const selectedId = useEditorStore((state) => state.selectedId);
-  const isSelected = selectedId === opening.id;
+  const selectedIds = useEditorStore((state) => state.selectedIds);
+  const isSelected = selectedIds.includes(opening.id);
   
   if (!wall) return null;
 
@@ -106,7 +112,7 @@ const OpeningObject: React.FC<{ opening: Opening }> = ({ opening }) => {
     <group 
       position={center} 
       rotation={[0, -wallAngle, 0]} 
-      onClick={(e) => { e.stopPropagation(); select(opening.id, 'opening'); }}
+      onClick={(e) => { e.stopPropagation(); select(opening.id, 'opening', e.shiftKey); }}
     >
       <mesh position={[x, opening.height / 2, 0]}>
         <boxGeometry args={[opening.width, opening.height, wall.thickness + 0.05]} />
@@ -213,8 +219,8 @@ const GltfModel: React.FC<{ url: string; item: SceneItem }> = ({ url, item }) =>
 };
 
 const SceneItemObject: React.FC<{ item: SceneItem }> = ({ item }) => {
-  const { select, selectedId, activeTool, updateItem, viewMode, gridSize, snapEnabled, items } = useEditorStore();
-  const isSelected = selectedId === item.id;
+  const { select, selectedIds, activeTool, updateItem, viewMode, gridSize, snapEnabled, items } = useEditorStore();
+  const isSelected = selectedIds.includes(item.id);
   const [activeSnap, setActiveSnap] = useState<SnapResult | null>(null);
 
   // groupRef is the actual THREE.Group for this item.
@@ -269,7 +275,7 @@ const SceneItemObject: React.FC<{ item: SceneItem }> = ({ item }) => {
 
   // Professional Auto-Gizmo: Always show if selected. Default to translate mode unless explicitly rotating/scaling.
   const mode = activeTool === 'rotate' ? 'rotate' : activeTool === 'scale' ? 'scale' : 'translate';
-  const showGizmo = isSelected && !(mode === 'scale' && item.resizable === false);
+  const showGizmo = isSelected && selectedIds.length === 1;
 
   const color = isSelected ? '#3b82f6' : '#64748b';
 
@@ -305,7 +311,7 @@ const SceneItemObject: React.FC<{ item: SceneItem }> = ({ item }) => {
         ref={groupRef}
         position={item.position}
         rotation={item.rotation}
-        onClick={(e) => { e.stopPropagation(); select(item.id, 'item'); }}
+        onClick={(e) => { e.stopPropagation(); select(item.id, 'item', e.shiftKey); }}
       >
         <ModelErrorBoundary fallback={<ModelFallback item={item} />}>
           <Suspense fallback={<ModelFallback item={item} />}>
@@ -378,8 +384,8 @@ const SceneItemObject: React.FC<{ item: SceneItem }> = ({ item }) => {
 
 const DimensionLineObject: React.FC<{ dim: DimensionLine }> = ({ dim }) => {
   const select = useEditorStore((state) => state.select);
-  const selectedId = useEditorStore((state) => state.selectedId);
-  const isSelected = selectedId === dim.id;
+  const selectedIds = useEditorStore((state) => state.selectedIds);
+  const isSelected = selectedIds.includes(dim.id);
   const distance = calculateDistance(dim.start, dim.end);
 
   const center = [
@@ -389,7 +395,7 @@ const DimensionLineObject: React.FC<{ dim: DimensionLine }> = ({ dim }) => {
   ];
 
   return (
-    <group onClick={(e) => { e.stopPropagation(); select(dim.id, 'dimension'); }}>
+    <group onClick={(e) => { e.stopPropagation(); select(dim.id, 'dimension', e.shiftKey); }}>
       <Line
         points={[dim.start, dim.end]}
         color={isSelected ? '#3b82f6' : '#60a5fa'}
@@ -406,9 +412,9 @@ const DimensionLineObject: React.FC<{ dim: DimensionLine }> = ({ dim }) => {
 
 const WallObject: React.FC<{ wall: Wall }> = ({ wall }) => {
   const select = useEditorStore((state) => state.select);
-  const selectedId = useEditorStore((state) => state.selectedId);
+  const selectedIds = useEditorStore((state) => state.selectedIds);
   const viewMode = useEditorStore((state) => state.viewMode);
-  const isSelected = selectedId === wall.id;
+  const isSelected = selectedIds.includes(wall.id);
 
   const length = calculateDistance(wall.start, wall.end);
   const angle = getWallAngle(wall.start, wall.end);
@@ -416,7 +422,7 @@ const WallObject: React.FC<{ wall: Wall }> = ({ wall }) => {
 
   if (viewMode === '2D') {
     return (
-      <group position={center as any} rotation={[0, -angle, 0]} onClick={(e) => { e.stopPropagation(); select(wall.id, 'wall'); }}>
+      <group position={center as any} rotation={[0, -angle, 0]} onClick={(e) => { e.stopPropagation(); select(wall.id, 'wall', e.shiftKey); }}>
         <mesh position={[0, 0.001, 0]}>
           <boxGeometry args={[length, 0.002, wall.thickness]} />
           <meshBasicMaterial color={isSelected ? '#3b82f6' : '#27272a'} />
@@ -431,7 +437,7 @@ const WallObject: React.FC<{ wall: Wall }> = ({ wall }) => {
   }
 
   return (
-    <group position={center as any} rotation={[0, -angle, 0]} onClick={(e) => { e.stopPropagation(); select(wall.id, 'wall'); }}>
+    <group position={center as any} rotation={[0, -angle, 0]} onClick={(e) => { e.stopPropagation(); select(wall.id, 'wall', e.shiftKey); }}>
       <mesh position={[0, wall.height / 2, 0]} castShadow receiveShadow>
         <boxGeometry args={[length, wall.height, wall.thickness]} />
         <meshStandardMaterial 
@@ -482,15 +488,19 @@ const HUD: React.FC<{
 
 const FaceObject: React.FC<{ face: FaceEntity }> = ({ face }) => {
   const select = useEditorStore((state) => state.select);
-  const selectedId = useEditorStore((state) => state.selectedId);
-  const isSelected = selectedId === face.id;
+  const selectedIds = useEditorStore((state) => state.selectedIds);
+  const isSelected = selectedIds.includes(face.id);
 
   const shape = useMemo(() => {
     const s = new THREE.Shape();
     if (face.points.length < 3) return s;
-    s.moveTo(face.points[0][0], face.points[0][2]);
-    for (let i = 1; i < face.points.length; i++) {
-      s.lineTo(face.points[i][0], face.points[i][2]);
+    // Map XZ to Local XY (Y = -Z to match -PI/2 rotation)
+    // Then ensure CCW in local space so normal points Z+ (World Y+)
+    const localPoints = ensureCCW2D(face.points.map(p => [p[0], -p[2]]));
+    
+    s.moveTo(localPoints[0][0], localPoints[0][1]);
+    for (let i = 1; i < localPoints.length; i++) {
+      s.lineTo(localPoints[i][0], localPoints[i][1]);
     }
     s.closePath();
     return s;
@@ -500,22 +510,21 @@ const FaceObject: React.FC<{ face: FaceEntity }> = ({ face }) => {
     <mesh 
       rotation={[-Math.PI / 2, 0, 0]} 
       position={[0, 0.0005, 0]}
-      onClick={(e) => { e.stopPropagation(); select(face.id, 'face'); }}
+      onClick={(e) => { e.stopPropagation(); select(face.id, 'face', e.shiftKey); }}
     >
       <shapeGeometry args={[shape]} />
       <meshBasicMaterial 
         color={isSelected ? '#3b82f6' : '#94a3b8'} 
         transparent 
         opacity={isSelected ? 0.4 : 0.2} 
-        side={THREE.DoubleSide} 
       />
     </mesh>
   );
 };
 
 const VolumeObject: React.FC<{ volume: VolumeEntity }> = ({ volume }) => {
-  const { select, selectedId, activeTool, updateVolume } = useEditorStore();
-  const isSelected = selectedId === volume.id;
+  const { select, selectedIds, activeTool, updateVolume } = useEditorStore();
+  const isSelected = selectedIds.includes(volume.id);
   const volumeGroupRef = useRef<THREE.Group>(null!);
   const transformRef = useRef<any>(null);
   const isDraggingVol = useRef(false);
@@ -523,9 +532,13 @@ const VolumeObject: React.FC<{ volume: VolumeEntity }> = ({ volume }) => {
   const shape = useMemo(() => {
     const s = new THREE.Shape();
     if (volume.basePoints.length < 3) return s;
-    s.moveTo(volume.basePoints[0][0], volume.basePoints[0][2]);
-    for (let i = 1; i < volume.basePoints.length; i++) {
-      s.lineTo(volume.basePoints[i][0], volume.basePoints[i][2]);
+    // Map XZ to Local XY (Y = -Z to match -PI/2 rotation)
+    // Then ensure CCW in local space so normal points Z+ (World Y+)
+    const localPoints = ensureCCW2D(volume.basePoints.map(p => [p[0], -p[2]]));
+
+    s.moveTo(localPoints[0][0], localPoints[0][1]);
+    for (let i = 1; i < localPoints.length; i++) {
+      s.lineTo(localPoints[i][0], localPoints[i][1]);
     }
     s.closePath();
     return s;
@@ -545,9 +558,9 @@ const VolumeObject: React.FC<{ volume: VolumeEntity }> = ({ volume }) => {
       <group
         ref={volumeGroupRef}
         position={volume.position}
-        onClick={(e) => { e.stopPropagation(); select(volume.id, 'volume'); }}
+        onClick={(e) => { e.stopPropagation(); select(volume.id, 'volume', e.shiftKey); }}
       >
-        <mesh castShadow receiveShadow>
+        <mesh castShadow receiveShadow rotation={[-Math.PI / 2, 0, 0]}>
           <extrudeGeometry
             args={[shape, { depth: volume.height, bevelEnabled: false }]}
           />
@@ -673,10 +686,127 @@ const Grid3DHelper: React.FC<{ gridSize: number }> = ({ gridSize }) => {
   );
 };
 
+const MultiSelectionGizmo: React.FC = () => {
+  const { selectedIds, items, walls, lines, rectangles, activeTool, updateItem, updateWall, updateLine, updateRectangle, gridSize, snapEnabled } = useEditorStore();
+  const groupRef = useRef<THREE.Group>(null!);
+  const [center, setCenter] = useState<[number, number, number]>([0, 0, 0]);
+  const isDragging = useRef(false);
+
+  // Calculate center of mass / bounding box center
+  useEffect(() => {
+    if (selectedIds.length <= 1) return;
+
+    const points: [number, number, number][] = [];
+    selectedIds.forEach(id => {
+      const item = items.find(i => i.id === id);
+      if (item) points.push(item.position);
+      const wall = walls.find(w => w.id === id);
+      if (wall) {
+        points.push(wall.start);
+        points.push(wall.end);
+      }
+      const line = lines.find(l => l.id === id);
+      if (line) {
+        points.push(line.start);
+        points.push(line.end);
+      }
+      const rect = rectangles.find(r => r.id === id);
+      if (rect) {
+        points.push(rect.start);
+        points.push(rect.end);
+      }
+    });
+
+    if (points.length === 0) return;
+
+    const min = [Infinity, Infinity, Infinity];
+    const max = [-Infinity, -Infinity, -Infinity];
+
+    points.forEach(p => {
+      for (let i = 0; i < 3; i++) {
+        min[i] = Math.min(min[i], p[i]);
+        max[i] = Math.max(max[i], p[i]);
+      }
+    });
+
+    const newCenter: [number, number, number] = [
+      (min[0] + max[0]) / 2,
+      (min[1] + max[1]) / 2,
+      (min[2] + max[2]) / 2
+    ];
+
+    setCenter(newCenter);
+    if (groupRef.current) {
+       groupRef.current.position.set(...newCenter);
+    }
+  }, [selectedIds, items, walls, lines, rectangles]);
+
+  const onDragStart = () => {
+    isDragging.current = true;
+    useEditorStore.getState().saveToHistory();
+  };
+
+  const onDragEnd = () => {
+    isDragging.current = false;
+    const offset = groupRef.current.position.clone().sub(new THREE.Vector3(...center));
+    
+    selectedIds.forEach(id => {
+      const item = items.find(i => i.id === id);
+      if (item) {
+        const newPos: [number, number, number] = [
+          item.position[0] + offset.x,
+          item.position[1] + offset.y,
+          item.position[2] + offset.z
+        ];
+        updateItem(id, { position: newPos });
+      }
+      const wall = walls.find(w => w.id === id);
+      if (wall) {
+        updateWall(id, {
+          start: [wall.start[0] + offset.x, wall.start[1] + offset.y, wall.start[2] + offset.z],
+          end: [wall.end[0] + offset.x, wall.end[1] + offset.y, wall.end[2] + offset.z]
+        });
+      }
+      const line = lines.find(l => l.id === id);
+      if (line) {
+        updateLine(id, {
+          start: [line.start[0] + offset.x, line.start[1] + offset.y, line.start[2] + offset.z],
+          end: [line.end[0] + offset.x, line.end[1] + offset.y, line.end[2] + offset.z]
+        });
+      }
+      const rect = rectangles.find(r => r.id === id);
+      if (rect) {
+        updateRectangle(id, {
+          start: [rect.start[0] + offset.x, rect.start[1] + offset.y, rect.start[2] + offset.z],
+          end: [rect.end[0] + offset.x, rect.end[1] + offset.y, rect.end[2] + offset.z]
+        });
+      }
+    });
+    
+    setCenter([groupRef.current.position.x, groupRef.current.position.y, groupRef.current.position.z]);
+  };
+
+  if (selectedIds.length <= 1 || !['move', 'select', 'pan'].includes(activeTool)) return null;
+
+  return (
+    <>
+      <group ref={groupRef} position={center} />
+      <TransformControls
+        object={groupRef}
+        mode="translate"
+        onMouseDown={onDragStart}
+        onMouseUp={onDragEnd}
+        translationSnap={snapEnabled ? gridSize : null}
+        size={0.75}
+      />
+    </>
+  );
+};
+
 export const Viewport: React.FC = () => {
   const { 
     items, walls, openings, dimensions, lines, rectangles, faces, volumes, layers, 
-    select, activeTool, viewMode, selectedId,
+    select, activeTool, viewMode, selectedIds,
     addWall, addDimension, addOpening, addLine, addRectangle, addFace, addVolume,
     updateWall, updateLine, updateRectangle, updateItem,
     gridSize, snapEnabled, showGrid,
@@ -897,12 +1027,12 @@ export const Viewport: React.FC = () => {
         const id = Math.random().toString(36).substr(2, 9);
         addRectangle({ id, start: drawingStart, end: point, width, depth, type: 'rectangle' });
         
-        const rectPoints: [number, number, number][] = [
+        const rectPoints: [number, number, number][] = ensureCounterClockwise([
           [drawingStart[0], 0, drawingStart[2]],
           [drawingStart[0] + width, 0, drawingStart[2]],
           [drawingStart[0] + width, 0, drawingStart[2] + depth],
           [drawingStart[0], 0, drawingStart[2] + depth]
-        ];
+        ]);
         addFace({ id: 'face-' + id, points: rectPoints, type: 'face' });
         setDrawingStart(null);
       }
@@ -928,7 +1058,7 @@ export const Viewport: React.FC = () => {
             drawingStart[2] + Math.sin(angle) * radius
           ]);
         }
-        addFace({ id: 'circle-' + Math.random().toString(36).substr(2, 5), points: circlePoints, type: 'face' });
+        addFace({ id: 'circle-' + Math.random().toString(36).substr(2, 5), points: ensureCounterClockwise(circlePoints), type: 'face' });
         setDrawingStart(null);
       }
     } else if (activeTool === 'place-opening' && pendingOpeningType) {
@@ -1121,7 +1251,7 @@ export const Viewport: React.FC = () => {
 
       // 5. Delete selection
       if (e.key === 'Delete' || (e.key === 'Backspace' && !vcbInput)) {
-        if (selectedId) removeItem(selectedId);
+        if (selectedIds.length > 0) removeItem();
       }
     };
 
@@ -1139,7 +1269,7 @@ export const Viewport: React.FC = () => {
       window.removeEventListener('keydown', handleKeyDown);
       window.removeEventListener('keyup', handleKeyUp);
     };
-  }, [drawingStart, vcbInput, mousePos, activeInference, lockedAxis, selectedId, activeTool]);
+  }, [drawingStart, vcbInput, mousePos, activeInference, lockedAxis, selectedIds, activeTool]);
 
   const layerVisible = (id: string) => layers.find(l => l.id === id)?.visible !== false;
 
@@ -1168,7 +1298,7 @@ export const Viewport: React.FC = () => {
         onPointerMissed={() => {
           // Don't deselect if TransformControls is active — clicking gizmo arrows
           // fires onPointerMissed because they don't hit any scene mesh.
-          if (['move', 'rotate', 'scale'].includes(activeTool) && selectedId) return;
+          if (['move', 'rotate', 'scale'].includes(activeTool) && selectedIds.length > 0) return;
           select(null);
         }}
         onPointerUp={handlePointerUp}
@@ -1234,6 +1364,8 @@ export const Viewport: React.FC = () => {
             {layerVisible('rectangles') && rectangles.map(r => <RectangleObject key={r.id} rect={r} />)}
             {layerVisible('faces') && faces.map(f => <FaceWithExtrude key={f.id} face={f} />)}
             {layerVisible('volumes') && volumes.map(v => <VolumeObject key={v.id} volume={v} />)}
+            
+            <MultiSelectionGizmo />
             
             {/* Real-time Preview */}
             {drawingStart && (

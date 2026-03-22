@@ -1,3 +1,8 @@
+/**
+ * Creado y diseñado por XO
+ * XLayout System
+ */
+
 import { Injectable, ConflictException, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 
@@ -5,9 +10,9 @@ import { PrismaService } from '../prisma/prisma.service';
 export class CatalogAccessService {
   constructor(private readonly prisma: PrismaService) {}
 
-  /**
-   * Company user directly grants catalog access to an end user.
-   * This is the "manual assignment" flow.
+   /**
+   * El usuario de la empresa otorga acceso al catálogo directamente a un usuario final.
+   * Este es el flujo de "asignación manual".
    */
   async grantAccess(data: {
     tenantId: string;
@@ -22,7 +27,7 @@ export class CatalogAccessService {
       where: { tenantId_endUserId: { tenantId: data.tenantId, endUserId: data.endUserId } },
     });
     if (existing) {
-      // Update permissions
+      // Actualizar permisos
       return this.prisma.client.catalogAccess.update({
         where: { tenantId_endUserId: { tenantId: data.tenantId, endUserId: data.endUserId } },
         data: {
@@ -39,11 +44,11 @@ export class CatalogAccessService {
     return this.prisma.client.catalogAccess.create({ data: { ...data, active: true } });
   }
 
-  /** Grant access looking up by email */
+  /** Otorgar acceso buscando por email */
   async grantAccessByEmail(tenantId: string, email: string, data: any) {
     const endUser = await this.prisma.client.endUser.findUnique({ where: { email } });
     if (!endUser) {
-      throw new NotFoundException('End user not found with this email. They must register first.');
+      throw new NotFoundException('Usuario final no encontrado con este email. Deben registrarse primero.');
     }
     return this.grantAccess({
       ...data,
@@ -52,7 +57,7 @@ export class CatalogAccessService {
     });
   }
 
-  /** List all accesses for a tenant */
+  /** Listar todos los accesos para un tenant */
   async findByTenant(tenantId: string) {
     return this.prisma.client.catalogAccess.findMany({
       where: { tenantId, active: true },
@@ -63,7 +68,7 @@ export class CatalogAccessService {
     });
   }
 
-  /** Revoke access */
+  /** Revocar acceso */
   async revokeAccess(tenantId: string, endUserId: string) {
     return this.prisma.client.catalogAccess.update({
       where: { tenantId_endUserId: { tenantId, endUserId } },

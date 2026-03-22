@@ -1,3 +1,8 @@
+/**
+ * Creado y diseñado por XO
+ * XLayout System
+ */
+
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { PricingEngineService } from '../pricing/pricing.service';
@@ -35,12 +40,12 @@ export class ProjectsService {
       include: { versions: true }
     });
     
-    if (!project) throw new NotFoundException('Project not found');
+    if (!project) throw new NotFoundException('Proyecto no encontrado');
     return project;
   }
 
   async saveLayoutVersion(tenantId: string, projectId: string, sceneState: any) {
-    // Basic verification that project belongs to tenant
+    // Verificación básica de que el proyecto pertenece al tenant
     await this.getProjectById(tenantId, projectId);
 
     const versionNum = await this.prisma.client.projectVersion.count({
@@ -55,7 +60,7 @@ export class ProjectsService {
       }
     });
 
-    // Automatically generate a quote based on placements
+    // Generar automáticamente una cotización basada en los placements
     const placements = sceneState.placements || [];
     if (placements.length > 0) {
        const quoteData = await this.pricingEngine.calculateQuote(tenantId, placements);
@@ -65,7 +70,7 @@ export class ProjectsService {
            tenantId,
            projectVersionId: version.id,
            totalAmount: quoteData.total,
-           quoteData: quoteData.lines as any, // Denormalized state snapshot
+           quoteData: quoteData.lines as any, // Instantánea del estado desnormalizado
            status: 'DRAFT'
          }
        });
@@ -102,17 +107,17 @@ export class ProjectsService {
   async duplicateProject(tenantId: string, userId: string, id: string) {
     const original = await this.getProjectById(tenantId, id);
     
-    // Create new project
+    // Crear nuevo proyecto
     const duplicated = await this.prisma.client.project.create({
       data: {
-        name: `${original.name} (Copy)`,
+        name: `${original.name} (Copia)`,
         description: original.description,
         tenantId,
         creatorId: userId
       }
     });
 
-    // Copy latest version if exists
+    // Copiar la última versión si existe
     const latestVersion = await this.prisma.client.projectVersion.findFirst({
       where: { projectId: id },
       orderBy: { versionNum: 'desc' }

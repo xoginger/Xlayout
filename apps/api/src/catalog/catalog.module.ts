@@ -1,3 +1,8 @@
+/**
+ * Creado y diseñado por XO
+ * XLayout System
+ */
+
 import { Module } from '@nestjs/common';
 import { CatalogService } from './catalog.service';
 import { CatalogController } from './catalog.controller';

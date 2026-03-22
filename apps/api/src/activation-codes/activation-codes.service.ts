@@ -1,3 +1,8 @@
+/**
+ * Creado y diseñado por XO
+ * XLayout System
+ */
+
 import { Injectable, BadRequestException, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { randomBytes } from 'crypto';
@@ -6,7 +11,7 @@ import { randomBytes } from 'crypto';
 export class ActivationCodesService {
   constructor(private readonly prisma: PrismaService) {}
 
-  /** Generate a unique activation code for a tenant */
+  /** Generar un código de activación único para un tenant */
   async create(data: {
     tenantId: string;
     catalogEnabled?: boolean;
@@ -30,7 +35,7 @@ export class ActivationCodesService {
     });
   }
 
-  /** List all codes for a tenant */
+  /** Listar todos los códigos para un tenant */
   async findByTenant(tenantId: string) {
     return this.prisma.client.activationCode.findMany({
       where: { tenantId },
@@ -39,12 +44,12 @@ export class ActivationCodesService {
     });
   }
 
-  /** Deactivate a code */
+  /** Desactivar un código */
   async deactivate(id: string) {
     return this.prisma.client.activationCode.update({ where: { id }, data: { active: false } });
   }
 
-  /** Validate a code without redeeming it (for UI preview) */
+  /** Validar un código sin canjearlo (para previsualización en UI) */
   async validate(code: string) {
     const record = await this.prisma.client.activationCode.findUnique({ where: { code } });
     if (!record || !record.active) return { valid: false, reason: 'Invalid or inactive code' };

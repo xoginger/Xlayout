@@ -1,7 +1,11 @@
+/**
+ * Creado y diseñado por XO
+ */
+
 import type { SceneItemType } from '@/store/editor-store';
 import * as THREE from 'three';
 
-// ─── Types ──────────────────────────────────────────────────────────────────
+// ─── Tipos ──────────────────────────────────────────────────────────────────
 export type InferenceType = 'endpoint' | 'midpoint' | 'center' | 'axis' | 'grid' | 'none';
 
 export interface SnapInference {
@@ -12,7 +16,7 @@ export interface SnapInference {
   label?: string;
 }
 
-// ─── Axis Colors (SketchUp Style) ──────────────────────────────────────────
+// ─── Colores de Ejes (Estilo SketchUp) ──────────────────────────────────────────
 export const AXIS_COLORS = {
   x: '#ff4444', // Red
   y: '#44ff44', // Green
@@ -20,7 +24,7 @@ export const AXIS_COLORS = {
   none: '#ffffff'
 };
 
-// ─── Floor Alignment Utilities ──────────────────────────────────────────────
+// ─── Utilidades de Alineación al Suelo ──────────────────────────────────────────────
 const ITEM_HALF_HEIGHTS: Record<SceneItemType | 'default', number> = {
   rack:          1.000,
   shelf:         0.900,
@@ -40,9 +44,9 @@ export const calculateDistance = (p1: [number, number, number], p2: [number, num
   return Math.sqrt(dx * dx + dy * dy + dz * dz);
 };
 
-// ─── Advanced Inference Engine ───────────────────────────────────────────────
+// ─── Motor de Inferencia Avanzado ───────────────────────────────────────────────
 
-/** Detects if a point is aligned with a major axis relative to a start point. */
+/** Detecta si un punto está alineado con un eje principal relativo a un punto de inicio. */
 export const getAxisInference = (
   start: [number, number, number], 
   current: [number, number, number],
@@ -57,7 +61,7 @@ export const getAxisInference = (
   const absY = Math.abs(dy);
   const absZ = Math.abs(dz);
 
-  // If locked, project the current point onto that axis
+  // Si está bloqueado, proyecta el punto actual sobre ese eje
   if (lockedAxis === 'x') {
     return { point: [current[0], start[1], start[2]], type: 'axis', axis: 'x', color: AXIS_COLORS.x, label: 'Eje X' };
   }
@@ -68,8 +72,8 @@ export const getAxisInference = (
     return { point: [start[0], start[1], current[2]], type: 'axis', axis: 'z', color: AXIS_COLORS.z, label: 'Eje Z' };
   }
 
-  // Automatic inference based on proximity
-  // We check which axis has the smallest relative difference
+  // Inferencia automática basada en proximidad
+  // Verificamos qué eje tiene la menor diferencia relativa
   if (absX > tolerance && absY < tolerance && absZ < tolerance) {
     return { point: [current[0], start[1], start[2]], type: 'axis', axis: 'x', color: AXIS_COLORS.x, label: 'Eje X' };
   }
@@ -90,13 +94,13 @@ export const findInference = (
   startPoint: [number, number, number] | null = null,
   lockedAxis: 'x' | 'y' | 'z' | null = null
 ): SnapInference => {
-  // 1. Locked Axis (Highest Priority if provided)
+  // 1. Eje bloqueado (Máxima prioridad si se proporciona)
   if (startPoint && lockedAxis) {
     const axisInf = getAxisInference(startPoint, point, lockedAxis);
     if (axisInf) return axisInf;
   }
 
-  // 2. Check Endpoints
+  // 2. Verificar extremos
   for (const seg of segments) {
     if (calculateDistance(point, seg.start) < threshold) {
       return { point: seg.start, type: 'endpoint', color: '#3b82f6', label: 'Punto Final' };
@@ -106,7 +110,7 @@ export const findInference = (
     }
   }
 
-  // 3. Check Midpoints
+  // 3. Verificar puntos medios
   for (const seg of segments) {
     const mid: [number, number, number] = [
       (seg.start[0] + seg.end[0]) / 2,
@@ -118,7 +122,7 @@ export const findInference = (
     }
   }
 
-  // 4. Check Axis Inference (if not locked, do auto-detection)
+  // 4. Verificar inferencia de ejes (si no está bloqueado, auto-detectar)
   if (startPoint) {
     const axisInf = getAxisInference(startPoint, point);
     if (axisInf) return axisInf;
@@ -128,7 +132,7 @@ export const findInference = (
   return { point, type: 'none', color: '#ffffff' };
 };
 
-// ─── Geometry Utilities ──────────────────────────────────────────────────────
+// ─── Utilidades de Geometría ──────────────────────────────────────────────────────
 
 export const snapToGrid = (value: number, gridSize: number = 0.5): number => {
   return Math.round(value / gridSize) * gridSize;
@@ -163,7 +167,44 @@ export const getOrthogonalPoint = (
   return dx > dz ? [current[0], start[1], start[2]] : [start[0], start[1], current[2]];
 };
 
-/** Detects loops for auto-face generation. */
+/**
+ * Calcula el área con signo de un polígono 2D.
+ */
+export const getPolygonArea2D = (points: [number, number][]): number => {
+  let area = 0;
+  for (let i = 0; i < points.length; i++) {
+    const j = (i + 1) % points.length;
+    area += points[i][0] * points[j][1];
+    area -= points[j][0] * points[i][1];
+  }
+  return area / 2;
+};
+
+/** Asegura que el orden de los puntos sea antihorario (CCW) en el espacio 2D. */
+export const ensureCCW2D = (points: [number, number][]): [number, number][] => {
+  if (getPolygonArea2D(points) < 0) {
+    return [...points].reverse();
+  }
+  return points;
+};
+
+/**
+ * Calculates the signed area of a 2D polygon in the XZ plane.
+ * Positive = Counter-Clockwise (CCW)
+ */
+export const getPolygonArea = (points: [number, number, number][]): number => {
+  return getPolygonArea2D(points.map(p => [p[0], p[2]]));
+};
+
+/** Ensures point winding order is Counter-Clockwise. */
+export const ensureCounterClockwise = (points: [number, number, number][]): [number, number, number][] => {
+  if (getPolygonArea(points) < 0) {
+    return [...points].reverse();
+  }
+  return points;
+};
+
+/** Detecta bucles para la generación automática de caras. */
 export const detectClosedLoops = (
   segments: { start: [number, number, number], end: [number, number, number] }[]
 ): [number, number, number][][] => {
@@ -199,7 +240,7 @@ export const detectClosedLoops = (
       const neighborRef = getRef(neighbor);
       if (neighborRef === parent) continue;
       if (neighborRef === path[0] && path.length >= 3) {
-        loops.push([...coords]);
+        loops.push(ensureCounterClockwise([...coords]));
         continue;
       }
       if (!visited.has(neighborRef)) {

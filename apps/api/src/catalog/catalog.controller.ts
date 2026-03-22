@@ -1,3 +1,8 @@
+/**
+ * Creado y diseñado por XO
+ * XLayout System
+ */
+
 import {
   Controller, Get, Post, Patch, Delete,
   Body, Param, UseGuards, Query, Req,
@@ -10,12 +15,12 @@ import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { TenantGuard } from '../common/guards/tenant.guard';
 import * as path from 'path';
 
-// Accepted 3D formats
+// Formatos 3D aceptados
 const ACCEPTED_EXTENSIONS = new Set([
   'glb', 'gltf', 'obj', 'dae', 'fbx', '3ds', 'dxf', 'kmz', 'stl', 'ply',
 ]);
-// DWG: explicitly rejected with a clear message
-const DWG_NOTE = 'DWG requires ODA Platform (commercial license). Use DXF export from your CAD tool instead.';
+// DWG: rechazado explícitamente con un mensaje claro
+const DWG_NOTE = 'DWG requiere ODA Platform (licencia comercial). Use la exportación DXF desde su herramienta CAD en su lugar.';
 
 const getFormatFromFile = (filename: string): string =>
   path.extname(filename).toLowerCase().replace('.', '');
@@ -28,7 +33,7 @@ export class CatalogController {
     private readonly conversionService: ConversionService,
   ) {}
 
-  // ─── Brands ─────────────────────────────────────────────────────────────
+  // ─── Marcas ─────────────────────────────────────────────────────────────
   @Post('brands')
   async createBrand(@Req() req: any, @Body() body: { name: string; description?: string; logoUrl?: string }) {
     return this.catalogService.createBrand(req.tenantId, body);
@@ -36,7 +41,7 @@ export class CatalogController {
   @Get('brands')
   async getBrands(@Req() req: any) { return this.catalogService.getBrands(req.tenantId); }
 
-  // ─── Lines ───────────────────────────────────────────────────────────────
+  // ─── Líneas ───────────────────────────────────────────────────────────────
   @Get('lines')
   async getLines(@Req() req: any) { return this.catalogService.getProductLines(req.tenantId); }
 
@@ -53,7 +58,7 @@ export class CatalogController {
     return this.catalogService.updateProductLine(req.tenantId, id, { active: body.active });
   }
 
-  // ─── Categories ──────────────────────────────────────────────────────────
+  // ─── Categorías ──────────────────────────────────────────────────────────
   @Get('categories')
   async getCategories(@Req() req: any) { return this.catalogService.getCategories(req.tenantId); }
   @Post('categories')
@@ -65,7 +70,7 @@ export class CatalogController {
     return this.catalogService.updateCategoryStatus(req.tenantId, id, { active: body.active });
   }
 
-  // ─── Products ────────────────────────────────────────────────────────────
+  // ─── Productos ────────────────────────────────────────────────────────────
   @Post('products')
   async createProduct(@Req() req: any, @Body() body: any) {
     return this.catalogService.createProduct(req.tenantId, body);
@@ -95,13 +100,13 @@ export class CatalogController {
     return this.catalogService.createProductPrice(req.tenantId, id, body);
   }
 
-  // ─── Assets (URL registration — legacy) ──────────────────────────────────
+  // ─── Assets (Registro de URL — legado) ──────────────────────────────────
   @Get('assets')
   async getAssets(@Req() req: any) { return this.catalogService.getAssets(req.tenantId); }
 
   @Post('assets')
   async createAsset(@Req() req: any, @Body() body: any) {
-    // Mark URL-registered assets as url_only (no conversion needed)
+    // Marcar assets registrados por URL como url_only (no requiere conversión)
     const asset = await this.catalogService.createAsset(req.tenantId, {
       ...body,
       conversionStatus: body.model3dUrl ? 'url_only' : 'pending',
@@ -114,7 +119,7 @@ export class CatalogController {
     return this.catalogService.deleteAsset(req.tenantId, id);
   }
 
-  // ─── Assets — File Upload (new pipeline) ─────────────────────────────────
+  // ─── Assets — Carga de archivos (nuevo pipeline) ─────────────────────────
   @Post('assets/upload')
   @UseInterceptors(FileInterceptor('file'))
   async uploadAsset(
@@ -122,12 +127,12 @@ export class CatalogController {
     @UploadedFile() file: Express.Multer.File,
     @Body() body: { productId: string },
   ) {
-    if (!file) throw new BadRequestException('No file uploaded');
-    if (!body.productId) throw new BadRequestException('productId is required');
+    if (!file) throw new BadRequestException('No se cargó ningún archivo');
+    if (!body.productId) throw new BadRequestException('productId es requerido');
 
     const format = getFormatFromFile(file.originalname);
 
-    // DWG explicit rejection
+    // Rechazo explícito de DWG
     if (format === 'dwg') {
       throw new BadRequestException(DWG_NOTE);
     }
@@ -138,9 +143,9 @@ export class CatalogController {
       );
     }
 
-    // Save original file path and create asset record
+    // Guardar ruta del archivo original y crear registro de asset
     const originalRelativePath = `/storage/uploads/${file.filename}`;
-    const absolutePath = file.path; // multer disk storage provides this
+    const absolutePath = file.path; // multer disk storage proporciona esto
 
     const asset = await this.catalogService.createAssetFromUpload(req.tenantId, {
       productId: body.productId,
@@ -155,7 +160,7 @@ export class CatalogController {
       },
     });
 
-    // Enqueue conversion job asynchronously
+    // Encolar trabajo de conversión asincrónicamente
     await this.conversionService.enqueueConversion({
       assetId: asset.id,
       originalFilePath: absolutePath,
@@ -165,7 +170,7 @@ export class CatalogController {
 
     return {
       ...asset,
-      message: `File uploaded successfully. Conversion to GLB in progress.`,
+      message: `Archivo cargado exitosamente. Conversión a GLB en curso.`,
     };
   }
 
@@ -174,7 +179,7 @@ export class CatalogController {
     return this.catalogService.retryAssetConversion(req.tenantId, id, this.conversionService);
   }
 
-  // ─── Conditions ──────────────────────────────────────────────────────────
+  // ─── Condiciones ──────────────────────────────────────────────────────────
   @Get('conditions')
   async getConditions(@Req() req: any) { return this.catalogService.getConditions(req.tenantId); }
   @Post('conditions')
@@ -186,7 +191,7 @@ export class CatalogController {
     return this.catalogService.updateConditionStatus(req.tenantId, id, { active: body.active });
   }
 
-  // ─── Prices ──────────────────────────────────────────────────────────────
+  // ─── Precios ──────────────────────────────────────────────────────────────
   @Get('prices')
   async getPrices(@Req() req: any) { return this.catalogService.getPrices(req.tenantId); }
   @Patch('prices/:id/status')
@@ -194,7 +199,7 @@ export class CatalogController {
     return this.catalogService.updatePriceStatus(req.tenantId, id, { active: body.active });
   }
 
-  // ─── Editor Catalog ───────────────────────────────────────────────────────
+  // ─── Catálogo del Editor ───────────────────────────────────────────────────────
   @Get('available')
   async getAvailableCatalog(@Req() req: any) {
     return this.catalogService.getAvailableCatalog(req.user.sub, req.user.userType);

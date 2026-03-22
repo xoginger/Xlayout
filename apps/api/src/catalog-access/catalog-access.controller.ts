@@ -1,3 +1,8 @@
+/**
+ * Creado y diseñado por XO
+ * XLayout System
+ */
+
 import { Controller, Post, Get, Delete, Param, Body, UseGuards, Req } from '@nestjs/common';
 import { CatalogAccessService } from './catalog-access.service';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
@@ -7,7 +12,7 @@ import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 export class CatalogAccessController {
   constructor(private readonly service: CatalogAccessService) {}
 
-  /** POST /catalog-access — Grant access to an end user (company user action) */
+  /** POST /catalog-access — Otorgar acceso a un usuario final (acción de usuario de empresa) */
   @Post()
   grant(@Body() body: {
     tenantId: string;
@@ -24,7 +29,7 @@ export class CatalogAccessController {
     });
   }
 
-  /** POST /catalog-access/by-email — Grant access to an end user via email */
+  /** POST /catalog-access/by-email — Otorgar acceso a un usuario final vía email */
   @Post('by-email')
   grantByEmail(@Req() req: any, @Body() body: any) {
     return this.service.grantAccessByEmail(req.tenantId, body.email, {
@@ -36,13 +41,13 @@ export class CatalogAccessController {
     });
   }
 
-  /** GET /catalog-access/tenant/:tenantId — List all accesses for a tenant */
+  /** GET /catalog-access/tenant/:tenantId — Listar todos los accesos para un tenant */
   @Get('tenant/:tenantId')
   listByTenant(@Param('tenantId') tenantId: string) {
     return this.service.findByTenant(tenantId);
   }
 
-  /** DELETE /catalog-access/tenant/:tenantId/user/:endUserId — Revoke access */
+  /** DELETE /catalog-access/tenant/:tenantId/user/:endUserId — Revocar acceso */
   @Delete('tenant/:tenantId/user/:endUserId')
   revoke(
     @Param('tenantId') tenantId: string,

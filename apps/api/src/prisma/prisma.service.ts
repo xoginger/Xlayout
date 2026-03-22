@@ -1,3 +1,8 @@
+/**
+ * Creado y diseñado por XO
+ * XLayout System
+ */
+
 import { Injectable, OnModuleInit, Logger } from '@nestjs/common';
 import { PrismaClient } from '@prisma/client';
 import { AsyncLocalStorage } from 'async_hooks';
@@ -30,17 +35,17 @@ export class PrismaService implements OnModuleInit {
     for (let attempt = 1; attempt <= maxRetries; attempt++) {
       try {
         await PrismaService.getBaseClient().$connect();
-        // Verify connection is truly usable with a real query
+        // Verificar que la conexión sea realmente utilizable con una consulta real
         await PrismaService.getBaseClient().$queryRaw`SELECT 1`;
-        this.logger.log(`Database connected successfully on attempt ${attempt}`);
+        this.logger.log(`Base de datos conectada exitosamente en el intento ${attempt}`);
         return;
       } catch (err: any) {
         const delay = baseDelayMs * attempt;
         this.logger.warn(
-          `DB connection attempt ${attempt}/${maxRetries} failed: ${err.message}. Retrying in ${delay}ms...`
+          `Intento de conexión a BD ${attempt}/${maxRetries} fallido: ${err.message}. Reintentando en ${delay}ms...`
         );
         if (attempt === maxRetries) {
-          this.logger.error('Could not connect to database after maximum retries');
+          this.logger.error('No se pudo conectar a la base de datos después de los intentos máximos');
           throw err;
         }
         await new Promise(resolve => setTimeout(resolve, delay));
@@ -74,7 +79,7 @@ export class PrismaService implements OnModuleInit {
     });
   }
 
-  // Fallback for direct access — bypasses tenant middleware
+  // Fallback para acceso directo — omite el middleware de tenant
   get baseClient() {
     return PrismaService.getBaseClient();
   }

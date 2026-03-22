@@ -1,3 +1,8 @@
+/**
+ * Creado y diseñado por XO
+ * XLayout System
+ */
+
 import { Controller, Get, Post, Param, Body, Patch, UseGuards } from '@nestjs/common';
 import { TenantsService } from './tenants.service';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
@@ -7,7 +12,7 @@ import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 export class TenantsController {
   constructor(private readonly service: TenantsService) {}
 
-  /** POST /tenants — Platform admin creates a new company/brand */
+  /** POST /tenants — El admin de la plataforma crea una nueva empresa/marca */
   @Post()
   create(@Body() body: {
     name: string;
@@ -22,19 +27,19 @@ export class TenantsController {
     return this.service.create(body);
   }
 
-  /** GET /tenants — List all tenants (platform admin only) */
+  /** GET /tenants — Listar todos los tenants (solo admin de plataforma) */
   @Get()
   findAll() {
     return this.service.findAll();
   }
 
-  /** GET /tenants/:id — Get tenant details */
+  /** GET /tenants/:id — Obtener detalles del tenant */
   @Get(':id')
   findOne(@Param('id') id: string) {
     return this.service.findById(id);
   }
 
-  /** PATCH /tenants/:id/status — Suspend / activate a tenant */
+  /** PATCH /tenants/:id/status — Suspender / activar un tenant */
   @Patch(':id/status')
   updateStatus(@Param('id') id: string, @Body() body: { status: any }) {
     return this.service.updateStatus(id, body.status);

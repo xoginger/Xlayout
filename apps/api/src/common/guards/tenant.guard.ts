@@ -1,3 +1,8 @@
+/**
+ * Creado y diseñado por XO
+ * XLayout System
+ */
+
 import { Injectable, CanActivate, ExecutionContext, ForbiddenException } from '@nestjs/common';
 import { Reflector } from '@nestjs/core';
 
@@ -10,7 +15,7 @@ export class TenantGuard implements CanActivate {
     const user = request.user;
     
     if (!user || (!user.tenantId && user.roles?.indexOf('ADMIN') === -1)) {
-      throw new ForbiddenException('Tenant access required');
+      throw new ForbiddenException('Se requiere acceso de Tenant');
     }
 
     // Example feature: We could inject the tenantId in body or header to make sure they match

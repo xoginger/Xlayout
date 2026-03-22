@@ -1,3 +1,7 @@
+/**
+ * Creado y diseñado por XO
+ */
+
 "use client";
 
 import React, { useState, useEffect } from 'react';
@@ -6,7 +10,7 @@ import { ProjectManager } from '@/components/editor/ProjectManager';
 import { Tooltip } from '@/components/ui/Tooltip';
 import { extractFirstPageAsImage } from '@/utils/pdf-extractor';
 
-// ─── Sub-components ─────────────────────────────────────────────────────────
+// ─── Sub-componentes ─────────────────────────────────────────────────────────
 
 const MenuBtn: React.FC<{ label: string; active?: boolean; onClick?: () => void }> = ({ label, active, onClick }) => (
   <button
@@ -39,7 +43,7 @@ const MenuAction: React.FC<{
 
 const MenuDivider = () => <div className="h-px bg-zinc-100 my-1 mx-2" />;
 
-// ─── Icon helpers ────────────────────────────────────────────────────────────
+// ─── Utilidades de Iconos ────────────────────────────────────────────────────────────
 
 const PlusIcon    = () => <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" className="w-3.5 h-3.5"><path d="M5 12h14M12 5v14"/></svg>;
 const FolderIcon  = () => <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" className="w-3.5 h-3.5"><path d="M4 20h16a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.93a2 2 0 0 1-1.66-.9l-.82-1.2A2 2 0 0 0 7.93 3H4a2 2 0 0 0-2 2v13c0 1.1.9 2 2 2Z"/></svg>;
@@ -49,7 +53,7 @@ const RedoIcon    = () => <svg viewBox="0 0 24 24" fill="none" stroke="currentCo
 const TrashIcon   = () => <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" className="w-3.5 h-3.5"><path d="M3 6h18M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2M10 11v6M14 11v6"/></svg>;
 const ImportIcon = () => <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" className="w-3.5 h-3.5"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M7 10l5 5 5-5M12 15V3"/></svg>;
 
-// ─── ActionBar ──────────────────────────────────────────────────────────
+// ─── Barra de Acciones ──────────────────────────────────────────────────────────
 
 /**
  * ActionBar — Barra de acciones del módulo (ej: del editor).

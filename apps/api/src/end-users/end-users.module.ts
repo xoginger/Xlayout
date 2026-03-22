@@ -1,4 +1,7 @@
-// end-users.module.ts — XLayout End Users Module
+/**
+ * Creado y diseñado por XO
+ * XLayout System
+ */
 import { Module } from '@nestjs/common';
 import { EndUsersService } from './end-users.service';
 import { EndUsersController } from './end-users.controller';

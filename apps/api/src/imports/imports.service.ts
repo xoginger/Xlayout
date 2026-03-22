@@ -1,3 +1,8 @@
+/**
+ * Creado y diseñado por XO
+ * XLayout System
+ */
+
 import { Injectable } from '@nestjs/common';
 import { InjectQueue } from '@nestjs/bullmq';
 import { Queue } from 'bullmq';
@@ -18,7 +23,7 @@ export class ImportsService {
       timestamp: Date.now()
     });
     
-    // Create a database record for historical tracking
+    // Crear un registro en la base de datos para el seguimiento histórico
     await this.prisma.client.importJob.create({
       data: {
         id: job.id,
@@ -26,12 +31,12 @@ export class ImportsService {
         type: type.toUpperCase(),
         filename: fileUrl.split('/').pop() || 'upload.csv',
         status: 'PENDING',
-        createdById: 'system', // or the actual user ID if passed
+        createdById: 'system', // o el ID de usuario real si se pasa
       }
     });
 
     return {
-      message: 'Import queued successfully',
+      message: 'Importación encolada exitosamente',
       jobId: job.id
     };
   }
@@ -39,7 +44,7 @@ export class ImportsService {
   async getImportStatus(jobId: string) {
     const job = await this.importsQueue.getJob(jobId);
     if (!job) {
-      // Check database as fallback
+      // Verificar la base de datos como respaldo
       const dbJob = await this.prisma.client.importJob.findUnique({ where: { id: jobId } });
       if (dbJob) return dbJob;
       return { status: 'NOT_FOUND' };

@@ -1,3 +1,8 @@
+/**
+ * Creado y diseñado por XO
+ * XLayout System
+ */
+
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 
@@ -15,7 +20,7 @@ export class OrganizationsService {
 
   async findCompanyById(id: string) {
     const company = await this.prisma.client.company.findUnique({ where: { id } });
-    if (!company) throw new NotFoundException('Company not found');
+    if (!company) throw new NotFoundException('Empresa no encontrada');
     return company;
   }
 }

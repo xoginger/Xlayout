@@ -1,3 +1,7 @@
+/**
+ * Creado y diseñado por XO
+ */
+
 import React, { useState, useEffect, useRef } from 'react';
 import { useEditorStore } from '@/store/editor-store';
 

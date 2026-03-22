@@ -1,3 +1,8 @@
+/**
+ * Creado y diseñado por XO
+ * XLayout System
+ */
+
 import { Controller, Post, Body, Get, UseGuards, Req } from '@nestjs/common';
 import { PricingEngineService } from './pricing.service';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';

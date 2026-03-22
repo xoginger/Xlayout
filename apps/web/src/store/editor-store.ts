@@ -1,3 +1,7 @@
+/**
+ * Creado y diseñado por XO
+ */
+
 import { create } from 'zustand';
 import { projectService } from '../services/project-service';
 
@@ -6,9 +10,9 @@ export type OpeningType = 'door' | 'window' | 'opening';
 export type OpeningDirection = 'left' | 'right' | 'inward' | 'outward';
 export type ViewMode = '2D' | '3D';
 export type ToolType =
-  | 'select' | 'pan' | 'zoom' | 'move' | 'rotate' | 'scale'
-  | 'line' | 'rectangle' | 'circle' | 'arc' | 'freehand' | 'wall'
-  | 'extrude' | 'offset' | 'follow-me'
+  | 'select' | 'multi-select' | 'pan' | 'zoom' | 'move' | 'rotate' | 'scale'
+  | 'line' | 'rectangle' | 'circle' | 'freehand' | 'wall'
+  | 'extrude' | 'offset'
   | 'tape' | 'paint' | 'eraser' | 'dimension'
   | 'delete' | 'duplicate' | 'scale-blueprint' | 'place-opening' | 'product';
 
@@ -46,7 +50,7 @@ export interface BlueprintState {
   opacity: number;
   locked: boolean;
   visible: boolean;
-  // Calibration Metadata
+  // Metadatos de Calibración
   calibrated?: boolean;
   calibrationPointA?: [number, number, number]; // Guardado en X,Y,Z locales del plano
   calibrationPointB?: [number, number, number];
@@ -99,7 +103,7 @@ export interface VolumeEntity {
   type: 'volume';
   layerId?: string;
   color?: string;
-  position: [number, number, number]; // center position for transform gizmo
+  position: [number, number, number]; // posición central para el gizmo de transformación
 }
 
 export interface RectangleEntity {
@@ -130,9 +134,9 @@ export interface SceneItem {
   price?: number | null;
   hasPriceAccess?: boolean;
 
-  // Professional Metadata
+  // Metadatos Profesionales
   model3dUrl?: string;
-  floorAnchor: number; // 0 = base, 0.5 = center
+  floorAnchor: number; // 0 = base, 0.5 = centro
   snapPoints?: SnapPoint[];
   resizable?: boolean;
   metadata?: Record<string, any>;
@@ -155,8 +159,8 @@ export interface Opening {
   offset: number;
   width: number;
   height: number;
-  sillHeight?: number;             // windows only
-  openingDirection?: OpeningDirection; // doors only
+  sillHeight?: number;             // solo ventanas
+  openingDirection?: OpeningDirection; // solo puertas
   label?: string;
   layerId?: string;
 }
@@ -184,8 +188,8 @@ interface EditorState {
   guides: Guide[];
 
   activeLayerId: string;
-  selectedId: string | null;
-  selectedType: 'item' | 'wall' | 'opening' | 'dimension' | 'line' | 'rectangle' | 'face' | 'volume' | null;
+  selectedIds: string[];
+  selectedType: 'item' | 'wall' | 'opening' | 'dimension' | 'line' | 'rectangle' | 'face' | 'volume' | 'group' | null;
   activeTool: ToolType;
   viewMode: ViewMode;
   gridSize: number;
@@ -233,10 +237,10 @@ interface EditorState {
   updateLayer: (id: string, updates: Partial<Layer>) => void;
   toggleLayer: (id: string) => void;
 
-  removeItem: (id: string) => void;
-  duplicateItem: (id: string) => void;
+  removeItem: (id?: string) => void;
+  duplicateItem: (id?: string) => void;
   insertSceneItem: (productData: any, tenantId: string) => void;
-  select: (id: string | null, type?: any) => void;
+  select: (id: string | null, type?: any, multi?: boolean) => void;
   clearSelection: () => void;
   setActiveTool: (tool: ToolType) => void;
   setViewMode: (mode: ViewMode) => void;
@@ -283,7 +287,7 @@ export const useEditorStore = create<EditorState>((set, get) => ({
     { id: 'volumes', name: 'Volumes', visible: true, locked: false },
   ],
   activeLayerId: 'lines',
-  selectedId: null,
+  selectedIds: [],
   selectedType: null,
   activeTool: 'select',
   viewMode: '2D',
@@ -327,14 +331,14 @@ export const useEditorStore = create<EditorState>((set, get) => ({
 
   addItem: (item: SceneItem) => {
     get().saveToHistory();
-    set((state) => ({ items: [...state.items, item], selectedId: item.id, selectedType: 'item' }));
+    set((state) => ({ items: [...state.items, item], selectedIds: [item.id], selectedType: 'item' }));
   },
 
   insertSceneItem: (productData, tenantId) => {
     get().saveToHistory();
     const floorAnchor = productData.metadata?.floorAnchor ?? 0.5;
     
-    // Y always starts completely at floor zero
+    // Y siempre comienza completamente en el suelo (cero)
     const yPos = 0;
 
     const item: SceneItem = {
@@ -358,27 +362,27 @@ export const useEditorStore = create<EditorState>((set, get) => ({
       metadata: productData.metadata,
       layerId: get().activeLayerId
     };
-    set((state) => ({ items: [...state.items, item], selectedId: item.id, selectedType: 'item' }));
+    set((state) => ({ items: [...state.items, item], selectedIds: [item.id], selectedType: 'item' }));
   },
 
   addWall: (wall) => {
     get().saveToHistory();
-    set((state) => ({ walls: [...state.walls, { ...wall, layerId: 'walls' }], selectedId: wall.id, selectedType: 'wall' }));
+    set((state) => ({ walls: [...state.walls, { ...wall, layerId: 'walls' }], selectedIds: [wall.id], selectedType: 'wall' }));
   },
 
   addOpening: (opening) => {
     get().saveToHistory();
-    set((state) => ({ openings: [...state.openings, { ...opening, layerId: 'openings' }], selectedId: opening.id, selectedType: 'opening' }));
+    set((state) => ({ openings: [...state.openings, { ...opening, layerId: 'openings' }], selectedIds: [opening.id], selectedType: 'opening' }));
   },
 
   addFace: (face) => {
     get().saveToHistory();
-    set((state) => ({ faces: [...state.faces, { ...face, layerId: 'faces' }], selectedId: face.id, selectedType: 'face' }));
+    set((state) => ({ faces: [...state.faces, { ...face, layerId: 'faces' }], selectedIds: [face.id], selectedType: 'face' }));
   },
 
   addVolume: (volume) => {
     get().saveToHistory();
-    set((state) => ({ volumes: [...state.volumes, { ...volume, layerId: 'volumes' }], selectedId: volume.id, selectedType: 'volume' }));
+    set((state) => ({ volumes: [...state.volumes, { ...volume, layerId: 'volumes' }], selectedIds: [volume.id], selectedType: 'volume' }));
   },
 
   addScene: (scene) => {
@@ -434,7 +438,7 @@ export const useEditorStore = create<EditorState>((set, get) => ({
     };
     set((state) => ({
       openings: [...state.openings, opening],
-      selectedId: opening.id,
+      selectedIds: [opening.id],
       selectedType: 'opening',
       activeTool: 'select',
       pendingOpeningType: null,
@@ -447,12 +451,12 @@ export const useEditorStore = create<EditorState>((set, get) => ({
 
   addDimension: (dim) => {
     get().saveToHistory();
-    set((state) => ({ dimensions: [...state.dimensions, dim], selectedId: dim.id, selectedType: 'dimension' }));
+    set((state) => ({ dimensions: [...state.dimensions, dim], selectedIds: [dim.id], selectedType: 'dimension' }));
   },
 
   addLine: (line) => {
     get().saveToHistory();
-    set((state) => ({ lines: [...state.lines, { ...line, layerId: 'lines' }], selectedId: line.id, selectedType: 'line' }));
+    set((state) => ({ lines: [...state.lines, { ...line, layerId: 'lines' }], selectedIds: [line.id], selectedType: 'line' }));
   },
 
   updateLine: (id, updates) => {
@@ -463,7 +467,7 @@ export const useEditorStore = create<EditorState>((set, get) => ({
 
   addRectangle: (rect) => {
     get().saveToHistory();
-    set((state) => ({ rectangles: [...state.rectangles, { ...rect, layerId: 'rectangles' }], selectedId: rect.id, selectedType: 'rectangle' }));
+    set((state) => ({ rectangles: [...state.rectangles, { ...rect, layerId: 'rectangles' }], selectedIds: [rect.id], selectedType: 'rectangle' }));
   },
 
   updateRectangle: (id, updates) => {
@@ -485,9 +489,9 @@ export const useEditorStore = create<EditorState>((set, get) => ({
   },
 
   updateItem: (id, updates) => {
-    // Epsilon guard: skip store update if the new values are identical to the
-    // current ones within floating-point noise (< 1e-6 delta per component).
-    // This prevents any accidental no-op re-renders from external callers.
+    // Guardia de Épsilon: salta la actualización si los valores son idénticos a los
+    // actuales dentro del ruido de punto flotante (delta < 1e-6 por componente).
+    // Esto evita re-renderizados accidentales sin cambios desde llamadores externos.
     const current = get().items.find(it => it.id === id);
     if (current) {
       const EPS = 1e-6;
@@ -519,56 +523,98 @@ export const useEditorStore = create<EditorState>((set, get) => ({
 
   removeItem: (id) => {
     get().saveToHistory();
+    const idsToRemove = id ? [id] : get().selectedIds;
+    if (idsToRemove.length === 0) return;
+
     set((state) => ({
-      items: state.items.filter((it) => it.id !== id),
-      walls: state.walls.filter((w) => w.id !== id),
-      faces: state.faces.filter((f) => f.id !== id),
-      volumes: state.volumes.filter((v) => v.id !== id),
-      openings: state.openings.filter((o) => o.id !== id && o.wallId !== id),
-      dimensions: state.dimensions.filter((d) => d.id !== id),
-      lines: state.lines.filter((l) => l.id !== id),
-      rectangles: state.rectangles.filter((r) => r.id !== id),
-      selectedId: state.selectedId === id ? null : state.selectedId,
-      selectedType: state.selectedId === id ? null : state.selectedType,
+      items: state.items.filter((it) => !idsToRemove.includes(it.id)),
+      walls: state.walls.filter((w) => !idsToRemove.includes(w.id)),
+      faces: state.faces.filter((f) => !idsToRemove.includes(f.id)),
+      volumes: state.volumes.filter((v) => !idsToRemove.includes(v.id)),
+      openings: state.openings.filter((o) => !idsToRemove.includes(o.id) && !idsToRemove.includes(o.wallId)),
+      dimensions: state.dimensions.filter((d) => !idsToRemove.includes(d.id)),
+      lines: state.lines.filter((l) => !idsToRemove.includes(l.id)),
+      rectangles: state.rectangles.filter((r) => !idsToRemove.includes(r.id)),
+      selectedIds: state.selectedIds.filter(sid => !idsToRemove.includes(sid)),
+      selectedType: state.selectedIds.some(sid => !idsToRemove.includes(sid)) ? state.selectedType : null,
     }));
   },
 
   duplicateItem: (id) => {
     const state = get();
+    const idsToDuplicate = id ? [id] : state.selectedIds;
+    if (idsToDuplicate.length === 0) return;
+
+    get().saveToHistory();
     const OFFSET: [number, number, number] = [0.5, 0, 0.5];
     const newId = () => Math.random().toString(36).substr(2, 9);
 
-    const wall = state.walls.find((w) => w.id === id);
-    if (wall) {
-      get().saveToHistory();
-      const dup: Wall = { ...wall, id: newId(), start: [wall.start[0] + OFFSET[0], wall.start[1], wall.start[2] + OFFSET[2]], end: [wall.end[0] + OFFSET[0], wall.end[1], wall.end[2] + OFFSET[2]] };
-      set((s) => ({ walls: [...s.walls, dup], selectedId: dup.id, selectedType: 'wall' }));
-      return;
-    }
-    const line = state.lines.find((l) => l.id === id);
-    if (line) {
-      get().saveToHistory();
-      const dup: LineEntity = { ...line, id: newId(), start: [line.start[0] + OFFSET[0], line.start[1], line.start[2] + OFFSET[2]], end: [line.end[0] + OFFSET[0], line.end[1], line.end[2] + OFFSET[2]] };
-      set((s) => ({ lines: [...s.lines, dup], selectedId: dup.id, selectedType: 'line' }));
-      return;
-    }
-    const rect = state.rectangles.find((r) => r.id === id);
-    if (rect) {
-      get().saveToHistory();
-      const dup: RectangleEntity = { ...rect, id: newId(), start: [rect.start[0] + OFFSET[0], rect.start[1], rect.start[2] + OFFSET[2]], end: [rect.end[0] + OFFSET[0], rect.end[1], rect.end[2] + OFFSET[2]] };
-      set((s) => ({ rectangles: [...s.rectangles, dup], selectedId: dup.id, selectedType: 'rectangle' }));
-      return;
-    }
-    const item = state.items.find((i) => i.id === id);
-    if (item) {
-      get().saveToHistory();
-      const dup: SceneItem = { ...item, id: newId(), position: [item.position[0] + OFFSET[0], item.position[1], item.position[2] + OFFSET[2]] };
-      set((s) => ({ items: [...s.items, dup], selectedId: dup.id, selectedType: 'item' }));
-    }
+    const newItems: SceneItem[] = [...state.items];
+    const newWalls: Wall[] = [...state.walls];
+    const newLines: LineEntity[] = [...state.lines];
+    const newRectangles: RectangleEntity[] = [...state.rectangles];
+    const newSelectedIds: string[] = [];
+
+    idsToDuplicate.forEach(targetId => {
+      const wall = state.walls.find((w) => w.id === targetId);
+      if (wall) {
+        const nid = newId();
+        newWalls.push({ ...wall, id: nid, start: [wall.start[0] + OFFSET[0], wall.start[1], wall.start[2] + OFFSET[2]], end: [wall.end[0] + OFFSET[0], wall.end[1], wall.end[2] + OFFSET[2]] });
+        newSelectedIds.push(nid);
+        return;
+      }
+      const line = state.lines.find((l) => l.id === targetId);
+      if (line) {
+        const nid = newId();
+        newLines.push({ ...line, id: nid, start: [line.start[0] + OFFSET[0], line.start[1], line.start[2] + OFFSET[2]], end: [line.end[0] + OFFSET[0], line.end[1], line.end[2] + OFFSET[2]] });
+        newSelectedIds.push(nid);
+        return;
+      }
+      const rect = state.rectangles.find((r) => r.id === targetId);
+      if (rect) {
+        const nid = newId();
+        newRectangles.push({ ...rect, id: nid, start: [rect.start[0] + OFFSET[0], rect.start[1], rect.start[2] + OFFSET[2]], end: [rect.end[0] + OFFSET[0], rect.end[1], rect.end[2] + OFFSET[2]] });
+        newSelectedIds.push(nid);
+        return;
+      }
+      const item = state.items.find((i) => i.id === targetId);
+      if (item) {
+        const nid = newId();
+        newItems.push({ ...item, id: nid, position: [item.position[0] + OFFSET[0], item.position[1], item.position[2] + OFFSET[2]] });
+        newSelectedIds.push(nid);
+      }
+    });
+
+    set({ 
+      items: newItems, 
+      walls: newWalls, 
+      lines: newLines, 
+      rectangles: newRectangles, 
+      selectedIds: newSelectedIds,
+      selectedType: newSelectedIds.length > 1 ? 'group' : state.selectedType 
+    });
   },
 
-  select: (id, type = null) => set({ selectedId: id, selectedType: type }),
-  clearSelection: () => set({ selectedId: null, selectedType: null }),
+  select: (id, type = null, multi = false) => {
+    if (!id) {
+      set({ selectedIds: [], selectedType: null });
+      return;
+    }
+    set((state) => {
+      if (multi || state.activeTool === 'multi-select') {
+        const isSelected = state.selectedIds.includes(id);
+        const newIds = isSelected 
+          ? state.selectedIds.filter(sid => sid !== id)
+          : [...state.selectedIds, id];
+        return { 
+          selectedIds: newIds, 
+          selectedType: newIds.length > 1 ? 'group' : (newIds.length === 1 ? type : null) 
+        };
+      }
+      return { selectedIds: [id], selectedType: type };
+    });
+  },
+  clearSelection: () => set({ selectedIds: [], selectedType: null }),
   setActiveTool: (tool) => set({ activeTool: tool }),
   setViewMode: (mode) => set({ viewMode: mode }),
   setGridSize: (size) => set({ gridSize: size }),
@@ -665,7 +711,7 @@ export const useEditorStore = create<EditorState>((set, get) => ({
         });
         get().saveToHistory();
       } else {
-        // Empty project
+        // Proyecto vacío
         set({
           project: {
             id: projectData.id,

@@ -1,3 +1,7 @@
+/**
+ * Creado y diseñado por XO
+ */
+
 "use client";
 
 import * as THREE from 'three';
@@ -50,12 +54,12 @@ export const exportEngine = {
     doc.setTextColor(255, 255, 255);
     doc.setFontSize(22);
     doc.setFont('helvetica', 'bold');
-    doc.text('XLAYOUT DESIGN QUOTE', 20, 25);
+    doc.text('PRESUPUESTO DE DISEÑO DE XLAYOUT', 20, 25);
     
     doc.setFontSize(8);
     doc.setFont('helvetica', 'normal');
-    doc.text(`PROJECT ID: ${project.id.toUpperCase()}`, 140, 20);
-    doc.text(`GENERATED: ${now.toUpperCase()}`, 140, 25);
+    doc.text(`ID DEL PROYECTO: ${project.id.toUpperCase()}`, 140, 20);
+    doc.text(`GENERADO EL: ${now.toUpperCase()}`, 140, 25);
 
     doc.setTextColor(40, 40, 40);
     doc.setFontSize(14);
@@ -86,7 +90,7 @@ export const exportEngine = {
 
     doc.autoTable({
       startY: 170,
-      head: [['PRODUCT ID', 'DESCRIPTION', 'QTY', 'UNIT PRICE', 'TOTAL']],
+      head: [['ID DE PRODUCTO', 'DESCRIPCIÓN', 'CANT', 'PRECIO UNITARIO', 'TOTAL']],
       body: tableData.map(p => [
         p.productId.toUpperCase(),
         p.name.toUpperCase(),
@@ -107,11 +111,11 @@ export const exportEngine = {
     const finalY = (doc as any).lastAutoTable.finalY + 10;
     doc.setFontSize(12);
     doc.setFont('helvetica', 'bold');
-    doc.text(`TOTAL ESTIMATED QUOTE: €${totalQuote.toFixed(2)}`, 190, finalY, { align: 'right' });
+    doc.text(`PRESUPUESTO ESTIMADO TOTAL: €${totalQuote.toFixed(2)}`, 190, finalY, { align: 'right' });
 
     doc.setFontSize(7);
     doc.setTextColor(150, 150, 150);
-    doc.text('This document is a generated layout estimate and does not constitute a final commercial binding offer.', 20, 285);
+    doc.text('Este documento es una estimación de diseño generada y no constituye una oferta comercial vinculante final.', 20, 285);
 
     doc.save(`${project.name.replace(/\s+/g, '_')}_Quote.pdf`);
   }

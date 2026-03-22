@@ -1,3 +1,8 @@
+/**
+ * Creado y diseñado por XO
+ * XLayout System
+ */
+
 import { Controller, Get, Post, Body, Param, UseGuards, Req, Patch, Delete } from '@nestjs/common';
 import { ProjectsService } from './projects.service';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
@@ -10,7 +15,7 @@ export class ProjectsController {
 
   @Post()
   async createProject(@Req() req: any, @Body() body: { name: string; description?: string }) {
-    // sub comes from JWT payload
+    // sub proviene del payload JWT
     return this.projectsService.createProject(req.tenantId, req.user.sub, body);
   }
 

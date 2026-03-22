@@ -1,3 +1,7 @@
+/**
+ * Creado y diseñado por XO
+ */
+
 "use client";
 
 import React from 'react';
@@ -21,7 +25,7 @@ export const AdminTable = <T extends { id: string | number }>({
   data, 
   loading, 
   onRowClick,
-  emptyMessage = 'No data found'
+  emptyMessage = 'No se encontraron datos'
 }: AdminTableProps<T>) => {
   return (
     <div className="admin-card overflow-hidden">

@@ -1,3 +1,8 @@
+/**
+ * Creado y diseñado por XO
+ * XLayout System
+ */
+
 import { PrismaClient } from '@prisma/client';
 
 const prisma = new PrismaClient();

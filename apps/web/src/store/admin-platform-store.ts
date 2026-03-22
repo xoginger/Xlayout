@@ -1,3 +1,7 @@
+/**
+ * Creado y diseñado por XO
+ */
+
 "use client";
 
 import { create } from 'zustand';
@@ -55,11 +59,11 @@ export const usePlatformStore = create<PlatformState>((set) => ({
 
   fetchMetrics: async () => {
     try {
-      // Assuming a /platform/metrics endpoint exists or implementing it soon
+      // Asumiendo que existe un endpoint /platform/metrics o se implementará pronto
       const metrics = await api.get<PlatformMetrics>('/platform/info/metrics');
       set({ metrics });
     } catch (err) {
-      // Fallback or ignore for now
+      // Fallback o ignorar por ahora
     }
   },
 

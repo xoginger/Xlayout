@@ -1,3 +1,8 @@
+/**
+ * Creado y diseñado por XO
+ * XLayout System
+ */
+
 import { Injectable } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 
@@ -17,7 +22,7 @@ export class BrandDiscountStrategy implements PricingStrategy {
     const defaultPrice = product.prices?.[0]?.basePrice;
     let finalPrice = defaultPrice ? Number(defaultPrice) : 0;
     
-    // Find applicable rule for this line (replacing brand)
+    // Buscar regla aplicable para esta línea (reemplazando marca)
     const brandRule = rules.find(
       r => r.strategyType === 'BrandDiscountStrategy' && r.configPayload?.lineId === product.lineId
     );
@@ -36,7 +41,7 @@ export class PricingEngineService {
   constructor(private prisma: PrismaService) {}
 
   async calculateQuote(tenantId: string, placements: any[]) {
-    // 1. Fetch active discount rules for the tenant
+    // 1. Obtener reglas de descuento activas para el tenant
     const rules = await this.prisma.client.discountRule.findMany({
       where: { tenantId, active: true },
       orderBy: { priority: 'desc' }
@@ -47,7 +52,7 @@ export class PricingEngineService {
     let total = 0;
     const lines = [];
 
-    // 2. Fetch products details and apply rules
+    // 2. Obtener detalles de productos y aplicar reglas
     for (const item of placements) {
       const product = await this.prisma.client.product.findUnique({
         where: { id: item.productId },
@@ -59,7 +64,7 @@ export class PricingEngineService {
       const defaultPrice = product.prices?.[0]?.basePrice;
       let itemPrice = defaultPrice ? Number(defaultPrice) : 0;
 
-      // Apply strategies consecutively (basic pipeline example)
+      // Aplicar estrategias consecutivamente (ejemplo básico de pipeline)
       strategies.forEach(strategy => {
          itemPrice = strategy.calculatePrice(product, rules); 
       });

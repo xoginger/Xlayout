@@ -1,3 +1,8 @@
+/**
+ * Creado y diseñado por XO
+ * XLayout System
+ */
+
 import { Controller, Get, Post, Body, UseGuards, Patch, Param } from '@nestjs/common';
 import { PlatformUsersService } from './platform-users.service';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';

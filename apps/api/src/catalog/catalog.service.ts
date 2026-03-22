@@ -1,3 +1,8 @@
+/**
+ * Creado y diseñado por XO
+ * XLayout System
+ */
+
 import { Injectable, ForbiddenException, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 
@@ -176,7 +181,7 @@ export class CatalogService {
       include: {
         line: true,
         category: true,
-        prices: { where: { active: true } }, // Traemos todos los precios, no solo el último
+        prices: { where: { active: true } }, // Obtenemos todos los precios, no solo el último
         assets: { where: { assetType: 'model_3d' } }
       },
     });
@@ -216,7 +221,7 @@ export class CatalogService {
     return this.prisma.client.productAsset.delete({ where: { id } });
   }
 
-  // Called by upload endpoint — stores uploaded file metadata, no URL yet
+  // Llamado por el endpoint de subida — guarda metadatos del archivo subido, aún sin URL
   async createAssetFromUpload(tenantId: string, data: any) {
     const product = await this.prisma.client.product.findUnique({ where: { id: data.productId } });
     if (!product || product.tenantId !== tenantId) {
@@ -228,14 +233,14 @@ export class CatalogService {
     });
   }
 
-  // Reset status and re-enqueue conversion job for a failed asset
+  // Reiniciar estado y re-encolar trabajo de conversión para un asset fallido
   async retryAssetConversion(tenantId: string, id: string, conversionService: any) {
     const asset = await this.prisma.client.productAsset.findUnique({ where: { id } });
     if (!asset || asset.tenantId !== tenantId) {
       throw new ForbiddenException('Access denied');
     }
     if (!asset.originalFileUrl) {
-      throw new ForbiddenException('No original file to convert. Re-upload the asset.');
+      throw new ForbiddenException('No hay archivo original para convertir. Re-suba el asset.');
     }
 
     await this.prisma.client.productAsset.update({
@@ -243,7 +248,7 @@ export class CatalogService {
       data: { conversionStatus: 'uploaded', conversionError: null },
     });
 
-    // Reconstruct absolute path from relative public URL
+    // Reconstruir ruta absoluta desde la URL pública relativa
     const storageDir = process.env.UPLOAD_DIR || '/app/storage';
     const relativePath = asset.originalFileUrl.replace('/storage/', '');
     const absolutePath = `${storageDir}/${relativePath}`;
@@ -297,7 +302,7 @@ export class CatalogService {
     return this.prisma.client.productPrice.update({ where: { id }, data });
   }
 
-  // ─── Editor Catalog — filters by PUBLISHED status ─────────────────────────
+  // ─── Catálogo del Editor — filtros por estado PUBLISHED ─────────────────────────
   async getAvailableCatalog(userId: string, userType: string) {
     let tenantAccessMap = new Map<string, { pricesEnabled: boolean }>();
 
@@ -325,11 +330,11 @@ export class CatalogService {
           orderBy: { name: 'asc' },
           include: {
             products: {
-              // KEY FIX: only show PUBLISHED products in the editor catalog
+              // CORRECCIÓN CLAVE: solo mostrar productos PUBLISHED en el catálogo del editor
               where: { status: 'PUBLISHED', active: true },
               orderBy: { name: 'asc' },
               include: {
-                prices: { where: { active: true } }, // Extraemos toooodos los precios para el Editor
+                prices: { where: { active: true } }, // Extraemos todos los precios para el Editor
                 assets: true
               }
             }
@@ -338,7 +343,7 @@ export class CatalogService {
       }
     });
 
-    // Filter out lines with no published products
+    // Filtrar líneas sin productos publicados
     return tenantsData
       .map((tenant: any) => {
         const access = tenantAccessMap.get(tenant.id);
@@ -364,7 +369,7 @@ export class CatalogService {
                 width: product.width,
                 depth: product.depth,
                 height: product.height,
-                pricesMap: access?.pricesEnabled ? pricesMap : null, // Entregar todos los precios si hay acceso
+                pricesMap: access?.pricesEnabled ? pricesMap : null, // Entregar todos los precios si tiene acceso
                 currency: currency,
                 hasPriceAccess: access?.pricesEnabled ?? false,
                 thumbnail: product.assets.find((a: any) => a.assetType === 'thumbnail')?.fileUrl || null,

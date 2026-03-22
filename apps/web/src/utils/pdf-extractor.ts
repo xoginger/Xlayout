@@ -1,3 +1,7 @@
+/**
+ * Creado y diseñado por XO
+ */
+
 import * as pdfjsLib from 'pdfjs-dist';
 
 // Cargar el worker desde CDN para evitar problemas de compilación en Next.js

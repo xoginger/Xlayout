@@ -1,3 +1,7 @@
+/**
+ * Creado y diseñado por XO
+ */
+
 "use client";
 
 import React from 'react';
@@ -57,23 +61,23 @@ export const Sidebar = ({ type }: SidebarProps) => {
   
   const sections = type === 'platform' 
     ? [
-        { label: 'Overview', href: `${base}/overview`, icon: 'overview' },
-        { label: 'Tenants', href: `${base}/tenants`, icon: 'tenants' },
-        { label: 'Users', href: `${base}/users`, icon: 'users' },
-        { label: 'Activity', href: `${base}/activity`, icon: 'audit' },
-        { label: 'Config', href: `${base}/config`, icon: 'config' },
+        { label: 'Vista General', href: `${base}/overview`, icon: 'overview' },
+        { label: 'Inquilinos', href: `${base}/tenants`, icon: 'tenants' },
+        { label: 'Usuarios', href: `${base}/users`, icon: 'users' },
+        { label: 'Actividad', href: `${base}/activity`, icon: 'audit' },
+        { label: 'Configuración', href: `${base}/config`, icon: 'config' },
       ]
     : [
-        { label: 'Dashboard', href: `${base}/dashboard`, icon: 'overview' },
-        { label: 'Catalog', href: `${base}/catalog`, icon: 'catalog', subItems: [
-          { label: 'Lines', href: `${base}/catalog/lines` },
-          { label: 'Products', href: `${base}/catalog/products` },
+        { label: 'Tablero', href: `${base}/dashboard`, icon: 'overview' },
+        { label: 'Catálogo', href: `${base}/catalog`, icon: 'catalog', subItems: [
+          { label: 'Líneas', href: `${base}/catalog/lines` },
+          { label: 'Productos', href: `${base}/catalog/products` },
         ]},
-        { label: 'Pricing', href: `${base}/pricing`, icon: 'pricing' },
-        { label: 'Access Codes', href: `${base}/access/codes`, icon: 'users' },
-        { label: 'Imports', href: `${base}/imports`, icon: 'imports' },
-        { label: 'Users', href: `${base}/users`, icon: 'users' },
-        { label: 'Audit', href: `${base}/audit`, icon: 'audit' },
+        { label: 'Precios', href: `${base}/pricing`, icon: 'pricing' },
+        { label: 'Códigos de Acceso', href: `${base}/access/codes`, icon: 'users' },
+        { label: 'Importaciones', href: `${base}/imports`, icon: 'imports' },
+        { label: 'Usuarios', href: `${base}/users`, icon: 'users' },
+        { label: 'Auditoría', href: `${base}/audit`, icon: 'audit' },
       ];
 
   return (
@@ -85,7 +89,7 @@ export const Sidebar = ({ type }: SidebarProps) => {
       
       <nav className="flex-1 flex flex-col gap-1">
         <div className="text-[10px] font-bold text-slate-400 uppercase tracking-widest px-4 mb-2">
-          {type === 'platform' ? 'Platform Management' : 'Company Workspace'}
+          {type === 'platform' ? 'Gestión de Plataforma' : 'Espacio de Empresa'}
         </div>
         {sections.map((item) => (
           <SidebarItem key={item.href} {...item} icon={item.icon || 'default'} />
@@ -106,8 +110,8 @@ export const Sidebar = ({ type }: SidebarProps) => {
           </svg>
         </Link>
         <div className="px-4 py-2 text-[10px] text-slate-400 font-mono">
-          Module: Admin Panel<br/>
-          Version: admin-panel-v2-full<br/>
+          Módulo: Panel de Administración<br/>
+          Versión: admin-panel-v2-full<br/>
           Build: 2026-03-16
         </div>
       </div>

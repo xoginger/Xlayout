@@ -1,3 +1,7 @@
+/**
+ * Creado y diseñado por XO
+ */
+
 "use client";
 
 import { create } from 'zustand';
@@ -43,7 +47,7 @@ export const usePricingStore = create<PricingState>((set) => ({
   },
 
   deactivatePrice: async (id) => {
-    // Assuming a deactivate endpoint
+    // Asumiendo un endpoint de desactivación
     await api.patch(`/catalog/prices/${id}/deactivate`, {});
     set((state) => ({
       prices: state.prices.map(p => p.id === id ? { ...p, active: false } : p)

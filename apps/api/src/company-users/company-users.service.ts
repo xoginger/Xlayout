@@ -1,3 +1,8 @@
+/**
+ * Creado y diseñado por XO
+ * XLayout System
+ */
+
 import { Injectable, NotFoundException, ConflictException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { CompanyUserRole } from '@prisma/client';
@@ -15,7 +20,7 @@ export class CompanyUsersService {
     role?: CompanyUserRole;
   }) {
     const existing = await this.prisma.client.companyUser.findUnique({ where: { email: data.email } });
-    if (existing) throw new ConflictException('Email already registered');
+    if (existing) throw new ConflictException('El correo ya está registrado');
 
     const passwordHash = Buffer.from(data.password).toString('base64');
     return this.prisma.client.companyUser.create({
@@ -40,7 +45,7 @@ export class CompanyUsersService {
 
   async updateRole(id: string, role: CompanyUserRole) {
     const user = await this.prisma.client.companyUser.findUnique({ where: { id } });
-    if (!user) throw new NotFoundException(`CompanyUser '${id}' not found`);
+    if (!user) throw new NotFoundException(`CompanyUser '${id}' no encontrado`);
     return this.prisma.client.companyUser.update({ where: { id }, data: { role } });
   }
 }

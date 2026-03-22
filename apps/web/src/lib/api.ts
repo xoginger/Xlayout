@@ -1,3 +1,7 @@
+/**
+ * Creado y diseñado por XO
+ */
+
 "use client";
 
 import { useAuthStore } from '../store/auth-store';
@@ -8,7 +12,7 @@ interface RequestOptions extends RequestInit {
   params?: Record<string, string>;
 }
 
-// Build a safe URL string that works with both absolute and relative base URLs
+// Construir una cadena de URL segura que funcione con URLs base absolutas y relativas
 function buildUrl(base: string, endpoint: string, params?: Record<string, string>): string {
   const path = `${base}${endpoint.startsWith('/') ? endpoint : `/${endpoint}`}`;
   if (!params || Object.keys(params).length === 0) return path;

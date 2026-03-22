@@ -1,4 +1,7 @@
-// company-users.module.ts — XLayout Company Users Module
+/**
+ * Creado y diseñado por XO
+ * XLayout System
+ */
 import { Module } from '@nestjs/common';
 import { CompanyUsersService } from './company-users.service';
 import { CompanyUsersController } from './company-users.controller';

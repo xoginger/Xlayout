@@ -1,4 +1,5 @@
 /**
+ * Creado y diseñado por XO
  * XLayout Catalog Mock Data
  * -------------------------
  * Represents 2 brands, several product lines, and realistic products.

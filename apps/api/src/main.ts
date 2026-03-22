@@ -1,3 +1,8 @@
+/**
+ * Creado y diseñado por XO
+ * XLayout System
+ */
+
 import { NestFactory } from '@nestjs/core';
 import { AppModule } from './app.module';
 

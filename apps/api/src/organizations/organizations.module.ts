@@ -1,3 +1,8 @@
+/**
+ * Creado y diseñado por XO
+ * XLayout System
+ */
+
 import { Module } from '@nestjs/common';
 import { OrganizationsService } from './organizations.service';
 import { OrganizationsController } from './organizations.controller';

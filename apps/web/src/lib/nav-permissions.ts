@@ -1,4 +1,5 @@
 /**
+ * Creado y diseñado por XO
  * nav-permissions.ts
  * ─────────────────────────────────────────────────────────────────────────────
  * FUENTE ÚNICA DE VERDAD para la navegación global de XLayout.

@@ -1,4 +1,7 @@
-// catalog-access.module.ts — XLayout Catalog Access Module
+/**
+ * Creado y diseñado por XO
+ * XLayout System
+ */
 import { Module } from '@nestjs/common';
 import { CatalogAccessService } from './catalog-access.service';
 import { CatalogAccessController } from './catalog-access.controller';

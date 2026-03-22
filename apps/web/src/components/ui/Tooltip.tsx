@@ -1,31 +1,93 @@
-import React, { ReactNode } from 'react';
+/**
+ * Creado y diseñado por XO
+ */
+
+"use client";
+
+import React, { ReactNode, useState, useRef, useEffect } from 'react';
+import { createPortal } from 'react-dom';
 
 interface TooltipProps {
   children: ReactNode;
-  content: string;
+  content: string | ReactNode;
   position?: 'top' | 'bottom' | 'left' | 'right';
   className?: string;
 }
 
 export const Tooltip: React.FC<TooltipProps> = ({ children, content, position = 'bottom', className = '' }) => {
+  const [isVisible, setIsVisible] = useState(false);
+  const [coords, setCoords] = useState({ top: 0, left: 0 });
+  const triggerRef = useRef<HTMLDivElement>(null);
+  const [mounted, setMounted] = useState(false);
+
+  useEffect(() => {
+    setMounted(true);
+    return () => setMounted(false);
+  }, []);
+
+  const updatePosition = () => {
+    if (triggerRef.current) {
+      const rect = triggerRef.current.getBoundingClientRect();
+      let top = 0;
+      let left = 0;
+
+      // Usamos posicionamiento fijo, por lo que no necesitamos desplazamientos de scroll
+      // si el padre también es fijo, pero lo estándar es usar los valores de rect
+      // que son relativos al viewport.
+      if (position === 'right') {
+        top = rect.top + rect.height / 2;
+        left = rect.right + 8;
+      } else if (position === 'bottom') {
+        top = rect.bottom + 8;
+        left = rect.left + rect.width / 2;
+      } else if (position === 'top') {
+        top = rect.top - 8;
+        left = rect.left + rect.width / 2;
+      } else if (position === 'left') {
+        top = rect.top + rect.height / 2;
+        left = rect.left - 8;
+      }
+
+      setCoords({ top, left });
+    }
+  };
+
+  const handleMouseEnter = () => {
+    updatePosition();
+    setIsVisible(true);
+  };
+
+  const handleMouseLeave = () => setIsVisible(false);
+
+  // Traslación basada en la posición para centrar
+  const getTranslate = () => {
+    if (position === 'right' || position === 'left') return 'translateY(-50%)';
+    return 'translateX(-50%)';
+  };
+
   return (
-    <div className={`relative group inline-block ${className}`}>
+    <div 
+      ref={triggerRef} 
+      className={`relative inline-block ${className}`}
+      onMouseEnter={handleMouseEnter}
+      onMouseLeave={handleMouseLeave}
+    >
       {children}
-      <div className={`absolute whitespace-nowrap z-[1000] invisible opacity-0 group-hover:visible group-hover:opacity-100 transition-all duration-200 ease-out group-hover:delay-150 pointer-events-none bg-[#222222] text-white text-[11px] font-bold tracking-wide px-2.5 py-1.5 rounded shadow-2xl border border-white/10 ${
-        position === 'bottom' ? 'top-full left-1/2 -translate-x-1/2 mt-2 group-hover:mt-3' :
-        position === 'top' ? 'bottom-full left-1/2 -translate-x-1/2 mb-2 group-hover:mb-3' :
-        position === 'left' ? 'right-full top-1/2 -translate-y-1/2 mr-2 group-hover:mr-3' :
-        'left-full top-1/2 -translate-y-1/2 ml-2 group-hover:ml-3'
-      }`}>
-        {content}
-        {/* Triángulo Opcional - en Figma típicamente no lo llevan pero si lo dejamos lo hacemos sutil */}
-        <div className={`absolute w-2 h-2 bg-[#222222] border-white/10 rotate-45 ${
-          position === 'bottom' ? '-top-1 left-1/2 -translate-x-1/2 border-t border-l' :
-          position === 'top' ? '-bottom-1 left-1/2 -translate-x-1/2 border-b border-r' :
-          position === 'left' ? '-right-1 top-1/2 -translate-y-1/2 border-t border-r' :
-          '-left-1 top-1/2 -translate-y-1/2 border-b border-l'
-        }`} />
-      </div>
+      {mounted && isVisible && createPortal(
+        <div 
+          className="fixed z-[10000] pointer-events-none transition-all duration-200"
+          style={{ 
+            top: coords.top, 
+            left: coords.left,
+            transform: getTranslate(),
+          }}
+        >
+          <div className="whitespace-nowrap bg-[#222222] text-white text-[10px] font-bold tracking-wider px-2.5 py-1.5 rounded shadow-2xl border border-white/10 opacity-100 flex items-center gap-2">
+            {content}
+          </div>
+        </div>,
+        document.body
+      )}
     </div>
   );
 };

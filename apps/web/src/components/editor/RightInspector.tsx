@@ -1,3 +1,7 @@
+/**
+ * Creado y diseñado por XO
+ */
+
 import React, { useState } from 'react';
 import { useEditorStore, Scene, Layer } from '@/store/editor-store';
 import { calculateDistance } from '@/utils/cad-math';
@@ -5,7 +9,7 @@ import { extractFirstPageAsImage } from '@/utils/pdf-extractor';
 
 export const RightInspector: React.FC = () => {
   const { 
-    selectedId, selectedType, items, walls, openings, dimensions, lines, rectangles, faces, volumes, layers, scenes,
+    selectedIds, selectedType, items, walls, openings, dimensions, lines, rectangles, faces, volumes, layers, scenes,
     activeLayerId, project, blueprint, activeTool,
     updateItem, updateWall, updateOpening, updateLine, updateRectangle, updateFace, updateVolume,
     removeItem, toggleLayer, updateLayer, addLayer, setActiveLayer, duplicateItem,
@@ -14,6 +18,9 @@ export const RightInspector: React.FC = () => {
 
   const [activeTab, setActiveTab] = useState<'properties' | 'scene' | 'layers' | 'components' | 'blueprint'>('properties');
   const [isCollapsed, setIsCollapsed] = useState(false);
+
+  const selectedId = selectedIds.length === 1 ? selectedIds[0] : null;
+  const isMulti = selectedIds.length > 1;
 
   const selectedItem = items.find(i => i.id === selectedId);
   const selectedWall = walls.find(w => w.id === selectedId);
@@ -25,13 +32,52 @@ export const RightInspector: React.FC = () => {
   const selectedVolume = volumes.find(v => v.id === selectedId);
 
   const renderProperties = () => {
-    if (!selectedId) {
+    if (selectedIds.length === 0) {
       return (
         <div className="p-8 h-full flex flex-col items-center justify-center opacity-40 grayscale space-y-4">
            <div className="text-5xl">📐</div>
            <p className="text-[10px] text-zinc-600 font-black uppercase tracking-[0.2em] text-center max-w-[140px] leading-relaxed">
              SELECCIONE UN OBJETO PARA INSPECCIONAR GEOMETRÍA
            </p>
+        </div>
+      );
+    }
+
+    if (isMulti) {
+      return (
+        <div className="animate-in fade-in slide-in-from-right-3 duration-500">
+          <div className="p-4 bg-blue-50 border-b border-blue-200/50 flex flex-col gap-1">
+            <span className="text-[9px] font-black text-blue-600 uppercase tracking-widest">
+              Selección Múltiple
+            </span>
+            <h2 className="text-sm font-black text-zinc-900 uppercase tracking-tighter truncate">
+              {selectedIds.length} Objetos Seleccionados
+            </h2>
+          </div>
+          <div className="p-4 space-y-6">
+            <p className="text-[10px] text-zinc-500 leading-relaxed">
+              Has seleccionado múltiples entidades. Puedes moverlas juntas usando el gizmo central o realizar acciones globales.
+            </p>
+            <section className="space-y-4 pt-4 border-t border-zinc-200/50">
+              <h3 className="text-[10px] font-black text-zinc-600 uppercase tracking-widest flex items-center gap-3">
+                ACCIONES DE GRUPO <div className="h-px flex-1 bg-zinc-200"></div>
+              </h3>
+              <div className="flex gap-2">
+                 <button 
+                   onClick={() => { duplicateItem(); }}
+                   className="flex-1 py-2 bg-zinc-100 text-zinc-700 hover:bg-zinc-200 rounded-lg text-[9px] font-black uppercase tracking-widest transition-all"
+                 >
+                   Duplicar Todo
+                 </button>
+                 <button 
+                   onClick={() => { removeItem(); }}
+                   className="flex-1 py-2 bg-red-50 text-red-600 hover:bg-red-500 hover:text-white rounded-lg text-[9px] font-black uppercase tracking-widest transition-all shadow-sm"
+                 >
+                   Eliminar Todo
+                 </button>
+              </div>
+            </section>
+          </div>
         </div>
       );
     }
@@ -190,13 +236,13 @@ export const RightInspector: React.FC = () => {
             </h3>
             <div className="flex gap-2">
                <button 
-                 onClick={() => { duplicateItem(selectedId); }}
+                 onClick={() => { duplicateItem(selectedId || undefined); }}
                  className="flex-1 py-2 bg-zinc-100 text-zinc-700 hover:bg-zinc-200 rounded-lg text-[9px] font-black uppercase tracking-widest transition-all"
                >
                  Duplicar
                </button>
                <button 
-                 onClick={() => { removeItem(selectedId); }}
+                 onClick={() => { removeItem(selectedId || undefined); }}
                  className="flex-1 py-2 bg-red-50 text-red-600 hover:bg-red-500 hover:text-white rounded-lg text-[9px] font-black uppercase tracking-widest transition-all shadow-sm"
                >
                  Eliminar
@@ -309,7 +355,7 @@ export const RightInspector: React.FC = () => {
   };
 
   const renderComponents = () => {
-    const componentList = items.reduce((acc: any[], item) => {
+          const componentList = items.reduce((acc: any[], item) => {
       const existing = acc.find(c => c.productId === item.productId);
       if (existing) {
         existing.count += 1;
@@ -317,7 +363,7 @@ export const RightInspector: React.FC = () => {
       } else {
         acc.push({
           productId: item.productId,
-          name: item.label || 'Unnamed Asset',
+          name: item.label || 'Activo sin Nombre',
           price: item.price || 0,
           count: 1,
           items: [item]
@@ -364,17 +410,17 @@ export const RightInspector: React.FC = () => {
                     }}
                     className="flex-1 py-1.5 bg-white border border-zinc-200 rounded-lg text-[8px] font-black uppercase hover:bg-zinc-100 transition-all"
                   >
-                    Locate
+                    Localizar
                   </button>
                   <button 
                     onClick={() => {
-                      if (confirm(`Delete all ${comp.count} instances of ${comp.name}?`)) {
+                      if (confirm(`¿Eliminar las ${comp.count} instancias de ${comp.name}?`)) {
                         comp.items.forEach((it: any) => removeItem(it.id));
                       }
                     }}
                     className="px-3 py-1.5 bg-red-50 text-red-500 border border-red-100 rounded-lg text-[8px] font-black uppercase hover:bg-red-500 hover:text-white transition-all"
                   >
-                    Delete all
+                    Eliminar todos
                   </button>
                 </div>
               </div>

@@ -1,3 +1,7 @@
+/**
+ * Creado y diseñado por XO
+ */
+
 import { create } from 'zustand';
 import { api } from '@/lib/api';
 

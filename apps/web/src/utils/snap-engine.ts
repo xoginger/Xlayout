@@ -1,3 +1,7 @@
+/**
+ * Creado y diseñado por XO
+ */
+
 import * as THREE from 'three';
 import { SceneItem, SnapPoint } from '@/store/editor-store';
 
@@ -11,7 +15,7 @@ export interface SnapResult {
 }
 
 /**
- * Calculates world position and normal for a snap point.
+ * Calcula la posición mundial y la normal para un punto de snap.
  */
 export function getSnapPointWorld(item: SceneItem, sp: SnapPoint) {
   const matrix = new THREE.Matrix4();
@@ -28,7 +32,7 @@ export function getSnapPointWorld(item: SceneItem, sp: SnapPoint) {
 }
 
 /**
- * Detects if a moving item can snap to any other item in the scene.
+ * Detecta si un objeto en movimiento puede hacer snap a cualquier otro objeto en la escena.
  */
 export function findModularSnap(
   movingItem: SceneItem, 
@@ -48,7 +52,7 @@ export function findModularSnap(
       const mWorld = getSnapPointWorld(movingItem, msp);
 
       for (const tsp of targetItem.snapPoints) {
-        // Compatibility check
+        // Verificación de compatibilidad
         if (msp.type !== tsp.type) continue;
         
         const tWorld = getSnapPointWorld(targetItem, tsp);
@@ -57,8 +61,7 @@ export function findModularSnap(
         if (dist < minDistance) {
           minDistance = dist;
           
-          // Calculate the required position of the MOVING item 
-          // such that msp aligned exactly with tsp.
+          // Calcula la posición requerida del objeto EN MOVIMIENTO de modo que msp se alinee exactamente con tsp.
           
           // The relative vector from item origin to msp in world space (unrotated/unscaled?)
           // No, easier: 

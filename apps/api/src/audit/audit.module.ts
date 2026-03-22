@@ -1,4 +1,7 @@
-// audit.module.ts — XLayout Audit Module
+/**
+ * Creado y diseñado por XO
+ * XLayout System
+ */
 import { Module } from '@nestjs/common';
 import { AuditService } from './audit.service';
 import { AuditController } from './audit.controller';

@@ -1,3 +1,8 @@
+/**
+ * Creado y diseñado por XO
+ * XLayout System
+ */
+
 import { Controller, Get, UseGuards } from '@nestjs/common';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { PrismaService } from '../prisma/prisma.service';
@@ -9,7 +14,7 @@ export class PlatformInfoController {
 
   @Get('metrics')
   async getMetrics() {
-    // This requires Platform Admin role to be fully accurate in a real system
+    // Esto requiere el rol de Admin de Plataforma para ser totalmente preciso en un sistema real
     const totalTenants = await this.prisma.client.tenant.count();
     const activeTenants = await this.prisma.client.tenant.count({ where: { status: 'ACTIVE' } });
     const totalCompanyUsers = await this.prisma.client.companyUser.count();

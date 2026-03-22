@@ -1,3 +1,7 @@
+/**
+ * Creado y diseñado por XO
+ */
+
 import React, { useState, useEffect } from 'react';
 import { useAuthStore } from '@/store/auth-store';
 import { EDITOR_TOOLS_META, EditorToolConfig } from './tools.config';
@@ -67,7 +71,7 @@ export const CustomizeToolbarModal: React.FC<CustomizeToolbarModalProps> = ({ is
   return (
     <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/50 backdrop-blur-sm">
       <div className="bg-white rounded-xl shadow-2xl w-full max-w-md overflow-hidden flex flex-col max-h-[85vh]">
-        {/* Header */}
+        {/* Cabecera */}
         <div className="px-6 py-4 border-b border-zinc-200 flex items-center justify-between bg-zinc-50">
           <div>
             <h2 className="text-lg font-bold text-zinc-900">Personalizar Herramientas</h2>
@@ -78,7 +82,7 @@ export const CustomizeToolbarModal: React.FC<CustomizeToolbarModalProps> = ({ is
           </button>
         </div>
 
-        {/* Content */}
+        {/* Contenido */}
         <div className="flex-1 overflow-y-auto p-2 bg-zinc-50/50">
           <div className="space-y-1">
             {tools.map((tool, idx) => (
@@ -116,7 +120,7 @@ export const CustomizeToolbarModal: React.FC<CustomizeToolbarModalProps> = ({ is
           </div>
         </div>
 
-        {/* Footer */}
+        {/* Pie de página */}
         <div className="px-6 py-4 border-t border-zinc-200 bg-white flex items-center justify-between">
           <button 
             onClick={resetToDefault}

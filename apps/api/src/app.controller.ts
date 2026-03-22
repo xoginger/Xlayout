@@ -1,3 +1,8 @@
+/**
+ * Creado y diseñado por XO
+ * XLayout System
+ */
+
 import { Controller, Get } from '@nestjs/common';
 import { AppService } from './app.service';
 

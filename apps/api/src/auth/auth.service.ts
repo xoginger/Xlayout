@@ -1,3 +1,8 @@
+/**
+ * Creado y diseñado por XO
+ * XLayout System
+ */
+
 import { Injectable, UnauthorizedException } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import { PrismaService } from '../prisma/prisma.service';
@@ -11,21 +16,21 @@ export class AuthService {
   ) {}
 
   async validateUser(email: string, pass: string): Promise<any> {
-    // Check PlatformUser
+    // Verificar PlatformUser
     const platformUser = await this.prisma.client.platformUser.findUnique({ where: { email } });
     if (platformUser && await bcrypt.compare(pass, platformUser.passwordHash)) {
       const { passwordHash, ...result } = platformUser;
       return { ...result, userType: 'PLATFORM_USER' };
     }
 
-    // Check CompanyUser
+    // Verificar CompanyUser
     const companyUser = await this.prisma.client.companyUser.findUnique({ where: { email } });
     if (companyUser && await bcrypt.compare(pass, companyUser.passwordHash)) {
       const { passwordHash, ...result } = companyUser;
       return { ...result, userType: 'COMPANY_USER' };
     }
 
-    // Check EndUser
+    // Verificar EndUser
     const endUser = await this.prisma.client.endUser.findUnique({ where: { email } });
     if (endUser && await bcrypt.compare(pass, endUser.passwordHash)) {
       const { passwordHash, ...result } = endUser;

@@ -1,3 +1,8 @@
+/**
+ * Creado y diseñado por XO
+ * XLayout System
+ */
+
 import { Injectable, NotFoundException, ConflictException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import * as crypto from 'crypto';
@@ -18,7 +23,7 @@ export class TenantsService {
     adminLastName?: string;
   }) {
     const existing = await this.prisma.client.tenant.findUnique({ where: { slug: data.slug } });
-    if (existing) throw new ConflictException(`Tenant with slug '${data.slug}' already exists`);
+    if (existing) throw new ConflictException(`El Tenant con slug '${data.slug}' ya existe`);
 
     return this.prisma.client.$transaction(async (tx: any) => {
       const tenant = await tx.tenant.create({
@@ -66,7 +71,7 @@ export class TenantsService {
         _count: { select: { products: true, activationCodes: true } },
       },
     });
-    if (!tenant) throw new NotFoundException(`Tenant '${id}' not found`);
+    if (!tenant) throw new NotFoundException(`Tenant '${id}' no encontrado`);
     return tenant;
   }
 

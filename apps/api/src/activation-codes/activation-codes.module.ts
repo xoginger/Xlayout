@@ -1,4 +1,7 @@
-// activation-codes.module.ts — XLayout Activation Codes Module
+/**
+ * Creado y diseñado por XO
+ * XLayout System
+ */
 import { Module } from '@nestjs/common';
 import { ActivationCodesService } from './activation-codes.service';
 import { ActivationCodesController } from './activation-codes.controller';

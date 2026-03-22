@@ -1,4 +1,7 @@
-// platform-users.module.ts — XLayout Platform User Module
+/**
+ * Creado y diseñado por XO
+ * XLayout System
+ */
 import { Module } from '@nestjs/common';
 import { PlatformUsersService } from './platform-users.service';
 import { PlatformUsersController } from './platform-users.controller';

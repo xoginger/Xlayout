@@ -10,6 +10,7 @@ interface AdminLayoutProps {
 }
 
 /**
+ * Creado y diseñado por XO
  * AdminLayout — layout para páginas de administración.
  *
  * Árbol de alturas (sin h-screen aquí — AppShell es el dueño):
