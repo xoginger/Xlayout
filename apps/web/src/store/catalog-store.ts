@@ -10,7 +10,9 @@ export interface Product {
   width: number;
   depth: number;
   height: number;
-  price: number | null;
+  price?: number | null;
+  pricesMap?: Record<string, number> | null;
+  currency?: string;
   hasPriceAccess: boolean;
   thumbnail: string | null;
   metadata?: Record<string, any>;
@@ -77,29 +79,61 @@ export const useCatalogStore = create<CatalogState>((set, get) => ({
   getFilteredProducts: () => {
     const { tenants, selectedTenantId, selectedLineId, searchQuery } = get();
     
-    let products: Product[] = [];
-    
+    // Si hay búsqueda global, ignoramos todos los filtros e inspeccionamos todo el catálogo.
+    if (searchQuery) {
+      const q = searchQuery.toLowerCase();
+      const allProducts = tenants.flatMap((t) =>
+        t.lines.flatMap((l) =>
+          l.products.map((p) => ({
+            ...p,
+            _tenant: { id: t.tenantId, name: t.tenantName },
+            _line: { id: l.lineId, name: l.lineName },
+          }))
+        )
+      );
+
+      return allProducts.filter(
+        (p) =>
+          p.name.toLowerCase().includes(q) ||
+          p.sku.toLowerCase().includes(q) ||
+          p._tenant.name.toLowerCase().includes(q) ||
+          p._line.name.toLowerCase().includes(q)
+      );
+    }
+
+    // Flujo normal con filtros
+    let products: any[] = [];
     if (selectedTenantId) {
       const tenant = tenants.find(t => t.tenantId === selectedTenantId);
       if (tenant) {
         if (selectedLineId) {
           const line = tenant.lines.find(l => l.lineId === selectedLineId);
-          if (line) products = line.products;
+          if (line) {
+            products = line.products.map(p => ({
+                 ...p, 
+                 _tenant: { id: tenant.tenantId, name: tenant.tenantName }, 
+                 _line: { id: line.lineId, name: line.lineName }
+            }));
+          }
         } else {
-          // All products from all lines in this tenant
-          products = tenant.lines.flatMap(l => l.products);
+          products = tenant.lines.flatMap(l => 
+            l.products.map(p => ({
+               ...p, 
+               _tenant: { id: tenant.tenantId, name: tenant.tenantName }, 
+               _line: { id: l.lineId, name: l.lineName }
+            }))
+          );
         }
       }
     } else {
-      // All products from all tenants
-      products = tenants.flatMap(t => t.lines.flatMap(l => l.products));
-    }
-
-    if (searchQuery) {
-      const q = searchQuery.toLowerCase();
-      products = products.filter(p => 
-        p.name.toLowerCase().includes(q) || 
-        p.sku.toLowerCase().includes(q)
+      products = tenants.flatMap(t => 
+        t.lines.flatMap(l => 
+          l.products.map(p => ({
+             ...p, 
+             _tenant: { id: t.tenantId, name: t.tenantName }, 
+             _line: { id: l.lineId, name: l.lineName }
+          }))
+        )
       );
     }
 

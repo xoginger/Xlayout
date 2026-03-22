@@ -809,30 +809,28 @@ export const Viewport: React.FC = () => {
     if (activeTool === 'scale-blueprint') {
       e.stopPropagation(); // Ignore Floor and under-objects
       const exactPoint = [e.point.x, e.point.y, e.point.z] as [number, number, number];
+      const localVec = e.object.worldToLocal(e.point.clone());
+      const localPoint = [localVec.x, localVec.y, localVec.z] as [number, number, number];
 
-      if (!drawingStart) {
-        setDrawingStart(exactPoint);
-      } else {
+      const store = useEditorStore.getState();
+      const { calibrationState, setCalibrationState } = store;
+
+      // Click 1
+      if (!drawingStart || calibrationState.step === 'idle' || calibrationState.step === 'awaiting-first-point') {
+        setDrawingStart(exactPoint); // World pos para dibujar Linea temporal
+        setCalibrationState({ step: 'awaiting-second-point', pointA: localPoint });
+      } 
+      // Click 2
+      else if (calibrationState.step === 'awaiting-second-point') {
         const measuredDist = calculateDistance(drawingStart, exactPoint);
-        const realDistStr = prompt(
-          `Distancia medida actual: ${measuredDist.toFixed(3)}m\n\nIngresa la distancia real (en metros) para calibrar el plano:`,
-          measuredDist.toFixed(3)
-        );
-        
-        if (realDistStr !== null) {
-          let realDist = parseFloat(realDistStr.replace(',', '.')); // Soporte para comas
-          if (!isNaN(realDist) && realDist > 0 && measuredDist > 0) {
-            const factor = realDist / measuredDist;
-            const store = useEditorStore.getState();
-            store.updateBlueprint({ scale: store.blueprint.scale * factor });
-          } else {
-            alert('Valor ingresado inválido. La calibración ha sido cancelada.');
-          }
-        }
-        
-        setDrawingStart(null);
-        useEditorStore.getState().setActiveTool('select');
+        setCalibrationState({ 
+          step: 'awaiting-real-distance', 
+          pointB: localPoint,
+          measuredDistance: measuredDist
+        });
+        setMousePos(exactPoint); // Congelar línea
       }
+      
       return; // End early. Mathematical purity achieved.
     }
     // -----------------------------------------------------------------
@@ -951,8 +949,13 @@ export const Viewport: React.FC = () => {
     // -----------------------------------------------------------------
     if (activeTool === 'scale-blueprint') {
       e.stopPropagation();
-      const exactPoint = [e.point.x, e.point.y, e.point.z] as [number, number, number];
       
+      // Stop rendering moving lines if we are already waiting for distance HUD
+      if (useEditorStore.getState().calibrationState.step === 'awaiting-real-distance') {
+        return; 
+      }
+      
+      const exactPoint = [e.point.x, e.point.y, e.point.z] as [number, number, number];
       // Update state manually to skip R3F's inference snap logic
       setActiveInference({ point: exactPoint, type: 'none', color: '#ec4899' }); // Magenta
       setMousePos(exactPoint);
@@ -1213,8 +1216,14 @@ export const Viewport: React.FC = () => {
             {/* Real-time Preview */}
             {drawingStart && (
               <group>
+                {/* Visual Calibration Lock when waiting for real distance */}
                 <Line 
-                  points={[drawingStart, mousePos]} 
+                  points={[
+                    drawingStart, 
+                    useEditorStore.getState().calibrationState.step === 'awaiting-real-distance' 
+                      ? mousePos 
+                      : mousePos
+                  ]} 
                   color={activeTool === 'scale-blueprint' ? "#ec4899" : (activeInference.type === 'axis' ? activeInference.color : "#3b82f6")} 
                   lineWidth={activeInference.type === 'axis' || activeTool === 'scale-blueprint' ? 3 : 2} 
                   dashed={activeInference.type !== 'axis' && activeTool !== 'scale-blueprint'} 
@@ -1243,7 +1252,7 @@ export const Viewport: React.FC = () => {
                 )}
 
                 <mesh position={drawingStart}>
-                  <sphereGeometry args={[activeTool === 'scale-blueprint' ? 0.015 : 0.03, 8, 8]} />
+                  <sphereGeometry args={[activeTool === 'scale-blueprint' ? 0.003 : 0.03, 8, 8]} />
                   <meshBasicMaterial color={activeTool === 'scale-blueprint' ? "#ec4899" : (activeInference.type === 'axis' ? activeInference.color : "#3b82f6")} />
                 </mesh>
                 {activeTool === 'rectangle' && (

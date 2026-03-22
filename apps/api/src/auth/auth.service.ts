@@ -61,6 +61,7 @@ export class AuthService {
         id: user.id,
         email: user.email,
         role: 'platform_admin',
+        preferences: user.preferences,
         tenants: tenants.map((t: any) => ({
           tenantId: t.id,
           tenantName: t.name,
@@ -79,6 +80,7 @@ export class AuthService {
         id: user.id,
         email: user.email,
         role: 'company_admin',
+        preferences: user.preferences,
         tenants: [{
           tenantId: user.tenantId,
           tenantName: (user as any).tenant.name,
@@ -102,6 +104,7 @@ export class AuthService {
         id: user.id,
         email: user.email,
         role: 'end_user',
+        preferences: user.preferences,
         tenants: (user as any).catalogAccesses.map((ca: any) => ({
           tenantId: ca.tenantId,
           tenantName: ca.tenant.name,
@@ -114,5 +117,18 @@ export class AuthService {
     }
 
     throw new UnauthorizedException();
+  }
+
+  async updatePreferences(userId: string, userType: string, preferences: any) {
+    if (userType === 'PLATFORM_USER') {
+      return this.prisma.client.platformUser.update({ where: { id: userId }, data: { preferences } });
+    }
+    if (userType === 'COMPANY_USER') {
+      return this.prisma.client.companyUser.update({ where: { id: userId }, data: { preferences } });
+    }
+    if (userType === 'END_USER') {
+      return this.prisma.client.endUser.update({ where: { id: userId }, data: { preferences } });
+    }
+    throw new UnauthorizedException('Invalid user type');
   }
 }

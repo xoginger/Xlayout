@@ -66,12 +66,29 @@ export class CatalogService {
   }
 
   async createProduct(tenantId: string, data: any) {
-    const line = await this.prisma.client.productLine.findUnique({ where: { id: data.lineId } });
+    const { prices, ...createData } = data;
+    const line = await this.prisma.client.productLine.findUnique({ where: { id: createData.lineId } });
     if (!line || line.tenantId !== tenantId) {
       throw new ForbiddenException('You can only create products for your own lines');
     }
+
+    let pricesCreate = {};
+    if (prices && Array.isArray(prices)) {
+      pricesCreate = {
+        prices: {
+          create: prices.map((p: any) => ({
+            tenantId: tenantId || undefined,
+            priceType: p.priceType,
+            basePrice: p.basePrice || 0,
+            currency: p.currency || 'MXN'
+          }))
+        }
+      };
+    }
+
     return this.prisma.client.product.create({
-      data: { ...data, tenantId: tenantId || undefined },
+      data: { ...createData, tenantId: tenantId || undefined, ...pricesCreate },
+      include: { prices: true }
     });
   }
 
@@ -81,10 +98,41 @@ export class CatalogService {
       throw new ForbiddenException('You can only update your own products');
     }
     // Strip relation fields that shouldn't be passed directly
-    const { tenantId: _t, assets, prices, line, category, conditions, ...updateData } = data;
+    const { tenantId: _t, assets, line, category, conditions, prices, ...updateData } = data as any;
+    
+    // Process prices if provided
+    let pricesUpdate = {};
+    if (prices && Array.isArray(prices)) {
+      pricesUpdate = {
+        prices: {
+          upsert: prices.map((p: any) => ({
+            where: {
+              productId_priceType: {
+                productId: id,
+                priceType: p.priceType
+              }
+            },
+            create: {
+              tenantId: tenantId || undefined,
+              priceType: p.priceType,
+              basePrice: p.basePrice || 0,
+              currency: p.currency || 'MXN'
+            },
+            update: {
+              basePrice: p.basePrice || 0,
+              currency: p.currency || 'MXN'
+            }
+          }))
+        }
+      };
+    }
+
     return this.prisma.client.product.update({
       where: { id },
-      data: updateData,
+      data: {
+        ...updateData,
+        ...pricesUpdate
+      },
       include: { line: true, category: true, prices: { where: { active: true } }, assets: true },
     });
   }
@@ -128,7 +176,7 @@ export class CatalogService {
       include: {
         line: true,
         category: true,
-        prices: { where: { active: true }, orderBy: { createdAt: 'desc' }, take: 1 },
+        prices: { where: { active: true } }, // Traemos todos los precios, no solo el último
         assets: { where: { assetType: 'model_3d' } }
       },
     });
@@ -281,7 +329,7 @@ export class CatalogService {
               where: { status: 'PUBLISHED', active: true },
               orderBy: { name: 'asc' },
               include: {
-                prices: { where: { active: true }, orderBy: { createdAt: 'desc' }, take: 1 },
+                prices: { where: { active: true } }, // Extraemos toooodos los precios para el Editor
                 assets: true
               }
             }
@@ -300,7 +348,14 @@ export class CatalogService {
             lineId: line.id,
             lineName: line.name,
             products: line.products.map((product: any) => {
-              const activePrice = product.prices[0];
+              // Convertir arreglo de precios de Prisma a diccionario útil: { A: 100, B: 200 }
+              const pricesMap: Record<string, number> = {};
+              let currency = 'MXN';
+              product.prices.forEach((p: any) => {
+                pricesMap[p.priceType] = Number(p.basePrice);
+                currency = p.currency;
+              });
+
               const model3dAsset = product.assets.find((a: any) => a.assetType === 'model_3d');
               return {
                 productId: product.id,
@@ -309,8 +364,8 @@ export class CatalogService {
                 width: product.width,
                 depth: product.depth,
                 height: product.height,
-                price: access?.pricesEnabled && activePrice ? Number(activePrice.basePrice) : null,
-                currency: activePrice?.currency || 'MXN',
+                pricesMap: access?.pricesEnabled ? pricesMap : null, // Entregar todos los precios si hay acceso
+                currency: currency,
                 hasPriceAccess: access?.pricesEnabled ?? false,
                 thumbnail: product.assets.find((a: any) => a.assetType === 'thumbnail')?.fileUrl || null,
                 metadata: {

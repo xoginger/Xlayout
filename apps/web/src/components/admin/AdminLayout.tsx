@@ -1,7 +1,6 @@
 "use client";
 
 import React from 'react';
-import { AppShell } from '@/components/nav/AppShell';
 import { Sidebar, SidebarType } from './Sidebar';
 
 interface AdminLayoutProps {
@@ -28,7 +27,7 @@ interface AdminLayoutProps {
  */
 export const AdminLayout = ({ children, type, title }: AdminLayoutProps) => {
   return (
-    <AppShell>
+    <>
       {/* Sidebar lateral del contexto admin */}
       <Sidebar type={type} />
 
@@ -50,6 +49,6 @@ export const AdminLayout = ({ children, type, title }: AdminLayoutProps) => {
           </div>
         </main>
       </div>
-    </AppShell>
+    </>
   );
 };

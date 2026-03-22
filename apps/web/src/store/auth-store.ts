@@ -19,6 +19,7 @@ interface User {
   id: string;
   email: string;
   role: 'platform_admin' | 'company_admin' | 'end_user';
+  preferences?: any;
   tenants: TenantContext[];
 }
 
@@ -32,6 +33,7 @@ interface AuthState {
   
   setAuth: (token: string, userData: any) => void;
   fetchMe: () => Promise<void>;
+  updatePreferences: (prefs: any) => Promise<void>;
   setActiveTenantId: (id: string) => void;
   getActiveTenant: () => TenantContext | null;
   logout: () => void;
@@ -74,6 +76,24 @@ export const useAuthStore = create<AuthState>()(
           });
         } catch (err) {
           set({ user: null, isAuthenticated: false, token: null, isLoading: false, activeTenantId: null, activeTenantName: null });
+        }
+      },
+
+      updatePreferences: async (prefs: any) => {
+        const currentUser = get().user;
+        if (!currentUser) return;
+        
+        const newPrefs = { ...currentUser.preferences, ...prefs };
+        
+        // Optimistic update
+        set({ user: { ...currentUser, preferences: newPrefs } });
+        
+        try {
+          await api.post('/auth/preferences', newPrefs);
+        } catch (err) {
+          console.error("Failed to save preferences", err);
+          // Rollback if needed
+          set({ user: currentUser });
         }
       },
 

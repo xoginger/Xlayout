@@ -471,15 +471,32 @@ export const RightInspector: React.FC = () => {
                     <input type="range" min="0" max="1" step="0.01" value={opacityVal} onChange={(e) => updateBlueprint({ opacity: parseFloat(e.target.value) })} className="w-full h-1.5 bg-zinc-200 rounded-lg appearance-none cursor-pointer accent-blue-600" />
                   </div>
 
-                  <div className="space-y-2">
+                  <div className="space-y-4">
                     <div className="flex justify-between">
                       <label className="text-[9px] font-black text-zinc-600 uppercase">Scale Factor</label>
                       <span className="text-[9px] font-mono text-blue-600 font-black">×{scaleFactor.toFixed(2)}</span>
                     </div>
-                    <div className="flex gap-2">
-                      <button onClick={() => updateBlueprint({ scale: scaleFactor * 0.9 })} className="flex-1 py-1.5 bg-white border border-zinc-200 rounded-lg text-[9px] font-black hover:bg-zinc-100 active:scale-95 transition-all">-</button>
-                      <button onClick={() => updateBlueprint({ scale: scaleFactor * 1.1 })} className="flex-1 py-1.5 bg-white border border-zinc-200 rounded-lg text-[9px] font-black hover:bg-zinc-100 active:scale-95 transition-all">+</button>
-                    </div>
+                    {blueprint.calibrated ? (
+                        <div className="bg-blue-50/50 border border-blue-200 p-2.5 rounded-lg space-y-2">
+                           <div className="flex items-center gap-2">
+                              <span className="text-[10px] uppercase font-black tracking-widest text-blue-600 flex-1">PLANO CALIBRADO</span>
+                              <span className="text-[9px] font-mono text-blue-600 bg-white px-1.5 py-0.5 rounded shadow-sm">
+                                {blueprint.calibrationMeasuredDist?.toFixed(2)}m ➔ {blueprint.calibrationRealDist?.toFixed(2)}m
+                              </span>
+                           </div>
+                           <button 
+                             onClick={() => updateBlueprint({ scale: 1, calibrated: false, calibrationMeasuredDist: undefined, calibrationRealDist: undefined, calibrationPointA: undefined, calibrationPointB: undefined })} 
+                             className="w-full py-1.5 bg-white border border-blue-200 rounded text-[9px] font-black text-blue-600 hover:bg-red-50 hover:text-red-500 hover:border-red-200 transition-all uppercase tracking-widest"
+                           >
+                             Deshacer Calibración
+                           </button>
+                        </div>
+                    ) : (
+                      <div className="flex gap-2">
+                        <button onClick={() => updateBlueprint({ scale: scaleFactor * 0.9 })} className="flex-1 py-1.5 bg-white border border-zinc-200 rounded-lg text-[9px] font-black hover:bg-zinc-100 active:scale-95 transition-all">-</button>
+                        <button onClick={() => updateBlueprint({ scale: scaleFactor * 1.1 })} className="flex-1 py-1.5 bg-white border border-zinc-200 rounded-lg text-[9px] font-black hover:bg-zinc-100 active:scale-95 transition-all">+</button>
+                      </div>
+                    )}
                   </div>
 
                   <div className="space-y-2">
@@ -502,16 +519,19 @@ export const RightInspector: React.FC = () => {
                    </div>
                 </div>
 
-                <div className="pt-2 border-t border-zinc-200/50">
+                <div className="pt-2 border-t border-zinc-200/50 mt-2">
                   <button 
-                    onClick={() => setActiveTool('scale-blueprint')}
+                    onClick={() => {
+                      setActiveTool('scale-blueprint');
+                      useEditorStore.getState().setCalibrationState({ step: 'awaiting-first-point', pointA: undefined, pointB: undefined, measuredDistance: undefined });
+                    }}
                     className="w-full py-3 bg-zinc-900 text-white rounded-xl text-[10px] font-black uppercase tracking-[0.1em] hover:bg-blue-600 transition-all shadow-lg flex items-center justify-center gap-2 group ring-1 ring-zinc-900/5"
                   >
                     <span className="group-hover:scale-125 transition-transform">📏</span>
-                    Calibrar Escala del Plano
+                    {blueprint.calibrated ? 'Recalibrar Plano' : 'Calibrar Escala del Plano'}
                   </button>
                   <p className="text-[8px] text-zinc-400 text-center mt-2 leading-relaxed px-2">
-                    Haz clic en dos puntos del plano e ingresa la distancia real para re-escalar automáticamente.
+                    Haz clic en dos puntos del plano e ingresa la distancia real en el HUD central.
                   </p>
                 </div>
               </div>

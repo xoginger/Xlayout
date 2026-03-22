@@ -8,7 +8,7 @@ import { useAuthStore } from '@/store/auth-store';
 const EditorShell = dynamic(() => import('@/components/editor/EditorShell').then(mod => mod.EditorShell), {
   ssr: false,
   loading: () => (
-    <div className="flex h-screen w-screen items-center justify-center bg-white text-zinc-400 font-mono text-xs tracking-widest uppercase animate-pulse">
+    <div className="flex h-full w-full items-center justify-center bg-white text-zinc-400 font-mono text-xs tracking-widest uppercase animate-pulse">
       Initializing XLayout Studio...
     </div>
   )
@@ -34,15 +34,11 @@ export default function EditorPage() {
 
   if (isLoading || !user) {
     return (
-      <div className="flex h-screen w-screen items-center justify-center bg-white text-zinc-400 font-mono text-xs tracking-widest uppercase animate-pulse">
+      <div className="flex h-full w-full items-center justify-center bg-white text-zinc-400 font-mono text-xs tracking-widest uppercase animate-pulse">
         Loading User Context...
       </div>
     );
   }
 
-  return (
-    <div className="bg-white min-h-screen">
-      <EditorShell />
-    </div>
-  );
+  return <EditorShell />;
 }

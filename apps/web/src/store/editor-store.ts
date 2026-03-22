@@ -5,11 +5,11 @@ export type SceneItemType = 'rack' | 'shelf' | 'desk' | 'cabinet' | 'catalog-ite
 export type OpeningType = 'door' | 'window' | 'opening';
 export type OpeningDirection = 'left' | 'right' | 'inward' | 'outward';
 export type ViewMode = '2D' | '3D';
-export type ToolType = 
-  | 'select' | 'pan' | 'zoom' | 'move' | 'rotate' | 'scale' 
-  | 'line' | 'rectangle' | 'circle' | 'arc' | 'freehand' | 'wall' 
-  | 'extrude' | 'offset' | 'follow-me' 
-  | 'tape' | 'paint' | 'eraser' | 'dimension' 
+export type ToolType =
+  | 'select' | 'pan' | 'zoom' | 'move' | 'rotate' | 'scale'
+  | 'line' | 'rectangle' | 'circle' | 'arc' | 'freehand' | 'wall'
+  | 'extrude' | 'offset' | 'follow-me'
+  | 'tape' | 'paint' | 'eraser' | 'dimension'
   | 'delete' | 'duplicate' | 'scale-blueprint' | 'place-opening' | 'product';
 
 export interface SnapPoint {
@@ -46,6 +46,19 @@ export interface BlueprintState {
   opacity: number;
   locked: boolean;
   visible: boolean;
+  // Calibration Metadata
+  calibrated?: boolean;
+  calibrationPointA?: [number, number, number]; // Guardado en X,Y,Z locales del plano
+  calibrationPointB?: [number, number, number];
+  calibrationMeasuredDist?: number;
+  calibrationRealDist?: number;
+}
+
+export interface CalibrationState {
+  step: 'idle' | 'awaiting-first-point' | 'awaiting-second-point' | 'awaiting-real-distance';
+  pointA?: [number, number, number]; // Coordenadas locales
+  pointB?: [number, number, number]; // Coordenadas locales
+  measuredDistance?: number;
 }
 
 export interface DimensionLine {
@@ -116,7 +129,7 @@ export interface SceneItem {
   label?: string;
   price?: number | null;
   hasPriceAccess?: boolean;
-  
+
   // Professional Metadata
   model3dUrl?: string;
   floorAnchor: number; // 0 = base, 0.5 = center
@@ -169,7 +182,7 @@ interface EditorState {
   layers: Layer[];
   scenes: Scene[];
   guides: Guide[];
-  
+
   activeLayerId: string;
   selectedId: string | null;
   selectedType: 'item' | 'wall' | 'opening' | 'dimension' | 'line' | 'rectangle' | 'face' | 'volume' | null;
@@ -182,6 +195,7 @@ interface EditorState {
   pendingOpeningType: OpeningType | null;
   exportRequest: 'image' | 'glb' | 'pdf' | null;
   blueprint: BlueprintState;
+  calibrationState: CalibrationState;
 
   history: any[];
   historyIndex: number;
@@ -196,11 +210,11 @@ interface EditorState {
   updateScene: (id: string, updates: Partial<Scene>) => void;
   removeScene: (id: string) => void;
   applyScene: (id: string) => void;
-  
+
   addGuide: (guide: Guide) => void;
   removeGuide: (id: string) => void;
   clearGuides: () => void;
-  
+
   updateOpening: (id: string, updates: Partial<Opening>) => void;
   insertStructuralAsset: (type: OpeningType, wallId: string, offset?: number) => void;
   setPendingOpeningType: (type: OpeningType | null) => void;
@@ -213,12 +227,12 @@ interface EditorState {
   updateVolume: (id: string, updates: Partial<VolumeEntity>) => void;
   updateItem: (id: string, updates: Partial<SceneItem>) => void;
   updateWall: (id: string, updates: Partial<Wall>) => void;
-  
+
   setActiveLayer: (id: string) => void;
   addLayer: (layer: Layer) => void;
   updateLayer: (id: string, updates: Partial<Layer>) => void;
   toggleLayer: (id: string) => void;
-  
+
   removeItem: (id: string) => void;
   duplicateItem: (id: string) => void;
   insertSceneItem: (productData: any, tenantId: string) => void;
@@ -240,13 +254,14 @@ interface EditorState {
   createNewProject: (name: string) => Promise<void>;
   triggerExport: (type: 'image' | 'glb' | 'pdf') => void;
   clearExportRequest: () => void;
-  
+
+  setCalibrationState: (data: Partial<CalibrationState>) => void;
   updateBlueprint: (data: Partial<BlueprintState>) => void;
   clearBlueprint: () => void;
 }
 
 export const useEditorStore = create<EditorState>((set, get) => ({
-  project: { id: 'default', name: 'New Project', isDirty: false, isSaving: false, lastSavedAt: null },
+  project: { id: 'default', name: 'New Project', priceType: 'A', isDirty: false, isSaving: false, lastSavedAt: null },
   items: [],
   walls: [],
   openings: [],
@@ -287,6 +302,9 @@ export const useEditorStore = create<EditorState>((set, get) => ({
     locked: false,
     visible: true,
   },
+  calibrationState: {
+    step: 'idle',
+  },
   history: [],
   historyIndex: -1,
 
@@ -296,10 +314,10 @@ export const useEditorStore = create<EditorState>((set, get) => ({
   saveToHistory: () => {
     const { items, walls, openings, dimensions, lines, rectangles, faces, volumes, layers, scenes, project, blueprint } = get();
     const currentState = JSON.stringify({ items, walls, openings, dimensions, lines, rectangles, faces, volumes, layers, scenes, project, blueprint });
-    
+
     const { history, historyIndex } = get();
     const newHistory = history.slice(0, historyIndex + 1);
-    
+
     if (newHistory.length > 0 && newHistory[newHistory.length - 1] === currentState) return;
 
     newHistory.push(currentState);
@@ -316,7 +334,7 @@ export const useEditorStore = create<EditorState>((set, get) => ({
     get().saveToHistory();
     const floorAnchor = productData.metadata?.floorAnchor ?? 0.5;
     const yPos = floorAnchor === 0 ? 0 : productData.height * floorAnchor;
-    
+
     const item: SceneItem = {
       id: Math.random().toString(36).substr(2, 9),
       productId: productData.productId,
@@ -395,8 +413,8 @@ export const useEditorStore = create<EditorState>((set, get) => ({
     if (!wall) return;
     get().saveToHistory();
     const defaults: Record<OpeningType, Partial<Opening>> = {
-      door:    { width: 0.9, height: 2.1, openingDirection: 'inward' },
-      window:  { width: 1.2, height: 1.0, sillHeight: 0.9 },
+      door: { width: 0.9, height: 2.1, openingDirection: 'inward' },
+      window: { width: 1.2, height: 1.0, sillHeight: 0.9 },
       opening: { width: 1.0, height: 2.1 },
     };
     const base = defaults[type] || defaults.opening;
@@ -429,7 +447,7 @@ export const useEditorStore = create<EditorState>((set, get) => ({
     get().saveToHistory();
     set((state) => ({ dimensions: [...state.dimensions, dim], selectedId: dim.id, selectedType: 'dimension' }));
   },
-  
+
   addLine: (line) => {
     get().saveToHistory();
     set((state) => ({ lines: [...state.lines, { ...line, layerId: 'lines' }], selectedId: line.id, selectedType: 'line' }));
@@ -521,28 +539,28 @@ export const useEditorStore = create<EditorState>((set, get) => ({
     const wall = state.walls.find((w) => w.id === id);
     if (wall) {
       get().saveToHistory();
-      const dup: Wall = { ...wall, id: newId(), start: [wall.start[0]+OFFSET[0], wall.start[1], wall.start[2]+OFFSET[2]], end: [wall.end[0]+OFFSET[0], wall.end[1], wall.end[2]+OFFSET[2]] };
+      const dup: Wall = { ...wall, id: newId(), start: [wall.start[0] + OFFSET[0], wall.start[1], wall.start[2] + OFFSET[2]], end: [wall.end[0] + OFFSET[0], wall.end[1], wall.end[2] + OFFSET[2]] };
       set((s) => ({ walls: [...s.walls, dup], selectedId: dup.id, selectedType: 'wall' }));
       return;
     }
     const line = state.lines.find((l) => l.id === id);
     if (line) {
       get().saveToHistory();
-      const dup: LineEntity = { ...line, id: newId(), start: [line.start[0]+OFFSET[0], line.start[1], line.start[2]+OFFSET[2]], end: [line.end[0]+OFFSET[0], line.end[1], line.end[2]+OFFSET[2]] };
+      const dup: LineEntity = { ...line, id: newId(), start: [line.start[0] + OFFSET[0], line.start[1], line.start[2] + OFFSET[2]], end: [line.end[0] + OFFSET[0], line.end[1], line.end[2] + OFFSET[2]] };
       set((s) => ({ lines: [...s.lines, dup], selectedId: dup.id, selectedType: 'line' }));
       return;
     }
     const rect = state.rectangles.find((r) => r.id === id);
     if (rect) {
       get().saveToHistory();
-      const dup: RectangleEntity = { ...rect, id: newId(), start: [rect.start[0]+OFFSET[0], rect.start[1], rect.start[2]+OFFSET[2]], end: [rect.end[0]+OFFSET[0], rect.end[1], rect.end[2]+OFFSET[2]] };
+      const dup: RectangleEntity = { ...rect, id: newId(), start: [rect.start[0] + OFFSET[0], rect.start[1], rect.start[2] + OFFSET[2]], end: [rect.end[0] + OFFSET[0], rect.end[1], rect.end[2] + OFFSET[2]] };
       set((s) => ({ rectangles: [...s.rectangles, dup], selectedId: dup.id, selectedType: 'rectangle' }));
       return;
     }
     const item = state.items.find((i) => i.id === id);
     if (item) {
       get().saveToHistory();
-      const dup: SceneItem = { ...item, id: newId(), position: [item.position[0]+OFFSET[0], item.position[1], item.position[2]+OFFSET[2]] };
+      const dup: SceneItem = { ...item, id: newId(), position: [item.position[0] + OFFSET[0], item.position[1], item.position[2] + OFFSET[2]] };
       set((s) => ({ items: [...s.items, dup], selectedId: dup.id, selectedType: 'item' }));
     }
   },
@@ -557,16 +575,16 @@ export const useEditorStore = create<EditorState>((set, get) => ({
   setCatalogPanelState: (panelState) => set({ catalogPanelState: panelState }),
   toggleCatalogPanel: () => set((state) => ({
     catalogPanelState:
-      state.catalogPanelState === 'open'      ? 'collapsed' :
-      state.catalogPanelState === 'collapsed' ? 'hidden'    : 'open'
+      state.catalogPanelState === 'open' ? 'collapsed' :
+        state.catalogPanelState === 'collapsed' ? 'hidden' : 'open'
   })),
 
   undo: () => {
     const { history, historyIndex } = get();
     if (historyIndex > 0) {
       const prevState = JSON.parse(history[historyIndex - 1]);
-      set({ 
-        ...prevState, 
+      set({
+        ...prevState,
         historyIndex: historyIndex - 1,
         history,
       });
@@ -577,8 +595,8 @@ export const useEditorStore = create<EditorState>((set, get) => ({
     const { history, historyIndex } = get();
     if (historyIndex < history.length - 1) {
       const nextState = JSON.parse(history[historyIndex + 1]);
-      set({ 
-        ...nextState, 
+      set({
+        ...nextState,
         historyIndex: historyIndex + 1,
         history,
       });
@@ -595,7 +613,7 @@ export const useEditorStore = create<EditorState>((set, get) => ({
 
     try {
       const sceneState = { items, walls, openings, dimensions, lines, rectangles, faces, volumes, layers, scenes, blueprint };
-      
+
       let projectId = project.id;
       if (projectId === 'default') {
         const newProj = await projectService.createProject(project.name);
@@ -603,15 +621,15 @@ export const useEditorStore = create<EditorState>((set, get) => ({
       }
 
       await projectService.saveVersion(projectId, sceneState);
-      
-      set((state) => ({ 
-        project: { 
-          ...state.project, 
+
+      set((state) => ({
+        project: {
+          ...state.project,
           id: projectId,
-          isDirty: false, 
-          isSaving: false, 
-          lastSavedAt: new Date().toISOString() 
-        } 
+          isDirty: false,
+          isSaving: false,
+          lastSavedAt: new Date().toISOString()
+        }
       }));
     } catch (e) {
       console.error('Failed to save project', e);
@@ -624,7 +642,7 @@ export const useEditorStore = create<EditorState>((set, get) => ({
     set((state) => ({ project: { ...state.project, isSaving: true } }));
     try {
       const projectData = await projectService.getProject(id);
-      const latestVersion = projectData.versions && projectData.versions.length > 0 
+      const latestVersion = projectData.versions && projectData.versions.length > 0
         ? projectData.versions.sort((a: any, b: any) => b.versionNum - a.versionNum)[0]
         : null;
 
@@ -695,12 +713,15 @@ export const useEditorStore = create<EditorState>((set, get) => ({
   removeGuide: (id) => set((state) => ({ guides: state.guides.filter(g => g.id !== id) })),
   clearGuides: () => set({ guides: [] }),
 
-  updateBlueprint: (data) => set((state) => ({ 
-    blueprint: { ...state.blueprint, ...data } 
+  updateBlueprint: (data) => set((state) => ({
+    blueprint: { ...state.blueprint, ...data }
+  })),
+  setCalibrationState: (data) => set((state) => ({
+    calibrationState: { ...state.calibrationState, ...data }
   })),
   clearBlueprint: () => set((state) => ({
-    blueprint: { 
-      url: null, position: [0, -0.01, 0], scale: 1, rotation: 0, opacity: 0.5, locked: false, visible: true 
+    blueprint: {
+      url: null, position: [0, -0.01, 0], scale: 1, rotation: 0, opacity: 0.5, locked: false, visible: true
     }
   }))
 }));

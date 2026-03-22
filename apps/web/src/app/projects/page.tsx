@@ -3,7 +3,6 @@
 import React, { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAuthStore } from '@/store/auth-store';
-import { AppShell } from '@/components/nav/AppShell';
 
 // Placeholder de proyecto card
 const ProjectCard = ({ name, date, items }: { name: string; date: string; items: number }) => (
@@ -38,8 +37,7 @@ export default function ProjectsPage() {
   ];
 
   return (
-    <AppShell>
-      <div className="flex-1 overflow-y-auto bg-slate-50 p-8">
+      <div className="flex-1 overflow-y-auto bg-slate-50 p-8 w-full h-full">
         <div className="max-w-6xl mx-auto">
           {/* Header de sección */}
           <div className="flex items-center justify-between mb-8">
@@ -85,6 +83,5 @@ export default function ProjectsPage() {
           </div>
         </div>
       </div>
-    </AppShell>
   );
 }

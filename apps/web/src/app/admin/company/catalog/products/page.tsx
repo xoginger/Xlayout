@@ -42,8 +42,12 @@ const defaultForm = () => ({
   width: 1.2,
   depth: 0.8,
   height: 0.75,
-  // Price
-  basePrice: '',
+  // Prices A-E
+  priceA: '',
+  priceB: '',
+  priceC: '',
+  priceD: '',
+  priceE: '',
   currency: 'MXN',
   // 3D Asset
   model3dUrl: '',
@@ -83,7 +87,18 @@ export default function CompanyProductsPage() {
     setIsSubmitting(true);
     setError(null);
     try {
-      // 1. Create product
+      // Gather prices A-E into an array
+      const pricesPayload = ['A','B','C','D','E'].map(type => {
+        const val = formData[`price${type}` as keyof FormData];
+        if (!val) return null;
+        return {
+          priceType: type,
+          basePrice: parseFloat(val as string),
+          currency: formData.currency
+        };
+      }).filter(Boolean);
+
+      // 1. Create product, sending prices payload to our enhanced backend
       const newProduct = await createProduct({
         name: formData.name,
         sku: formData.sku,
@@ -93,16 +108,8 @@ export default function CompanyProductsPage() {
         width: formData.width,
         depth: formData.depth,
         height: formData.height,
-      });
-
-      // 2. Create price if provided
-      if (formData.basePrice) {
-        await createProductPrice(newProduct.id, {
-          currency: formData.currency,
-          basePrice: parseFloat(formData.basePrice as string),
-          active: true,
-        });
-      }
+        prices: pricesPayload
+      } as any);
 
       // 3. Create 3D asset if URL provided
       if (formData.model3dUrl) {
@@ -182,15 +189,17 @@ export default function CompanyProductsPage() {
       )
     },
     {
-      header: 'Precio',
+      header: 'Precios',
       accessor: (p: Product) => {
-        const price = p.prices?.[0];
-        return price ? (
-          <span className="text-xs font-semibold text-emerald-700">
-            ${Number(price.basePrice).toLocaleString()} {price.currency}
-          </span>
-        ) : (
-          <span className="text-xs text-slate-400">Sin precio</span>
+        if (!p.prices || p.prices.length === 0) return <span className="text-xs text-slate-400">Sin precios</span>;
+        return (
+          <div className="flex gap-1 flex-wrap max-w-[120px]">
+            {p.prices.map((price: any) => (
+              <span key={price.id} className="text-[9px] font-semibold text-emerald-700 bg-emerald-50 px-1 py-0.5 rounded border border-emerald-100 uppercase">
+                {price.priceType}: ${Number(price.basePrice).toLocaleString()}
+              </span>
+            ))}
+          </div>
         );
       }
     },
@@ -318,25 +327,30 @@ export default function CompanyProductsPage() {
             </div>
           </div>
 
-          {/* Price */}
-          <div className="border-t border-slate-100 pt-4">
-            <p className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-3">Precio (opcional)</p>
-            <div className="grid grid-cols-3 gap-3">
-              <div className="col-span-2">
-                <label className="block text-xs text-slate-600 mb-1">Precio base</label>
-                <input type="number" step="0.01" min="0"
-                  className="w-full px-3 py-2 border border-slate-300 rounded-md text-sm focus:border-blue-500 focus:outline-none"
-                  value={formData.basePrice} onChange={set('basePrice')} placeholder="12500.00" />
-              </div>
-              <div>
-                <label className="block text-xs text-slate-600 mb-1">Moneda</label>
-                <select className="w-full px-3 py-2 border border-slate-300 rounded-md text-sm focus:border-blue-500 focus:outline-none"
+          {/* Pricing Grid */}
+          <div className="border-t border-slate-100 pt-4 bg-slate-50/50 -mx-6 px-6 pb-2">
+            <div className="flex justify-between items-end mb-3">
+              <p className="text-xs font-bold text-slate-500 uppercase tracking-wider">Matriz de Precios</p>
+              <div className="w-24">
+                <label className="block text-[10px] uppercase font-bold text-slate-400 mb-1">Moneda Base</label>
+                <select className="w-full px-2 py-1.5 border border-slate-300 rounded text-xs focus:border-blue-500 focus:outline-none bg-white font-bold"
                   value={formData.currency} onChange={set('currency')}>
                   <option value="MXN">MXN</option>
                   <option value="USD">USD</option>
                   <option value="EUR">EUR</option>
                 </select>
               </div>
+            </div>
+            
+            <div className="grid grid-cols-5 gap-2">
+              {['A','B','C','D','E'].map((type) => (
+                <div key={type} className="bg-white p-2 rounded-md border border-slate-200 shadow-sm">
+                  <label className="block text-[10px] font-black text-slate-500 mb-1 text-center bg-slate-100 py-0.5 rounded">TIPO {type}</label>
+                  <input type="number" step="0.01" min="0" placeholder="0.00"
+                    className="w-full px-2 py-1 border border-transparent hover:border-slate-200 rounded text-sm text-center font-mono focus:border-blue-500 focus:outline-none"
+                    value={formData[`price${type}` as keyof FormData] as string | number} onChange={set(`price${type}` as keyof FormData)} />
+                </div>
+              ))}
             </div>
           </div>
 
