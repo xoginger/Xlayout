@@ -193,6 +193,7 @@ export const CatalogPanel: React.FC = () => {
     getFilteredProducts,
   } = useCatalogStore();
 
+  const catalogPanelState = useEditorStore((s) => s.catalogPanelState);
   const setCatalogPanelState = useEditorStore((s) => s.setCatalogPanelState);
   const pendingOpeningType = useEditorStore((s) => s.pendingOpeningType);
   const setPendingOpeningType = useEditorStore((s) => s.setPendingOpeningType);
@@ -213,171 +214,164 @@ export const CatalogPanel: React.FC = () => {
   const currentLines = selectedTenant?.lines || [];
   const selectedLine = currentLines.find(l => l.lineId === selectedLineId);
 
+  if (catalogPanelState === 'hidden') return null;
+  const isCollapsed = catalogPanelState === 'collapsed';
+
   return (
-    <aside className="w-full flex flex-col border-r border-zinc-200 bg-white shrink-0 z-30 shadow-sm overflow-hidden h-full">
-      {/* ── Header ── */}
-      <div className="p-4 bg-white border-b border-zinc-100 shrink-0">
-        <div className="flex items-center justify-between mb-3">
-          <h2 className="text-[14px] font-black text-zinc-900 uppercase tracking-tighter leading-none">CATÁLOGO</h2>
-          <div className="flex items-center gap-1.5">
-            <button
-              onClick={() => setCatalogPanelState('collapsed')}
-              className="w-7 h-7 flex items-center justify-center rounded hover:bg-zinc-100 text-zinc-400 hover:text-zinc-900 transition-all text-xl font-light"
-            >
-              ‹
-            </button>
-            <button
-              onClick={() => setCatalogPanelState('hidden')}
-              className="w-7 h-7 flex items-center justify-center rounded hover:bg-red-50 text-zinc-400 hover:text-red-500 transition-all text-xs font-bold"
-            >
-              ✕
+    <aside 
+      className={`absolute top-4 left-[72px] z-40 flex flex-col bg-white/95 backdrop-blur-xl rounded-2xl shadow-2xl ring-1 ring-zinc-900/5 transition-all duration-300 ease-in-out overflow-hidden
+        ${isCollapsed ? 'w-12 h-12 justify-center items-center cursor-pointer hover:bg-zinc-50' : 'w-72 bottom-4'}`}
+    >
+      {isCollapsed ? (
+        <div onClick={() => setCatalogPanelState('open')} className="w-full h-full flex items-center justify-center text-zinc-600 hover:text-blue-600" title="Expandir Catálogo">
+          <span className="text-xl">📦</span>
+        </div>
+      ) : (
+        <>
+          <div className="flex items-center justify-between px-4 py-3 border-b border-zinc-200/50 bg-white/50 shrink-0">
+            <span className="text-[10px] font-black uppercase tracking-widest text-zinc-800">Catálogo</span>
+            <button onClick={() => setCatalogPanelState('collapsed')} className="w-6 h-6 flex items-center justify-center rounded hover:bg-zinc-100 text-zinc-400 hover:text-zinc-800 transition-colors" title="Contraer">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" className="w-4 h-4"><path d="M18 6L6 18M6 6l12 12"/></svg>
             </button>
           </div>
-        </div>
 
-        {/* ── Global Search Independent from Tree ── */}
-        <div className="relative group">
-          <input
-            type="text"
-            value={searchInput}
-            onChange={(e) => {
-              setSearchInput(e.target.value);
-              setSearchQuery(e.target.value);
-            }}
-            placeholder="Buscar producto, SKU, modelo..."
-            className="w-full bg-zinc-50 border border-zinc-200 rounded-lg py-2.5 px-3 pl-9 text-[10px] font-bold text-zinc-800 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 placeholder:text-zinc-400 tracking-wider transition-all"
-          />
-          <svg className="absolute left-3 top-2.5 w-4 h-4 text-zinc-400 group-focus-within:text-blue-500 transition-colors" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
-          </svg>
-          
-          {searchInput && (
-            <button onClick={() => { setSearchInput(''); setSearchQuery(''); }} className="absolute right-3 top-2.5 w-4 h-4 text-zinc-400 hover:text-zinc-700 bg-white rounded-full flex items-center justify-center shadow-sm border border-zinc-200">
-               <span className="text-[8px] font-black">✕</span>
-            </button>
-          )}
-        </div>
-      </div>
-
-      {/* ── Main Filter Types (Tabs) ── */}
-      {!searchQuery && (
-        <div className="flex border-b border-zinc-200 shrink-0">
-          <button
-            onClick={() => setActiveTab('mobiliario')}
-            className={`flex-1 py-3 text-[9px] font-black uppercase tracking-widest border-b-2 transition-all ${
-              activeTab === 'mobiliario' ? 'border-blue-600 text-blue-600 bg-blue-50/30' : 'border-transparent text-zinc-500 hover:text-zinc-800 hover:bg-zinc-50'
-            }`}
-          >
-            Mobiliario y Accesorios
-          </button>
-          <button
-            onClick={() => setActiveTab('estructura')}
-            className={`flex-1 py-3 text-[9px] font-black uppercase tracking-widest border-b-2 transition-all ${
-              activeTab === 'estructura' ? 'border-blue-600 text-blue-600 bg-blue-50/30' : 'border-transparent text-zinc-500 hover:text-zinc-800 hover:bg-zinc-50'
-            }`}
-          >
-            Estructuras
-          </button>
-        </div>
-      )}
-
-      <div className="flex-1 overflow-hidden flex flex-col relative bg-zinc-50/30">
-        
-        {/* Loader Overlay */}
-        {isLoading && (
-          <div className="absolute inset-0 bg-white/70 backdrop-blur-sm z-40 flex flex-col items-center justify-center gap-3">
-            <div className="w-6 h-6 border-3 border-blue-600 border-t-transparent rounded-full animate-spin" />
+          <div className="flex border-b border-zinc-200/50 bg-zinc-50/50 p-1 shrink-0 overflow-x-auto custom-scrollbar">
+            <button onClick={() => setActiveTab('mobiliario')} className={`flex-1 py-1.5 px-2 text-[9px] font-black uppercase tracking-widest transition-all rounded-md whitespace-nowrap ${activeTab === 'mobiliario' ? 'text-zinc-900 bg-white border border-zinc-200 shadow-sm' : 'text-zinc-400 hover:text-zinc-600'}`}>Mobiliario</button>
+            <button onClick={() => setActiveTab('estructura')} className={`flex-1 py-1.5 px-2 text-[9px] font-black uppercase tracking-widest transition-all rounded-md whitespace-nowrap ${activeTab === 'estructura' ? 'text-zinc-900 bg-white border border-zinc-200 shadow-sm' : 'text-zinc-400 hover:text-zinc-600'}`}>Estructuras</button>
           </div>
-        )}
 
-        {/* ── View: SEARCH RESULTS ── */}
-        {searchQuery ? (
-          <div className="flex-1 overflow-y-auto p-4 scrollbar-thin">
-            <p className="text-[9px] font-black uppercase tracking-widest text-zinc-400 mb-3">
-              Resultados de Búsqueda ({filteredProducts.length})
-            </p>
-            {filteredProducts.length === 0 ? (
-              <div className="flex flex-col items-center justify-center py-10 opacity-50">
-                <span className="text-3xl mb-2">🔍</span>
-                <p className="text-[9px] font-black uppercase tracking-widest">Sin coincidencias</p>
-              </div>
-            ) : (
-              <div className="grid grid-cols-2 gap-2 pb-4">
-                {filteredProducts.map((p) => (
-                  <ProductCard key={p.productId} product={p} tenantId={(p as any)._tenant?.id || selectedTenantId || ''} />
-                ))}
+          <div className="flex-1 overflow-y-auto custom-scrollbar bg-white p-4 space-y-6 relative">
+            
+            {/* Loader Overlay */}
+            {isLoading && (
+              <div className="absolute inset-0 bg-white/70 backdrop-blur-sm z-40 flex flex-col items-center justify-center gap-3">
+                <div className="w-6 h-6 border-3 border-blue-600 border-t-transparent rounded-full animate-spin" />
               </div>
             )}
-          </div>
-        ) : (
-          /* ── View: NORMAL NAVIGATION ── */
-          <>
-            {activeTab === 'estructura' && (
-              <div className="p-4 grid grid-cols-2 gap-3 shrink-0">
-                {([
-                  { type: 'door' as const,    icon: '🚪', label: 'Puerta',  desc: '0.90m' },
-                  { type: 'window' as const,  icon: '🪟', label: 'Ventana', desc: '1.20m' },
-                  { type: 'opening' as const, icon: '🔲', label: 'Hueco',   desc: 'Vano Abierto' },
-                ]).map(asset => (
-                  <button
-                    key={asset.type}
-                    onClick={() => setPendingOpeningType(asset.type)}
-                    className={`flex flex-col items-center p-4 rounded-xl border transition-all active:scale-95 ${
-                      pendingOpeningType === asset.type
-                        ? 'bg-blue-600 border-blue-600 text-white shadow-xl shadow-blue-500/20'
-                        : 'bg-white border-zinc-200 hover:border-blue-400 hover:shadow-lg'
-                    }`}
-                  >
-                    <span className={`text-3xl mb-1.5 ${pendingOpeningType === asset.type ? '' : 'grayscale opacity-80'}`}>{asset.icon}</span>
-                    <span className={`text-[9px] font-black uppercase tracking-wide ${pendingOpeningType === asset.type ? 'text-white' : 'text-zinc-800'}`}>{asset.label}</span>
-                    <span className={`text-[7px] font-mono mt-1 ${pendingOpeningType === asset.type ? 'text-blue-200' : 'text-zinc-400'}`}>{asset.desc}</span>
+
+            {/* Búsqueda Global */}
+            <section className="space-y-4">
+              <h3 className="text-[10px] font-black text-zinc-600 uppercase tracking-widest flex items-center gap-3">
+                BÚSQUEDA <div className="h-px flex-1 bg-zinc-200"></div>
+              </h3>
+              <div className="relative group">
+                <input
+                  type="text"
+                  value={searchInput}
+                  onChange={(e) => {
+                    setSearchInput(e.target.value);
+                    setSearchQuery(e.target.value);
+                  }}
+                  placeholder="Buscar producto, modelo..."
+                  className="w-full bg-zinc-50 border border-zinc-200 rounded-lg py-2.5 px-3 pl-9 text-[10px] font-bold text-zinc-800 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 placeholder:text-zinc-400 tracking-wider transition-all"
+                />
+                <svg className="absolute left-3 top-2.5 w-4 h-4 text-zinc-400 group-focus-within:text-blue-500 transition-colors" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+                </svg>
+                {searchInput && (
+                  <button onClick={() => { setSearchInput(''); setSearchQuery(''); }} className="absolute right-3 top-2.5 w-4 h-4 text-zinc-400 hover:text-zinc-700 bg-white rounded-full flex items-center justify-center shadow-sm border border-zinc-200">
+                    <span className="text-[8px] font-black">✕</span>
                   </button>
-                ))}
+                )}
               </div>
-            )}
+            </section>
 
-            {activeTab === 'mobiliario' && (
-              <div className="flex flex-col h-full">
-                {/* Brand & Collection Selector Header */}
-                <div className="p-4 border-b border-zinc-100 bg-white shadow-sm z-20 shrink-0">
-                  <p className="text-[8px] font-black uppercase tracking-widest text-zinc-400 mb-1.5">MARCA DEL FABRICANTE</p>
-                  <BrandDropdown tenants={tenants} selectedTenantId={selectedTenantId} onSelect={setSelectedTenant} />
-                  
-                  {selectedTenantId && currentLines.length > 0 && (
-                    <div className="mt-3">
-                      <div className="flex items-center gap-1.5 mb-1.5">
-                        <p className="text-[8px] font-black uppercase tracking-widest text-zinc-400">COLECCIÓN / LÍNEA</p>
+            {searchQuery ? (
+              <section className="space-y-4">
+                <h3 className="text-[10px] font-black text-zinc-600 uppercase tracking-widest flex items-center gap-3">
+                  RESULTADOS ({filteredProducts.length}) <div className="h-px flex-1 bg-zinc-200"></div>
+                </h3>
+                {filteredProducts.length === 0 ? (
+                  <div className="h-40 flex flex-col items-center justify-center border-2 border-dashed border-zinc-100 rounded-2xl opacity-40 bg-zinc-50/50 p-4 text-center">
+                    <span className="text-2xl mb-2">🔍</span>
+                    <p className="text-[9px] font-black uppercase tracking-widest">Sin coincidencias</p>
+                  </div>
+                ) : (
+                  <div className="grid grid-cols-2 gap-2 pb-4">
+                    {filteredProducts.map((p) => (
+                      <ProductCard key={p.productId} product={p} tenantId={(p as any)._tenant?.id || selectedTenantId || ''} />
+                    ))}
+                  </div>
+                )}
+              </section>
+            ) : (
+              <>
+                {activeTab === 'mobiliario' && (
+                  <>
+                    <section className="space-y-4">
+                      <h3 className="text-[10px] font-black text-zinc-600 uppercase tracking-widest flex items-center gap-3">
+                        FABRICANTE <div className="h-px flex-1 bg-zinc-200"></div>
+                      </h3>
+                      <BrandDropdown tenants={tenants} selectedTenantId={selectedTenantId} onSelect={setSelectedTenant} />
+                    </section>
+
+                    {selectedTenantId && currentLines.length > 0 && (
+                      <section className="space-y-4">
+                        <h3 className="text-[10px] font-black text-zinc-600 uppercase tracking-widest flex items-center gap-3">
+                          COLECCIÓN / LÍNEA <div className="h-px flex-1 bg-zinc-200"></div>
+                        </h3>
                         {selectedLine && (
-                          <div className="flex items-center text-[8px] font-black text-blue-600 uppercase tracking-widest bg-blue-50 px-1.5 py-0.5 rounded">
+                          <div className="flex items-center text-[8px] font-black text-blue-600 uppercase tracking-widest bg-blue-50 px-1.5 py-0.5 rounded w-max">
                             <span className="text-zinc-400 mr-1">/</span> {selectedLine.lineName}
                           </div>
                         )}
-                      </div>
-                      <LineSelector lines={currentLines} selectedLineId={selectedLineId} onSelect={setSelectedLine} />
-                    </div>
-                  )}
-                </div>
+                        <LineSelector lines={currentLines} selectedLineId={selectedLineId} onSelect={setSelectedLine} />
+                      </section>
+                    )}
 
-                {/* Product Grid */}
-                <div className="flex-1 overflow-y-auto p-4 scrollbar-thin scroll-smooth">
-                   {filteredProducts.length === 0 ? (
-                     <div className="flex flex-col items-center justify-center py-10 opacity-50">
-                       <span className="text-3xl mb-2">📁</span>
-                       <p className="text-[9px] font-black uppercase tracking-widest text-center">Carpeta Vacía<br/><span className="text-zinc-400 text-[8px]">No hay productos en esta selección</span></p>
-                     </div>
-                   ) : (
-                     <div className="grid grid-cols-2 gap-2 pb-6">
-                       {filteredProducts.map((p) => (
-                         <ProductCard key={p.productId} product={p} tenantId={selectedTenantId!} />
-                       ))}
-                     </div>
-                   )}
-                </div>
-              </div>
+                    <section className="space-y-4">
+                      <h3 className="text-[10px] font-black text-zinc-600 uppercase tracking-widest flex items-center gap-3">
+                        PRODUCTOS (MODELOS 3D) <div className="h-px flex-1 bg-zinc-200"></div>
+                      </h3>
+                      {filteredProducts.length === 0 ? (
+                        <div className="h-40 flex flex-col items-center justify-center border-2 border-dashed border-zinc-100 rounded-2xl opacity-40 bg-zinc-50/50 p-4 text-center">
+                          <span className="text-2xl mb-2">📁</span>
+                          <p className="text-[9px] font-black uppercase tracking-widest">Carpeta Vacía</p>
+                        </div>
+                      ) : (
+                        <div className="grid grid-cols-2 gap-2 pb-6">
+                          {filteredProducts.map((p) => (
+                            <ProductCard key={p.productId} product={p} tenantId={selectedTenantId!} />
+                          ))}
+                        </div>
+                      )}
+                    </section>
+                  </>
+                )}
+
+                {activeTab === 'estructura' && (
+                  <section className="space-y-4">
+                    <h3 className="text-[10px] font-black text-zinc-600 uppercase tracking-widest flex items-center gap-3">
+                      COMPONENTES ARQUITECTÓNICOS <div className="h-px flex-1 bg-zinc-200"></div>
+                    </h3>
+                    <div className="grid grid-cols-2 gap-3">
+                      {([
+                        { type: 'door' as const,    icon: '🚪', label: 'Puerta',  desc: '0.90m' },
+                        { type: 'window' as const,  icon: '🪟', label: 'Ventana', desc: '1.20m' },
+                        { type: 'opening' as const, icon: '🔲', label: 'Hueco',   desc: 'Vano Abierto' },
+                      ]).map(asset => (
+                        <button
+                          key={asset.type}
+                          onClick={() => setPendingOpeningType(asset.type)}
+                          className={`flex flex-col items-center p-4 rounded-xl border transition-all active:scale-95 ${
+                            pendingOpeningType === asset.type
+                              ? 'bg-blue-600 border-blue-600 text-white shadow-xl shadow-blue-500/20'
+                              : 'bg-zinc-50 border-zinc-200 hover:border-blue-400 hover:shadow-lg hover:bg-white'
+                          }`}
+                        >
+                          <span className={`text-3xl mb-1.5 ${pendingOpeningType === asset.type ? '' : 'grayscale opacity-80'}`}>{asset.icon}</span>
+                          <span className={`text-[9px] font-black uppercase tracking-wide ${pendingOpeningType === asset.type ? 'text-white' : 'text-zinc-800'}`}>{asset.label}</span>
+                          <span className={`text-[7px] font-mono mt-1 ${pendingOpeningType === asset.type ? 'text-blue-200' : 'text-zinc-400'}`}>{asset.desc}</span>
+                        </button>
+                      ))}
+                    </div>
+                  </section>
+                )}
+              </>
             )}
-          </>
-        )}
-      </div>
+          </div>
+        </>
+      )}
     </aside>
   );
 };

@@ -333,7 +333,9 @@ export const useEditorStore = create<EditorState>((set, get) => ({
   insertSceneItem: (productData, tenantId) => {
     get().saveToHistory();
     const floorAnchor = productData.metadata?.floorAnchor ?? 0.5;
-    const yPos = floorAnchor === 0 ? 0 : productData.height * floorAnchor;
+    
+    // Y always starts completely at floor zero
+    const yPos = 0;
 
     const item: SceneItem = {
       id: Math.random().toString(36).substr(2, 9),

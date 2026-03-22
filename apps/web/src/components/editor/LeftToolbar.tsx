@@ -32,20 +32,10 @@ const ToolButton: React.FC<{
   const setActiveTool = useEditorStore((state) => state.setActiveTool);
   const active = activeTool === tool.id;
 
-  const tooltipContent = (
-    <div className="flex flex-col items-start gap-1">
-      <div className="flex items-center gap-3 justify-between w-full">
-        <span className="font-bold">{tool.label}</span>
-        {tool.shortcut && <span className="text-[#a0a0a0] px-1 bg-white/10 rounded">{tool.shortcut}</span>}
-      </div>
-      <span className="text-[10px] text-[#a0a0a0] font-normal leading-snug w-[140px] whitespace-normal">
-        {tool.description}
-      </span>
-    </div>
-  );
+  const tooltipContent = tool.shortcut ? `${tool.label} (${tool.shortcut})` : tool.label;
 
   return (
-    <Tooltip content={tooltipContent as unknown as string} position="right">
+    <Tooltip content={tooltipContent} position="right">
       <button 
         onClick={() => setActiveTool(tool.id)}
         className={`w-10 h-10 flex items-center justify-center rounded-lg transition-all group relative

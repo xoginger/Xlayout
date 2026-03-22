@@ -16,12 +16,12 @@ const prisma = new PrismaClient();
 
 // Public GLB URLs — Khronos/Three.js samples (reliable, no auth required)
 const PUBLIC_GLBS = {
-  box:      'https://raw.githubusercontent.com/mrdoob/three.js/master/examples/models/gltf/Box.glb',
+  box:      '', // Nullified to trigger local procedural Box fallback
   chair:    'https://raw.githubusercontent.com/KhronosGroup/glTF-Sample-Models/master/2.0/CesiumMilkTruck/glTF-Binary/CesiumMilkTruck.glb',
   table:    'https://raw.githubusercontent.com/mrdoob/three.js/master/examples/models/gltf/DamagedHelmet/glTF-Binary/DamagedHelmet.glb',
-  locker:   'https://raw.githubusercontent.com/mrdoob/three.js/master/examples/models/gltf/Box.glb',
-  archiver: 'https://raw.githubusercontent.com/mrdoob/three.js/master/examples/models/gltf/Box.glb',
-  rack:     'https://raw.githubusercontent.com/mrdoob/three.js/master/examples/models/gltf/Box.glb',
+  locker:   '',
+  archiver: '',
+  rack:     '',
 };
 
 async function upsertTenant(slug: string, name: string) {

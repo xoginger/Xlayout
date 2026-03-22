@@ -151,6 +151,38 @@ const SnapPointIndicator: React.FC<{ position: [number, number, number]; active:
   </mesh>
 );
 
+class ModelErrorBoundary extends React.Component<{ fallback: React.ReactNode, children: React.ReactNode }, { hasError: boolean }> {
+  state = { hasError: false };
+  static getDerivedStateFromError() { return { hasError: true }; }
+  componentDidCatch(error: any) { 
+    // Silently caught: prevents Context Lost and avoids polluting the console with 404s
+  }
+  render() { return this.state.hasError ? this.props.fallback : this.props.children; }
+}
+
+const ModelFallback: React.FC<{ item: SceneItem }> = ({ item }) => {
+  const w = item.width || 1;
+  const h = item.height || 1;
+  const d = item.depth || 1;
+
+  return (
+    <group position={[0, h / 2, 0]}>
+      <mesh castShadow receiveShadow>
+        <boxGeometry args={[w, h, d]} />
+        <meshStandardMaterial 
+          color="#e2e8f0" 
+          roughness={0.8}
+          metalness={0.1} 
+        />
+      </mesh>
+      <mesh>
+        <boxGeometry args={[w, h, d]} />
+        <meshBasicMaterial color="#94a3b8" wireframe transparent opacity={0.15} />
+      </mesh>
+    </group>
+  );
+};
+
 const GltfModel: React.FC<{ url: string; item: SceneItem }> = ({ url, item }) => {
   const { scene } = useGLTF(url);
   
@@ -165,6 +197,14 @@ const GltfModel: React.FC<{ url: string; item: SceneItem }> = ({ url, item }) =>
 
     // Apply scale to the scene itself
     clone.scale.set(item.scale[0], item.scale[1], item.scale[2]);
+
+    // Professional Floor Alignment:
+    // We compute the strict geometric BoundingBox of the clone, identifying its lowest physical point
+    // Then we pull the origin DOWN so that its physical base touches Y=0 locally inside the SceneItemObject.
+    const box = new THREE.Box3().setFromObject(clone);
+    if (box.min.y !== Infinity && box.max.y !== -Infinity) {
+      clone.position.y = -box.min.y;
+    }
 
     return clone;
   }, [scene, item.metadata?.forwardAxis, item.scale]);
@@ -193,10 +233,8 @@ const SceneItemObject: React.FC<{ item: SceneItem }> = ({ item }) => {
     const rot = group.rotation;
     const scale = group.scale;
 
-    // Professional Floor Alignment
-    const currentHeight = item.height * scale.y;
-    const minY = currentHeight * (item.floorAnchor ?? 0.5);
-    let safeY = Math.max(pos.y, minY);
+    // Soft Floor Clamp: prevent sending items to the void, but allow true 0-placement without bouncing up!
+    let safeY = pos.y < 0 ? 0 : pos.y;
 
     let finalX = pos.x;
     let finalZ = pos.z;
@@ -229,10 +267,9 @@ const SceneItemObject: React.FC<{ item: SceneItem }> = ({ item }) => {
     });
   };
 
-  const isInTransformMode = isSelected && ['move', 'rotate', 'scale'].includes(activeTool);
-  // Skip scale gizmo if item is not resizable
-  const isInTransformModeFinal = isInTransformMode && !(activeTool === 'scale' && item.resizable === false);
-  const mode = activeTool === 'move' ? 'translate' : activeTool === 'rotate' ? 'rotate' : 'scale';
+  // Professional Auto-Gizmo: Always show if selected. Default to translate mode unless explicitly rotating/scaling.
+  const mode = activeTool === 'rotate' ? 'rotate' : activeTool === 'scale' ? 'scale' : 'translate';
+  const showGizmo = isSelected && !(mode === 'scale' && item.resizable === false);
 
   const color = isSelected ? '#3b82f6' : '#64748b';
 
@@ -270,13 +307,15 @@ const SceneItemObject: React.FC<{ item: SceneItem }> = ({ item }) => {
         rotation={item.rotation}
         onClick={(e) => { e.stopPropagation(); select(item.id, 'item'); }}
       >
-        <Suspense fallback={placeholder}>
-          {item.model3dUrl ? (
-            <GltfModel url={item.model3dUrl} item={item} />
-          ) : (
-            placeholder
-          )}
-        </Suspense>
+        <ModelErrorBoundary fallback={<ModelFallback item={item} />}>
+          <Suspense fallback={<ModelFallback item={item} />}>
+            {item.model3dUrl ? (
+              <GltfModel url={item.model3dUrl} item={item} />
+            ) : (
+              <ModelFallback item={item} />
+            )}
+          </Suspense>
+        </ModelErrorBoundary>
 
         {/* Visualizers for Snap Points */}
         {isSelected && item.snapPoints?.map(sp => (
@@ -288,7 +327,7 @@ const SceneItemObject: React.FC<{ item: SceneItem }> = ({ item }) => {
         ))}
 
         {viewMode === '2D' && item.label && (
-          <Html position={[0, item.height * (1 - (item.floorAnchor ?? 0.5)) + 0.12, 0]} center>
+          <Html position={[0, item.height + 0.12, 0]} center>
             <div className={`text-[7px] font-black uppercase tracking-tight px-1.5 py-0.5 rounded shadow whitespace-nowrap ${
               isSelected ? 'bg-blue-600 text-white' : 'bg-zinc-800/80 text-zinc-100'
             }`}>
@@ -312,7 +351,7 @@ const SceneItemObject: React.FC<{ item: SceneItem }> = ({ item }) => {
         )}
       </group>
 
-      {isInTransformModeFinal && (
+      {showGizmo && (
         <TransformControls
           ref={transformRef}
           object={groupRef}
@@ -412,40 +451,20 @@ const HUD: React.FC<{
   vcbValue: string;
   activeInference: SnapInference;
 }> = ({ point, start, tool, vcbValue, activeInference }) => {
-  if (tool === 'select') return null;
+  // Only show VCB if explicitly measuring, drawing, or typing
+  const isActive = start !== null || vcbValue !== '' || ['wall', 'line', 'rectangle', 'dimension', 'circle', 'scale-blueprint'].includes(tool);
+  if (!isActive) return null;
+
   const distance = start ? calculateDistance(start, point) : 0;
   
   return (
     <>
-      {/* 1. Floating Cursor Info */}
-      <Html position={point} center style={{ pointerEvents: 'none' }}>
-        <div className="flex flex-col items-center gap-1 -translate-y-12 transition-all duration-75">
-          <div className="bg-zinc-950/80 backdrop-blur-md border border-zinc-700/50 px-2 py-1 rounded shadow-2xl flex items-center gap-2 ring-1 ring-white/10">
-            <span className="text-[9px] font-black text-blue-400 tracking-widest uppercase">{tool}</span>
-            {start && (
-              <>
-                <div className="w-px h-3 bg-zinc-700/50"></div>
-                <span className="text-[11px] font-mono text-white font-bold">{distance.toFixed(3)}m</span>
-              </>
-            )}
-            {activeInference.type !== 'none' && (
-              <div 
-                className="ml-2 px-1.5 py-0.5 rounded text-[9px] font-black uppercase tracking-tighter"
-                style={{ backgroundColor: activeInference.color, color: '#fff' }}
-              >
-                {activeInference.label || activeInference.type}
-              </div>
-            )}
-          </div>
-        </div>
-      </Html>
-
       {/* 2. Fixed VCB (SketchUp Style) */}
       <Html fullscreen style={{ pointerEvents: 'none' }}>
         <div className="absolute bottom-4 right-4 flex flex-col items-end gap-2 p-2">
           <div className="bg-white border border-zinc-200 shadow-2xl rounded-lg overflow-hidden flex divide-x divide-zinc-100 min-w-[120px] ring-1 ring-black/5">
             <div className="px-3 py-2 bg-zinc-50 flex items-center gap-2">
-              <span className="text-[10px] font-black text-zinc-400 uppercase tracking-tighter">Medidas</span>
+              <span className="text-[10px] font-black text-zinc-400 uppercase tracking-tighter">Medida</span>
             </div>
             <div className="px-4 py-2 flex items-center bg-white min-w-[80px]">
               <span className="text-sm font-mono font-bold text-zinc-800">
@@ -453,15 +472,6 @@ const HUD: React.FC<{
               </span>
               <span className="ml-1 text-[10px] text-zinc-400 font-bold">m</span>
               {vcbValue && <div className="ml-2 w-1.5 h-4 bg-blue-500 animate-pulse rounded-full" />}
-            </div>
-          </div>
-          
-          <div className="flex gap-2">
-            <div className="bg-zinc-900/90 text-[8px] font-black text-zinc-400 px-2 py-0.5 rounded border border-zinc-800 uppercase tracking-tighter">
-              X: {point[0].toFixed(3)}
-            </div>
-            <div className="bg-zinc-900/90 text-[8px] font-black text-zinc-400 px-2 py-0.5 rounded border border-zinc-800 uppercase tracking-tighter">
-              Z: {point[2].toFixed(3)}
             </div>
           </div>
         </div>
@@ -555,7 +565,7 @@ const VolumeObject: React.FC<{ volume: VolumeEntity }> = ({ volume }) => {
         </mesh>
       </group>
 
-      {isSelected && activeTool === 'move' && (
+      {isSelected && (
         <TransformControls
           ref={transformRef}
           object={volumeGroupRef}
@@ -1133,9 +1143,21 @@ export const Viewport: React.FC = () => {
 
   const layerVisible = (id: string) => layers.find(l => l.id === id)?.visible !== false;
 
+  const getCursorClass = (tool: string) => {
+    switch (tool) {
+      case 'move': case 'pan': return 'cursor-grab active:cursor-grabbing';
+      case 'rotate': return 'cursor-alias';
+      case 'scale': return 'cursor-nwse-resize';
+      case 'select': return 'cursor-default';
+      case 'zoom': return 'cursor-zoom-in';
+      case 'eraser': case 'delete': return 'cursor-not-allowed';
+      default: return 'cursor-crosshair';
+    }
+  };
+
   return (
     <main 
-      className={`flex-1 relative bg-zinc-50 overflow-hidden outline-none ${activeTool === 'select' ? 'cursor-default' : 'cursor-crosshair'}`}
+      className={`flex-1 relative bg-zinc-50 overflow-hidden outline-none ${getCursorClass(activeTool)}`}
       tabIndex={0}
       onKeyDown={(e) => {
         if (e.key === 'Escape') setDrawingStart(null);
@@ -1298,14 +1320,10 @@ export const Viewport: React.FC = () => {
               position={[0, -0.01, 0]}
               rotation={[-Math.PI / 2, 0, 0]}
               onPointerDown={(e) => {
-                // When TransformControls is active for a selected item, let the gizmo
-                // exclusively own pointer events — do NOT forward to drawing tools.
-                if (['move', 'rotate', 'scale'].includes(activeTool) && selectedId) return;
+                // If gizmo is active and user clicks on empty canvas, handle default tool action
                 handlePointerDown(e);
               }}
               onPointerMove={(e) => {
-                // Same guard for move: skip canvas drag logic while gizmo is in control.
-                if (['move', 'rotate', 'scale'].includes(activeTool) && selectedId) return;
                 handlePointerMove(e);
               }}
             >
