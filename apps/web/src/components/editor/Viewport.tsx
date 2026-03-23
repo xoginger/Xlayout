@@ -132,13 +132,13 @@ const InferenceIndicator: React.FC<{ inference: SnapInference }> = ({ inference 
 
   return (
     <group position={inference.point}>
-      {/* Small square/circle for the point */}
+      {/* Pequeño cuadrado/círculo para el punto */}
       <mesh renderOrder={1000}>
         {inference.type === 'midpoint' ? <boxGeometry args={[0.06, 0.06, 0.06]} /> : <sphereGeometry args={[0.04, 8, 8]} />}
         <meshBasicMaterial color={inference.color} depthTest={false} transparent opacity={0.8} />
       </mesh>
       
-      {/* Label */}
+      {/* Etiqueta */}
       {inference.label && (
         <Html distanceFactor={10} position={[0, 0.1, 0]}>
           <div className="bg-zinc-900 text-white text-[8px] px-1 py-0.5 rounded border border-zinc-700 whitespace-nowrap shadow-xl pointer-events-none uppercase font-black tracking-tighter">
@@ -161,7 +161,7 @@ class ModelErrorBoundary extends React.Component<{ fallback: React.ReactNode, ch
   state = { hasError: false };
   static getDerivedStateFromError() { return { hasError: true }; }
   componentDidCatch(error: any) { 
-    // Silently caught: prevents Context Lost and avoids polluting the console with 404s
+    // Capturado silenciosamente: previene la pérdida de contexto y evita polucionar la consola con 404s
   }
   render() { return this.state.hasError ? this.props.fallback : this.props.children; }
 }
@@ -195,18 +195,18 @@ const GltfModel: React.FC<{ url: string; item: SceneItem }> = ({ url, item }) =>
   const clonedScene = useMemo(() => {
     const clone = scene.clone();
     
-    // Apply internal transformations based on model metadata
+    // Aplicar transformaciones internas basadas en metadatos del modelo
     const forwardAxis = item.metadata?.forwardAxis || 'Z';
     if (forwardAxis === 'X') clone.rotation.y = -Math.PI / 2;
     if (forwardAxis === '-X') clone.rotation.y = Math.PI / 2;
     if (forwardAxis === '-Z') clone.rotation.y = Math.PI;
 
-    // Apply scale to the scene itself
+    // Aplicar escala a la escena misma
     clone.scale.set(item.scale[0], item.scale[1], item.scale[2]);
 
-    // Professional Floor Alignment:
-    // We compute the strict geometric BoundingBox of the clone, identifying its lowest physical point
-    // Then we pull the origin DOWN so that its physical base touches Y=0 locally inside the SceneItemObject.
+    // Alineación Profesional al Suelo:
+    // Computamos el BoundingBox geométrico estricto del clon para identificar su punto físico más bajo.
+    // Luego bajamos el origen para que su base física toque Y=0 localmente dentro del SceneItemObject.
     const box = new THREE.Box3().setFromObject(clone);
     if (box.min.y !== Infinity && box.max.y !== -Infinity) {
       clone.position.y = -box.min.y;
@@ -223,12 +223,12 @@ const SceneItemObject: React.FC<{ item: SceneItem }> = ({ item }) => {
   const isSelected = selectedIds.includes(item.id);
   const [activeSnap, setActiveSnap] = useState<SnapResult | null>(null);
 
-  // groupRef is the actual THREE.Group for this item.
-  // TransformControls uses object={groupRef} to attach directly to it,
-  // so the gizmo appears at the group's real world position (item.position).
+  // groupRef es el THREE.Group real para este objeto.
+  // TransformControls usa object={groupRef} para acoplarse directamente a él,
+  // así el gizmo aparece en la posición real del mundo (item.position).
   const groupRef = useRef<THREE.Group>(null!);
   const transformRef = useRef<any>(null);
-  // isDragging ref: no store writes during drag — core crash-loop fix.
+  // ref isDragging: sin escrituras al store durante el arrastre — corrección de bucle de crash.
   const isDragging = useRef(false);
 
   const commitTransform = () => {
@@ -239,13 +239,13 @@ const SceneItemObject: React.FC<{ item: SceneItem }> = ({ item }) => {
     const rot = group.rotation;
     const scale = group.scale;
 
-    // Soft Floor Clamp: prevent sending items to the void, but allow true 0-placement without bouncing up!
+    // Ajuste de Suelo Suave: evita enviar objetos al vacío, pero permite colocación en 0 sin rebotar.
     let safeY = pos.y < 0 ? 0 : pos.y;
 
     let finalX = pos.x;
     let finalZ = pos.z;
 
-    // 1. Modular Snap (Priority) — evaluated only at drop time
+    // 1. Ajuste Modular (Prioridad) — evaluado solo al soltar
     const modularSnap = findModularSnap(item, items, 0.4);
     if (modularSnap) {
       finalX = modularSnap.snappedPosition[0];
@@ -254,18 +254,18 @@ const SceneItemObject: React.FC<{ item: SceneItem }> = ({ item }) => {
       setActiveSnap(modularSnap);
     } else {
       setActiveSnap(null);
-      // 2. Grid Snap (Fallback) — only when Three.js built-in snap is off
+      // 2. Ajuste de Rejilla (Fallback) — solo cuando el ajuste nativo de Three.js está desactivado
       if (snapEnabled && activeTool === 'move' && !(transformRef.current?.translationSnap)) {
         finalX = Math.round(pos.x / gridSize) * gridSize;
         finalZ = Math.round(pos.z / gridSize) * gridSize;
       }
     }
 
-    // Snap correction: push the final snapped position back to the Three.js object
-    // so the gizmo is aligned after commit (before React reconciliation)
+    // Corrección de ajuste: empujar la posición final ajustada de vuelta al objeto de Three.js
+    // para que el gizmo esté alineado tras el commit (antes de la reconciliación de React)
     group.position.set(finalX, safeY, finalZ);
 
-    // Single store write — happens only on drag-end
+    // Escritura única al store — ocurre solo al terminar el arrastre
     updateItem(item.id, {
       position: [finalX, safeY, finalZ],
       rotation: [rot.x, rot.y, rot.z],
@@ -273,7 +273,7 @@ const SceneItemObject: React.FC<{ item: SceneItem }> = ({ item }) => {
     });
   };
 
-  // Professional Auto-Gizmo: Always show if selected. Default to translate mode unless explicitly rotating/scaling.
+  // Auto-Gizmo Profesional: Mostrar siempre si está seleccionado. Por defecto modo traslación salvo rotación/escala explícita.
   const mode = activeTool === 'rotate' ? 'rotate' : activeTool === 'scale' ? 'scale' : 'translate';
   const showGizmo = isSelected && selectedIds.length === 1;
 
@@ -301,11 +301,11 @@ const SceneItemObject: React.FC<{ item: SceneItem }> = ({ item }) => {
   return (
     <>
       {/*
-        The group is ALWAYS rendered in the scene at item.position.
-        When TransformControls is active it uses object={groupRef} to attach
-        directly to this group — gizmo appears at the group's real world position.
-        We do NOT wrap this group inside TransformControls children to avoid the
-        drei inner-wrapper-at-origin bug.
+        El grupo SIEMPRE se renderiza en la escena en item.position.
+        Cuando TransformControls está activo usa object={groupRef} para acoplarse
+        directamente a este grupo — el gizmo aparece en su posición real.
+        No envolvemos este grupo dentro de los hijos de TransformControls para evitar el
+        error de drie del wrapper interno en el origen.
       */}
       <group
         ref={groupRef}
@@ -323,7 +323,7 @@ const SceneItemObject: React.FC<{ item: SceneItem }> = ({ item }) => {
           </Suspense>
         </ModelErrorBoundary>
 
-        {/* Visualizers for Snap Points */}
+        {/* Visualizadores para los Snap Points */}
         {isSelected && item.snapPoints?.map(sp => (
           <SnapPointIndicator
             key={sp.id}
@@ -362,7 +362,7 @@ const SceneItemObject: React.FC<{ item: SceneItem }> = ({ item }) => {
           ref={transformRef}
           object={groupRef}
           mode={mode as any}
-          // No onChange — no store writes during drag. Core crash-loop fix preserved.
+          // Sin onChange — sin escrituras al store durante el arrastre. Corrección de bucle de crash preservada.
           onMouseDown={() => {
             isDragging.current = true;
             useEditorStore.getState().saveToHistory();
@@ -457,7 +457,7 @@ const HUD: React.FC<{
   vcbValue: string;
   activeInference: SnapInference;
 }> = ({ point, start, tool, vcbValue, activeInference }) => {
-  // Only show VCB if explicitly measuring, drawing, or typing
+  // Solo mostrar VCB si se está midiendo, dibujando o escribiendo explícitamente
   const isActive = start !== null || vcbValue !== '' || ['wall', 'line', 'rectangle', 'dimension', 'circle', 'scale-blueprint'].includes(tool);
   if (!isActive) return null;
 
@@ -465,7 +465,7 @@ const HUD: React.FC<{
   
   return (
     <>
-      {/* 2. Fixed VCB (SketchUp Style) */}
+      {/* 2. VCB Fijo (Estilo SketchUp) */}
       <Html fullscreen style={{ pointerEvents: 'none' }}>
         <div className="absolute bottom-4 right-4 flex flex-col items-end gap-2 p-2">
           <div className="bg-white border border-zinc-200 shadow-2xl rounded-lg overflow-hidden flex divide-x divide-zinc-100 min-w-[120px] ring-1 ring-black/5">
@@ -666,7 +666,7 @@ const ExportManager: React.FC = () => {
 };
 
 // ─── Grid Helper for 3D mode ─────────────────────────────────────────────────
-// Always visible in 3D view regardless of showGrid toggle.
+// Siempre visible en la vista 3D independientemente del estado de la rejilla.
 const Grid3DHelper: React.FC<{ gridSize: number }> = ({ gridSize }) => {
   const size = 50;
   const divisions = Math.round(size / gridSize);
@@ -692,7 +692,7 @@ const MultiSelectionGizmo: React.FC = () => {
   const [center, setCenter] = useState<[number, number, number]>([0, 0, 0]);
   const isDragging = useRef(false);
 
-  // Calculate center of mass / bounding box center
+  // Calcular centro de masa / centro de caja delimitadora
   useEffect(() => {
     if (selectedIds.length <= 1) return;
 
@@ -823,7 +823,7 @@ export const Viewport: React.FC = () => {
   const [highlightedWallId, setHighlightedWallId] = useState<string | null>(null);
   const [extrudingFaceId, setExtrudingFaceId] = useState<string | null>(null);
   const [extrusionHeight, setExtrusionHeight] = useState<number>(0);
-  // For extrude: track screen Y at drag start to compute vertical delta
+  // Para extrusión: rastrear Y de pantalla al empezar arrastre para calcular delta vertical
   const extrudeStartScreenY = useRef<number | null>(null);
   const extrudeBaseHeight = useRef<number>(0.1);
   const [vcbInput, setVcbInput] = useState('');
@@ -833,7 +833,7 @@ export const Viewport: React.FC = () => {
   const [isCopyMode, setIsCopyMode] = useState(false);
   
   const allSegments = useMemo(() => {
-    // Collect all geometrical segments for snapping
+    // Recolectar todos los segmentos geométricos para el ajuste (snap)
     const segs: { start: [number, number, number], end: [number, number, number] }[] = [];
     
     walls.forEach(w => segs.push({ start: w.start, end: w.end }));
@@ -846,7 +846,7 @@ export const Viewport: React.FC = () => {
       segs.push({ start: p1, end: p2 }, { start: p2, end: p3 }, { start: p3, end: p4 }, { start: p4, end: p1 });
     });
 
-    // Also include snap points from scene items
+    // También incluir puntos de ajuste de los objetos de la escena
     items.forEach(item => {
       if (item.snapPoints) {
         item.snapPoints.forEach(sp => {
@@ -855,7 +855,7 @@ export const Viewport: React.FC = () => {
             .applyEuler(new THREE.Euler(...item.rotation))
             .add(new THREE.Vector3(...item.position))
             .toArray() as [number, number, number];
-          // We treat snap points as zero-length segments for the endpoint snapping
+          // Tratamos los puntos de ajuste como segmentos de longitud cero para el ajuste de extremos
           segs.push({ start: worldPos, end: worldPos });
         });
       }
@@ -867,11 +867,11 @@ export const Viewport: React.FC = () => {
   const confirmVCB = (value: number) => {
     if (!drawingStart) return;
     
-    // Direction is either from mouse to start, or along the active inference axis
+    // La dirección es desde el ratón al inicio, o a lo largo del eje de inferencia activo
     const currentPoint = activeInference.type !== 'none' ? activeInference.point : mousePos;
     const dir = new THREE.Vector3().fromArray(currentPoint).sub(new THREE.Vector3().fromArray(drawingStart)).normalize();
     
-    // If no clear direction yet, and we have an axis lock, use that axis
+    // Si no hay dirección clara aún, y hay un bloqueo de eje, usar ese eje
     if (dir.lengthSq() < 0.0001 && lockedAxis) {
       if (lockedAxis === 'x') dir.set(1, 0, 0);
       else if (lockedAxis === 'y') dir.set(0, 1, 0);
@@ -897,7 +897,7 @@ export const Viewport: React.FC = () => {
         }
       }
 
-      // Input Numerical
+      // Input Numérico
       if (/^[0-9.]$/.test(e.key)) {
         setVcbInput(prev => prev + e.key);
         return;
@@ -947,7 +947,7 @@ export const Viewport: React.FC = () => {
     // 🚧 CALIBRATOR OVERRIDE: Strict absolute precision on Blueprint
     // -----------------------------------------------------------------
     if (activeTool === 'scale-blueprint') {
-      e.stopPropagation(); // Ignore Floor and under-objects
+      e.stopPropagation(); // Ignorar suelo y objetos inferiores
       const exactPoint = [e.point.x, e.point.y, e.point.z] as [number, number, number];
       const localVec = e.object.worldToLocal(e.point.clone());
       const localPoint = [localVec.x, localVec.y, localVec.z] as [number, number, number];
@@ -955,12 +955,12 @@ export const Viewport: React.FC = () => {
       const store = useEditorStore.getState();
       const { calibrationState, setCalibrationState } = store;
 
-      // Click 1
+      // Clic 1
       if (!drawingStart || calibrationState.step === 'idle' || calibrationState.step === 'awaiting-first-point') {
-        setDrawingStart(exactPoint); // World pos para dibujar Linea temporal
+        setDrawingStart(exactPoint); // World pos para dibujar Línea temporal
         setCalibrationState({ step: 'awaiting-second-point', pointA: localPoint });
       } 
-      // Click 2
+      // Clic 2
       else if (calibrationState.step === 'awaiting-second-point') {
         const measuredDist = calculateDistance(drawingStart, exactPoint);
         setCalibrationState({ 
@@ -971,13 +971,13 @@ export const Viewport: React.FC = () => {
         setMousePos(exactPoint); // Congelar línea
       }
       
-      return; // End early. Mathematical purity achieved.
+      return; // Finalizar pronto. Pureza matemática alcanzada.
     }
     // -----------------------------------------------------------------
 
     let point: [number, number, number] = e.forcedPoint || activeInference.point;
     
-    // Grid snap fallback if no geometric inference
+    // Fallback de ajuste a rejilla si no hay inferencia geométrica
     if (snapEnabled && activeInference.type === 'none') {
       point = snapPointToGrid(point, gridSize);
     }
@@ -1005,7 +1005,7 @@ export const Viewport: React.FC = () => {
           };
           addLine(newLine);
           
-          // SketchUp-style: Detect closed loops
+          // Estilo SketchUp: Detectar bucles cerrados
           const allLineSegments = [...lines, newLine].map(l => ({ start: l.start, end: l.end }));
           const loops = detectClosedLoops(allLineSegments);
           
@@ -1014,8 +1014,8 @@ export const Viewport: React.FC = () => {
             addFace({ id: faceId, points: loopPoints, type: 'face' });
           });
 
-          setDrawingStart(point); // Continuous chain
-          setLockedAxis(null); // Release lock after click
+          setDrawingStart(point); // Cadena continua
+          setLockedAxis(null); // Liberar bloqueo tras clic
         }
       }
     } else if (activeTool === 'rectangle') {
@@ -1085,18 +1085,18 @@ export const Viewport: React.FC = () => {
 
   const handlePointerMove = (e: any) => {
     // -----------------------------------------------------------------
-    // 🚧 CALIBRATOR OVERRIDE: Floating mouse tracking without Snap
+    // 🚧 ANULACIÓN DEL CALIBRADOR: Seguimiento de ratón flotante sin Snap
     // -----------------------------------------------------------------
     if (activeTool === 'scale-blueprint') {
       e.stopPropagation();
       
-      // Stop rendering moving lines if we are already waiting for distance HUD
+      // Detener el renderizado de líneas variables si ya estamos esperando al HUD de distancia
       if (useEditorStore.getState().calibrationState.step === 'awaiting-real-distance') {
         return; 
       }
       
       const exactPoint = [e.point.x, e.point.y, e.point.z] as [number, number, number];
-      // Update state manually to skip R3F's inference snap logic
+      // Actualizar el estado manualmente para saltar la lógica de snap de R3F
       setActiveInference({ point: exactPoint, type: 'none', color: '#ec4899' }); // Magenta
       setMousePos(exactPoint);
       return;
@@ -1106,12 +1106,12 @@ export const Viewport: React.FC = () => {
     const rawPoint = [e.point.x, 0, e.point.z] as [number, number, number];
     
     if (extrudingFaceId) {
-      // Use screen-space Y delta to compute extrusion height.
-      // e.nativeEvent.clientY gives us pixel coordinates.
+      // Usar delta Y en espacio de pantalla para calcular altura de extrusión.
+      // e.nativeEvent.clientY da coordenadas en píxeles.
       const clientY = e.nativeEvent?.clientY ?? e.clientY;
       if (extrudeStartScreenY.current !== null && clientY !== undefined) {
-        // Moving mouse UP (smaller clientY) = increase height
-        // Scale: 1px ≈ 0.02m (adjustable sensitivity)
+        // Mover ratón ARRIBA (clientY menor) = aumentar altura
+        // Escala: 1px ≈ 0.02m (sensibilidad ajustable)
         const deltaY = extrudeStartScreenY.current - clientY;
         const newHeight = Math.max(0.05, extrudeBaseHeight.current + deltaY * 0.03);
         setExtrusionHeight(newHeight);
@@ -1119,17 +1119,17 @@ export const Viewport: React.FC = () => {
       return;
     }
 
-    // 1. Detection of Inferences
-    const inf = snapEnabled 
-      ? findInference(rawPoint, allSegments, 0.25, drawingStart, lockedAxis) 
-      : { point: rawPoint, type: 'none', color: '#ffffff' } as SnapInference;
+  // 1. Detección de Inferencias
+  const inf = snapEnabled 
+    ? findInference(rawPoint, allSegments, 0.25, drawingStart, lockedAxis) 
+    : { point: rawPoint, type: 'none', color: '#ffffff' } as SnapInference;
     
-    const point = inf.point;
+  const point = inf.point;
 
-    // 2. Move/Rotate/Scale: TransformControls owns all pointer interaction — skip canvas logic
-    // Note: the gizmo's dragging-changed event already disables OrbitControls (makeDefault)
+  // 2. Mover/Rotar/Escalar: TransformControls gestiona toda la interacción del puntero — omitir lógica del canvas
+  // Nota: el evento dragging-changed del gizmo ya desactiva OrbitControls (makeDefault)
 
-    // 3. Update States
+  // 3. Actualizar Estados
     setActiveInference(inf);
     setMousePos(point);
 
@@ -1144,7 +1144,7 @@ export const Viewport: React.FC = () => {
       const face = faces.find(f => f.id === extrudingFaceId);
       const finalHeight = Math.max(0.05, extrusionHeight);
       if (face && finalHeight > 0.05) {
-        // Compute centroid as position anchor for the volume
+        // Calcular el centroide como ancla de posición para el volumen
         const count = face.points.length;
         const sum = face.points.reduce(
           (acc, p) => [acc[0] + p[0], 0, acc[2] + p[2]],
@@ -1163,11 +1163,11 @@ export const Viewport: React.FC = () => {
           type: 'volume',
           position: avgCenter,
         });
-        // Remove the source face so volumes replace it cleanly
+        // Eliminar la cara de origen para que los volúmenes la reemplacen limpiamente
         useEditorStore.getState().removeItem(extrudingFaceId);
         useEditorStore.getState().saveToHistory();
       }
-      // Always reset extrude state on pointer up
+      // Siempre resetear el estado de extrusión al soltar el puntero
       setExtrudingFaceId(null);
       setExtrusionHeight(0);
       extrudeStartScreenY.current = null;
@@ -1175,13 +1175,13 @@ export const Viewport: React.FC = () => {
     }
   };
 
-  // Update FaceObject to support extrusion start
+  // Actualizar FaceObject para soportar el inicio de extrusión
   const FaceWithExtrude: React.FC<{ face: FaceEntity }> = ({ face }) => {
     return (
       <group onPointerDown={(e) => {
         if (activeTool === 'extrude') {
           e.stopPropagation();
-          // Record the screen Y position at drag start for height delta calculation
+          // Registrar la posición Y de la pantalla al inicio del arrastre para el cálculo del delta de altura
           extrudeStartScreenY.current = e.nativeEvent?.clientY ?? null;
           extrudeBaseHeight.current = 0.1;
           setExtrudingFaceId(face.id);
@@ -1194,7 +1194,7 @@ export const Viewport: React.FC = () => {
   };
 
   React.useEffect(() => {
-    // Reset interaction states when tool changes
+    // Resetear estados de interacción cuando cambia la herramienta
     setDrawingStart(null);
     setExtrudingFaceId(null);
     setHighlightedWallId(null);
@@ -1232,7 +1232,7 @@ export const Viewport: React.FC = () => {
         return;
       }
 
-      // 4. Escape / Enter for Tool State Control
+      // 4. Escape / Enter para control de estado de la herramienta
       if (e.key === 'Escape') {
         if (vcbInput) {
           setVcbInput('');
@@ -1246,10 +1246,10 @@ export const Viewport: React.FC = () => {
       }
       
       if (e.key === 'Enter' && !vcbInput && drawingStart) {
-        setDrawingStart(null); // Finish chain
+        setDrawingStart(null); // Terminar cadena
       }
 
-      // 5. Delete selection
+      // 5. Eliminar selección
       if (e.key === 'Delete' || (e.key === 'Backspace' && !vcbInput)) {
         if (selectedIds.length > 0) removeItem();
       }
@@ -1296,8 +1296,8 @@ export const Viewport: React.FC = () => {
       <Canvas
         shadows
         onPointerMissed={() => {
-          // Don't deselect if TransformControls is active — clicking gizmo arrows
-          // fires onPointerMissed because they don't hit any scene mesh.
+          // No deseleccionar si TransformControls está activo — hacer clic en las flechas del gizmo
+          // dispara onPointerMissed porque no golpean ninguna malla de la escena.
           if (['move', 'rotate', 'scale'].includes(activeTool) && selectedIds.length > 0) return;
           select(null);
         }}
@@ -1324,7 +1324,7 @@ export const Viewport: React.FC = () => {
           <ambientLight intensity={0.6} />
           <directionalLight position={[10, 20, 10]} intensity={1.2} castShadow />
           
-          {/* 2D: Grid drei suave */}
+          {/* 2D: Grid Drei suave */}
           {viewMode === '2D' && showGrid && (
             <Grid infiniteGrid cellSize={gridSize} sectionSize={gridSize * 5} sectionColor="#cbd5e1" cellColor="#f1f5f9" fadeDistance={100} />
           )}
@@ -1340,7 +1340,7 @@ export const Viewport: React.FC = () => {
           />
 
           <group>
-            {/* Environment Guides */}
+            {/* Guías del entorno */}
             {guides.map(g => (
               <Line 
                 key={g.id} 
@@ -1367,10 +1367,10 @@ export const Viewport: React.FC = () => {
             
             <MultiSelectionGizmo />
             
-            {/* Real-time Preview */}
+            {/* Previsualización en tiempo real */}
             {drawingStart && (
               <group>
-                {/* Visual Calibration Lock when waiting for real distance */}
+                {/* Bloqueo de Calibración Visual cuando se espera la distancia real */}
                 <Line 
                   points={[
                     drawingStart, 
@@ -1383,7 +1383,7 @@ export const Viewport: React.FC = () => {
                   dashed={activeInference.type !== 'axis' && activeTool !== 'scale-blueprint'} 
                 />
                 
-                {/* Axis Guide Line (Infinite feel) */}
+                {/* Línea Guía de Eje (sensación infinita) */}
                 {activeInference.type === 'axis' && (
                   <Line 
                     points={[
@@ -1421,7 +1421,7 @@ export const Viewport: React.FC = () => {
               </group>
             )}
 
-            {/* Extrusion Preview */}
+            {/* Previsualización de Extrusión */}
             {extrudingFaceId && (() => {
               const face = faces.find(f => f.id === extrudingFaceId);
               if (!face) return null;
@@ -1452,7 +1452,7 @@ export const Viewport: React.FC = () => {
               position={[0, -0.01, 0]}
               rotation={[-Math.PI / 2, 0, 0]}
               onPointerDown={(e) => {
-                // If gizmo is active and user clicks on empty canvas, handle default tool action
+                // Si el gizmo está activo y el usuario hace clic en el canvas vacío, manejar acción por defecto
                 handlePointerDown(e);
               }}
               onPointerMove={(e) => {

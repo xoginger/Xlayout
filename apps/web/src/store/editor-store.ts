@@ -11,7 +11,7 @@ export type OpeningDirection = 'left' | 'right' | 'inward' | 'outward';
 export type ViewMode = '2D' | '3D';
 export type ToolType =
   | 'select' | 'multi-select' | 'pan' | 'zoom' | 'move' | 'rotate' | 'scale'
-  | 'line' | 'rectangle' | 'circle' | 'freehand' | 'wall'
+  | 'line' | 'rectangle' | 'circle' | 'wall'
   | 'extrude' | 'offset'
   | 'tape' | 'paint' | 'eraser' | 'dimension'
   | 'delete' | 'duplicate' | 'scale-blueprint' | 'place-opening' | 'product';
@@ -188,6 +188,7 @@ interface EditorState {
   guides: Guide[];
 
   activeLayerId: string;
+  selectedId: string | null;
   selectedIds: string[];
   selectedType: 'item' | 'wall' | 'opening' | 'dimension' | 'line' | 'rectangle' | 'face' | 'volume' | 'group' | null;
   activeTool: ToolType;
@@ -277,16 +278,17 @@ export const useEditorStore = create<EditorState>((set, get) => ({
   scenes: [],
   guides: [],
   layers: [
-    { id: 'walls', name: 'Walls', visible: true, locked: false },
-    { id: 'openings', name: 'Openings', visible: true, locked: false },
-    { id: 'assets', name: 'Assets', visible: true, locked: false },
-    { id: 'dimensions', name: 'Dimensions', visible: true, locked: false },
-    { id: 'lines', name: 'Draft Lines', visible: true, locked: false },
-    { id: 'rectangles', name: 'Rectangles', visible: true, locked: false },
-    { id: 'faces', name: 'Faces', visible: true, locked: false },
-    { id: 'volumes', name: 'Volumes', visible: true, locked: false },
+    { id: 'walls', name: 'Muros', visible: true, locked: false },
+    { id: 'openings', name: 'Huecos', visible: true, locked: false },
+    { id: 'assets', name: 'Objetos', visible: true, locked: false },
+    { id: 'dimensions', name: 'Dimensiones', visible: true, locked: false },
+    { id: 'lines', name: 'Líneas de boceto', visible: true, locked: false },
+    { id: 'rectangles', name: 'Rectángulos', visible: true, locked: false },
+    { id: 'faces', name: 'Caras', visible: true, locked: false },
+    { id: 'volumes', name: 'Volúmenes', visible: true, locked: false },
   ],
   activeLayerId: 'lines',
+  selectedId: null,
   selectedIds: [],
   selectedType: null,
   activeTool: 'select',
@@ -331,7 +333,7 @@ export const useEditorStore = create<EditorState>((set, get) => ({
 
   addItem: (item: SceneItem) => {
     get().saveToHistory();
-    set((state) => ({ items: [...state.items, item], selectedIds: [item.id], selectedType: 'item' }));
+    set((state) => ({ items: [...state.items, item], selectedId: item.id, selectedIds: [item.id], selectedType: 'item' }));
   },
 
   insertSceneItem: (productData, tenantId) => {
@@ -367,22 +369,22 @@ export const useEditorStore = create<EditorState>((set, get) => ({
 
   addWall: (wall) => {
     get().saveToHistory();
-    set((state) => ({ walls: [...state.walls, { ...wall, layerId: 'walls' }], selectedIds: [wall.id], selectedType: 'wall' }));
+    set((state) => ({ walls: [...state.walls, { ...wall, layerId: 'walls' }], selectedId: wall.id, selectedIds: [wall.id], selectedType: 'wall' }));
   },
 
   addOpening: (opening) => {
     get().saveToHistory();
-    set((state) => ({ openings: [...state.openings, { ...opening, layerId: 'openings' }], selectedIds: [opening.id], selectedType: 'opening' }));
+    set((state) => ({ openings: [...state.openings, { ...opening, layerId: 'openings' }], selectedId: opening.id, selectedIds: [opening.id], selectedType: 'opening' }));
   },
 
   addFace: (face) => {
     get().saveToHistory();
-    set((state) => ({ faces: [...state.faces, { ...face, layerId: 'faces' }], selectedIds: [face.id], selectedType: 'face' }));
+    set((state) => ({ faces: [...state.faces, { ...face, layerId: 'faces' }], selectedId: face.id, selectedIds: [face.id], selectedType: 'face' }));
   },
 
   addVolume: (volume) => {
     get().saveToHistory();
-    set((state) => ({ volumes: [...state.volumes, { ...volume, layerId: 'volumes' }], selectedIds: [volume.id], selectedType: 'volume' }));
+    set((state) => ({ volumes: [...state.volumes, { ...volume, layerId: 'volumes' }], selectedId: volume.id, selectedIds: [volume.id], selectedType: 'volume' }));
   },
 
   addScene: (scene) => {
@@ -536,6 +538,7 @@ export const useEditorStore = create<EditorState>((set, get) => ({
       lines: state.lines.filter((l) => !idsToRemove.includes(l.id)),
       rectangles: state.rectangles.filter((r) => !idsToRemove.includes(r.id)),
       selectedIds: state.selectedIds.filter(sid => !idsToRemove.includes(sid)),
+      selectedId: state.selectedIds.filter(sid => !idsToRemove.includes(sid))[0] || null,
       selectedType: state.selectedIds.some(sid => !idsToRemove.includes(sid)) ? state.selectedType : null,
     }));
   },
@@ -597,7 +600,7 @@ export const useEditorStore = create<EditorState>((set, get) => ({
 
   select: (id, type = null, multi = false) => {
     if (!id) {
-      set({ selectedIds: [], selectedType: null });
+      set({ selectedId: null, selectedIds: [], selectedType: null });
       return;
     }
     set((state) => {
@@ -607,14 +610,15 @@ export const useEditorStore = create<EditorState>((set, get) => ({
           ? state.selectedIds.filter(sid => sid !== id)
           : [...state.selectedIds, id];
         return { 
+          selectedId: newIds.length > 0 ? newIds[newIds.length - 1] : null,
           selectedIds: newIds, 
           selectedType: newIds.length > 1 ? 'group' : (newIds.length === 1 ? type : null) 
         };
       }
-      return { selectedIds: [id], selectedType: type };
+      return { selectedId: id, selectedIds: [id], selectedType: type };
     });
   },
-  clearSelection: () => set({ selectedIds: [], selectedType: null }),
+  clearSelection: () => set({ selectedId: null, selectedIds: [], selectedType: null }),
   setActiveTool: (tool) => set({ activeTool: tool }),
   setViewMode: (mode) => set({ viewMode: mode }),
   setGridSize: (size) => set({ gridSize: size }),

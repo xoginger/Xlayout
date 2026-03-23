@@ -3,44 +3,55 @@
  * XLayout System
  */
 
-import { Injectable, ForbiddenException, NotFoundException } from '@nestjs/common';
+import { Injectable, ForbiddenException, NotFoundException, BadRequestException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 
 @Injectable()
 export class CatalogService {
   constructor(private prisma: PrismaService) {}
 
+  private validateTenantId(tenantId: string) {
+    if (!tenantId) {
+      throw new BadRequestException('tenantId is required');
+    }
+  }
+
   async createBrand(tenantId: string, data: { name: string; description?: string; logoUrl?: string }) {
+    this.validateTenantId(tenantId);
     return this.prisma.client.brand.create({
-      data: { ...data, tenantId: tenantId || undefined },
+      data: { ...data, tenantId },
     });
   }
 
   async getBrands(tenantId: string) {
+    this.validateTenantId(tenantId);
     return this.prisma.client.brand.findMany({
       where: {
         OR: [
-          { tenantId: tenantId || undefined },
-          { accessRules: { some: { companyId: tenantId || undefined } } },
+          { tenantId },
+          { accessRules: { some: { companyId: tenantId } } },
         ],
       },
     });
   }
 
   async createProductLine(tenantId: string, name: string) {
+    this.validateTenantId(tenantId);
     return this.prisma.client.productLine.create({
-      data: { tenantId: tenantId || undefined, name, slug: name.toLowerCase().replace(/\s+/g, '-') },
+      data: { tenantId, name, slug: name.toLowerCase().replace(/\s+/g, '-') },
     });
   }
 
   async getProductLines(tenantId: string) {
+    this.validateTenantId(tenantId);
     return this.prisma.client.productLine.findMany({
-      where: { tenantId: tenantId || undefined },
+      where: { tenantId },
       orderBy: { createdAt: 'desc' },
     });
   }
 
   async updateProductLine(tenantId: string, id: string, data: { active?: boolean; name?: string; description?: string }) {
+    this.validateTenantId(tenantId);
     const line = await this.prisma.client.productLine.findUnique({ where: { id } });
     if (!line || line.tenantId !== tenantId) {
       throw new ForbiddenException('You can only update your own product lines');
@@ -49,20 +60,23 @@ export class CatalogService {
   }
 
   async createCategory(tenantId: string, name: string, parentId?: string) {
+    this.validateTenantId(tenantId);
     return this.prisma.client.productCategory.create({
-      data: { tenantId: tenantId || undefined, name, slug: name.toLowerCase().replace(/\s+/g, '-'), parentId: parentId || undefined },
+      data: { tenantId, name, slug: name.toLowerCase().replace(/\s+/g, '-'), parentId: parentId || undefined },
     });
   }
 
   async getCategories(tenantId: string) {
+    this.validateTenantId(tenantId);
     return this.prisma.client.productCategory.findMany({
-      where: { tenantId: tenantId || undefined },
-      orderBy: { createdAt: 'desc' },
+      where: { tenantId },
+      orderBy: { name: 'asc' },
       include: { parent: true }
     });
   }
 
   async updateCategoryStatus(tenantId: string, id: string, data: { active?: boolean }) {
+    this.validateTenantId(tenantId);
     const category = await this.prisma.client.productCategory.findUnique({ where: { id } });
     if (!category || category.tenantId !== tenantId) {
       throw new ForbiddenException('You can only update your own categories');
@@ -71,6 +85,7 @@ export class CatalogService {
   }
 
   async createProduct(tenantId: string, data: any) {
+    this.validateTenantId(tenantId);
     const { prices, ...createData } = data;
     const line = await this.prisma.client.productLine.findUnique({ where: { id: createData.lineId } });
     if (!line || line.tenantId !== tenantId) {
@@ -82,7 +97,7 @@ export class CatalogService {
       pricesCreate = {
         prices: {
           create: prices.map((p: any) => ({
-            tenantId: tenantId || undefined,
+            tenantId,
             priceType: p.priceType,
             basePrice: p.basePrice || 0,
             currency: p.currency || 'MXN'
@@ -92,12 +107,13 @@ export class CatalogService {
     }
 
     return this.prisma.client.product.create({
-      data: { ...createData, tenantId: tenantId || undefined, ...pricesCreate },
+      data: { ...createData, tenantId, ...pricesCreate },
       include: { prices: true }
     });
   }
 
   async updateProduct(tenantId: string, id: string, data: any) {
+    this.validateTenantId(tenantId);
     const product = await this.prisma.client.product.findUnique({ where: { id } });
     if (!product || product.tenantId !== tenantId) {
       throw new ForbiddenException('You can only update your own products');
@@ -118,7 +134,7 @@ export class CatalogService {
               }
             },
             create: {
-              tenantId: tenantId || undefined,
+              tenantId,
               priceType: p.priceType,
               basePrice: p.basePrice || 0,
               currency: p.currency || 'MXN'
@@ -143,6 +159,7 @@ export class CatalogService {
   }
 
   async publishProduct(tenantId: string, id: string) {
+    this.validateTenantId(tenantId);
     const product = await this.prisma.client.product.findUnique({ where: { id } });
     if (!product || product.tenantId !== tenantId) {
       throw new ForbiddenException('You can only publish your own products');
@@ -154,6 +171,7 @@ export class CatalogService {
   }
 
   async unpublishProduct(tenantId: string, id: string) {
+    this.validateTenantId(tenantId);
     const product = await this.prisma.client.product.findUnique({ where: { id } });
     if (!product || product.tenantId !== tenantId) {
       throw new ForbiddenException('You can only update your own products');
@@ -165,18 +183,20 @@ export class CatalogService {
   }
 
   async createProductPrice(tenantId: string, productId: string, data: any) {
+    this.validateTenantId(tenantId);
     const product = await this.prisma.client.product.findUnique({ where: { id: productId } });
     if (!product || product.tenantId !== tenantId) {
       throw new ForbiddenException('You can only create prices for your own products');
     }
     return this.prisma.client.productPrice.create({
-      data: { ...data, tenantId: tenantId || undefined, productId },
+      data: { ...data, tenantId, productId },
     });
   }
 
   async getProducts(tenantId: string, filters?: any) {
+    this.validateTenantId(tenantId);
     return this.prisma.client.product.findMany({
-      where: { tenantId: tenantId || undefined, ...filters },
+      where: { tenantId, ...filters },
       orderBy: { sku: 'asc' },
       include: {
         line: true,
@@ -188,6 +208,7 @@ export class CatalogService {
   }
 
   async updateProductStatus(tenantId: string, id: string, data: { active?: boolean }) {
+    this.validateTenantId(tenantId);
     const product = await this.prisma.client.product.findUnique({ where: { id } });
     if (!product || product.tenantId !== tenantId) {
       throw new ForbiddenException('You can only update your own products');
@@ -196,24 +217,27 @@ export class CatalogService {
   }
 
   async getAssets(tenantId: string) {
+    this.validateTenantId(tenantId);
     return this.prisma.client.productAsset.findMany({
-      where: { tenantId: tenantId || undefined },
+      where: { tenantId },
       orderBy: { createdAt: 'desc' },
       include: { product: true }
     });
   }
 
   async createAsset(tenantId: string, data: any) {
+    this.validateTenantId(tenantId);
     const product = await this.prisma.client.product.findUnique({ where: { id: data.productId } });
     if (!product || product.tenantId !== tenantId) {
       throw new ForbiddenException('You can only add assets to your own products');
     }
     return this.prisma.client.productAsset.create({
-      data: { ...data, tenantId: tenantId || undefined },
+      data: { ...data, tenantId },
     });
   }
 
   async deleteAsset(tenantId: string, id: string) {
+    this.validateTenantId(tenantId);
     const asset = await this.prisma.client.productAsset.findUnique({ where: { id } });
     if (!asset || asset.tenantId !== tenantId) {
       throw new ForbiddenException('You can only delete your own assets');
@@ -223,18 +247,20 @@ export class CatalogService {
 
   // Llamado por el endpoint de subida — guarda metadatos del archivo subido, aún sin URL
   async createAssetFromUpload(tenantId: string, data: any) {
+    this.validateTenantId(tenantId);
     const product = await this.prisma.client.product.findUnique({ where: { id: data.productId } });
     if (!product || product.tenantId !== tenantId) {
       throw new ForbiddenException('You can only add assets to your own products');
     }
     return this.prisma.client.productAsset.create({
-      data: { ...data, tenantId: tenantId || undefined },
+      data: { ...data, tenantId },
       include: { product: true },
     });
   }
 
   // Reiniciar estado y re-encolar trabajo de conversión para un asset fallido
   async retryAssetConversion(tenantId: string, id: string, conversionService: any) {
+    this.validateTenantId(tenantId);
     const asset = await this.prisma.client.productAsset.findUnique({ where: { id } });
     if (!asset || asset.tenantId !== tenantId) {
       throw new ForbiddenException('Access denied');
@@ -265,20 +291,23 @@ export class CatalogService {
 
 
   async getConditions(tenantId: string) {
+    this.validateTenantId(tenantId);
     return this.prisma.client.productCondition.findMany({
-      where: { tenantId: tenantId || undefined },
+      where: { tenantId },
       orderBy: { createdAt: 'desc' },
       include: { product: true, line: true }
     });
   }
 
   async createCondition(tenantId: string, data: { productId?: string; lineId?: string; conditionType: string; description: string }) {
+    this.validateTenantId(tenantId);
     return this.prisma.client.productCondition.create({
-      data: { ...data, tenantId: tenantId || undefined },
+      data: { ...data, tenantId },
     });
   }
 
   async updateConditionStatus(tenantId: string, id: string, data: { active?: boolean }) {
+    this.validateTenantId(tenantId);
     const condition = await this.prisma.client.productCondition.findUnique({ where: { id } });
     if (!condition || condition.tenantId !== tenantId) {
       throw new ForbiddenException('You can only update your own conditions');
@@ -287,14 +316,16 @@ export class CatalogService {
   }
 
   async getPrices(tenantId: string) {
+    this.validateTenantId(tenantId);
     return this.prisma.client.productPrice.findMany({
-      where: { tenantId: tenantId || undefined },
+      where: { tenantId },
       orderBy: { createdAt: 'desc' },
       include: { product: true }
     });
   }
 
   async updatePriceStatus(tenantId: string, id: string, data: { active?: boolean }) {
+    this.validateTenantId(tenantId);
     const price = await this.prisma.client.productPrice.findUnique({ where: { id } });
     if (!price || price.tenantId !== tenantId) {
       throw new ForbiddenException('You can only update your own prices');

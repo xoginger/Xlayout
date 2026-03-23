@@ -57,15 +57,15 @@ export const LeftToolbar: React.FC = () => {
   const { user } = useAuthStore();
 
   const toolbarTools = useMemo(() => {
-    // Obtain configuration or fallback to defaults
+    // Obtener configuración o usar valores por defecto
     const customOrder = user?.preferences?.toolbarOrder as string[] | undefined;
     
-    // Sort logic
+    // Lógica de ordenación
     if (customOrder && Array.isArray(customOrder) && customOrder.length > 0) {
-      // Create a map for fast lookup
+      // Crear un mapa para búsqueda rápida
       const orderMap = new Map(customOrder.map((id, index) => [id, index]));
       
-      // Sort tools existing in customOrder first, then append any new tools strictly by defaultOrder
+      // Ordenar primero las herramientas en customOrder, luego añadir las nuevas por defaultOrder
       const ordered = [...EDITOR_TOOLS_META].sort((a, b) => {
         const aIndex = orderMap.has(a.id) ? orderMap.get(a.id)! : 9999 + a.defaultOrder;
         const bIndex = orderMap.has(b.id) ? orderMap.get(b.id)! : 9999 + b.defaultOrder;
@@ -75,7 +75,7 @@ export const LeftToolbar: React.FC = () => {
       return ordered.filter(t => t.group !== 'system');
     }
 
-    // Default Fallback
+    // Fallback por defecto
     return [...EDITOR_TOOLS_META]
       .filter(t => t.group !== 'system')
       .sort((a, b) => a.defaultOrder - b.defaultOrder);

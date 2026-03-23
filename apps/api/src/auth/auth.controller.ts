@@ -14,7 +14,6 @@ export class AuthController {
   @HttpCode(HttpStatus.OK)
   @Post('login')
   async login(@Body() signInDto: Record<string, any>) {
-    console.log('[DEBUG LOGIN] Payload received:', signInDto.email, signInDto.password);
     const user = await this.authService.validateUser(signInDto.email, signInDto.password);
     if (!user) {
       throw new UnauthorizedException();
