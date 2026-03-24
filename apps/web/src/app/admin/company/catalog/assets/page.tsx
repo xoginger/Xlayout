@@ -1,47 +1,103 @@
+/**
+ * Creado y diseñado por XO
+ * XLayout System — Página de Assets 3D
+ *
+ * Gestión completa de modelos 3D: subida multi-formato, pipeline de conversión,
+ * visor 3D con React Three Fiber, metadata técnica, y reintentos.
+ * Hardened: badges profesionales, metadata precisa, error fallback visual.
+ */
+
 "use client";
 
-import React, { useEffect, useState, useCallback, useRef } from 'react';
+import React, { useEffect, useState, useCallback, useRef, lazy, Suspense } from 'react';
 import { AdminLayout } from '@/components/admin/AdminLayout';
-import { AdminTable, StatusBadge } from '@/components/admin/AdminTable';
+import { AdminTable } from '@/components/admin/AdminTable';
 import { AdminButton } from '@/components/admin/AdminButton';
 import { useAdminCatalogStore, ProductAsset } from '@/store/admin-catalog-store';
 
-// ─── Status badge for conversion pipeline ────────────────────────────────────
+// Carga lazy del visor 3D — evitar bundle pesado si no se usa
+const ModelViewer = lazy(() => import('@/components/3d/ModelViewer'));
+
+// ─── Utilidad para formatear bytes de forma legible ──────────────────────────
+const formatBytes = (bytes: number): string => {
+  if (bytes === 0) return '0 B';
+  if (bytes < 1024) return `${bytes} B`;
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+  return `${(bytes / (1024 * 1024)).toFixed(2)} MB`;
+};
+
+// ─── Badge de estado del pipeline ────────────────────────────────────────────
 const ConversionBadge: React.FC<{ status: string; error?: string }> = ({ status, error }) => {
   const map: Record<string, { label: string; cls: string; icon: string }> = {
-    pending:     { label: 'Pendiente',    cls: 'bg-slate-100 text-slate-500',   icon: '⏳' },
-    uploaded:    { label: 'Subido',       cls: 'bg-blue-100 text-blue-700',     icon: '📤' },
-    processing:  { label: 'Procesando',   cls: 'bg-amber-100 text-amber-700',   icon: '⚙️' },
-    converted:   { label: 'Convertido',   cls: 'bg-emerald-100 text-emerald-700', icon: '✓' },
+    pending:     { label: 'Pendiente',    cls: 'bg-slate-100 text-slate-600',     icon: '⏳' },
+    uploaded:    { label: 'Subido',       cls: 'bg-blue-100 text-blue-700',       icon: '📤' },
+    processing:  { label: 'Procesando',   cls: 'bg-amber-100 text-amber-700',     icon: '⚙️' },
+    converted:   { label: 'Convertido',   cls: 'bg-cyan-100 text-cyan-700',       icon: '🔄' },
     validated:   { label: 'Validado',     cls: 'bg-emerald-100 text-emerald-700', icon: '✅' },
-    failed:      { label: 'Error',        cls: 'bg-red-100 text-red-700',       icon: '❌' },
-    url_only:    { label: 'URL directa',  cls: 'bg-purple-100 text-purple-700', icon: '🔗' },
+    failed:      { label: 'Error',        cls: 'bg-red-100 text-red-700',         icon: '❌' },
+    error:       { label: 'Error',        cls: 'bg-red-100 text-red-700',         icon: '❌' },
+    url_only:    { label: 'URL directa',  cls: 'bg-purple-100 text-purple-700',   icon: '🔗' },
   };
   const cfg = map[status] ?? map['pending'];
   return (
-    <div className="flex flex-col">
+    <div className="flex flex-col gap-0.5">
       <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded text-xs font-semibold ${cfg.cls}`}>
         <span>{cfg.icon}</span> {cfg.label}
       </span>
-      {error && <span className="text-[10px] text-red-500 mt-0.5 max-w-[180px] truncate" title={error}>{error}</span>}
+      {error && (
+        <span
+          className="text-[10px] text-red-500 mt-0.5 max-w-[200px] line-clamp-2 leading-tight"
+          title={error}
+        >
+          {error}
+        </span>
+      )}
     </div>
   );
 };
 
-// ─── Validation badge ─────────────────────────────────────────────────────────
-const ValidationBadge: React.FC<{ status?: string }> = ({ status }) => {
-  if (!status) return <span className="text-xs text-slate-300">—</span>;
-  const map: Record<string, string> = {
-    valid:   'bg-emerald-100 text-emerald-700',
-    warning: 'bg-amber-100 text-amber-700',
-    invalid: 'bg-red-100 text-red-700',
-  };
-  return <span className={`px-2 py-0.5 rounded text-xs font-semibold ${map[status] || 'bg-slate-100 text-slate-500'}`}>{status}</span>;
+// ─── Badges de propiedades del asset ─────────────────────────────────────────
+const PropertyBadges: React.FC<{ asset: any }> = ({ asset }) => {
+  const meta = asset.metadata as any;
+  if (!meta) return null;
+
+  const badges: { label: string; cls: string; show: boolean }[] = [
+    {
+      label: '🗜️ Draco',
+      cls: meta.dracoEnabled ? 'bg-violet-100 text-violet-700' : 'bg-slate-100 text-slate-400',
+      show: asset.conversionStatus === 'validated' || asset.conversionStatus === 'converted',
+    },
+    {
+      label: meta.validation === 'valid' ? '✓ Válido' : '⚠ Warning',
+      cls: meta.validation === 'valid' ? 'bg-emerald-100 text-emerald-700' : 'bg-amber-100 text-amber-700',
+      show: !!meta.validation,
+    },
+    {
+      label: meta.orientation?.floorAligned ? '⬇ Piso OK' : '⬇ Piso ⚠',
+      cls: meta.orientation?.floorAligned ? 'bg-sky-100 text-sky-700' : 'bg-amber-100 text-amber-700',
+      show: !!meta.orientation,
+    },
+    {
+      label: meta.orientation?.centered ? '⊕ Centro OK' : '⊕ Descentrado',
+      cls: meta.orientation?.centered ? 'bg-sky-100 text-sky-700' : 'bg-amber-100 text-amber-700',
+      show: !!meta.orientation,
+    },
+  ];
+
+  return (
+    <div className="flex flex-wrap gap-1 mt-1">
+      {badges.filter(b => b.show).map((b, i) => (
+        <span key={i} className={`px-1.5 py-0.5 rounded text-[9px] font-semibold ${b.cls}`}>
+          {b.label}
+        </span>
+      ))}
+    </div>
+  );
 };
 
-// ─── Upload drop zone ─────────────────────────────────────────────────────────
-const ACCEPTED_FORMATS = '.glb,.gltf,.obj,.dae,.fbx,.3ds,.dxf,.kmz,.stl,.ply';
-const FORMAT_INFO = 'GLB, GLTF, OBJ, DAE, FBX, 3DS, DXF, KMZ, STL, PLY';
+// ─── Zona de upload con drag & drop ───────────────────────────────────────────
+const ACCEPTED_FORMATS = '.glb,.gltf,.obj,.dae,.fbx,.3ds,.dxf,.kmz,.stl,.ply,.ifc,.wrl,.xsi';
+const FORMAT_INFO = 'GLB, GLTF, OBJ, DAE, FBX, 3DS, DXF, KMZ, STL, PLY, IFC, WRL, XSI';
 
 const UploadZone: React.FC<{
   productId: string;
@@ -52,7 +108,13 @@ const UploadZone: React.FC<{
   const [isDragging, setIsDragging] = useState(false);
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
 
-  const handleFile = (file: File) => setSelectedFile(file);
+  const handleFile = (file: File) => {
+    if (file.size > 50 * 1024 * 1024) {
+      alert(`El archivo excede el límite de 50MB (${(file.size / 1024 / 1024).toFixed(1)}MB)`);
+      return;
+    }
+    setSelectedFile(file);
+  };
 
   const handleSubmit = async () => {
     if (!selectedFile || !productId) return;
@@ -75,7 +137,7 @@ const UploadZone: React.FC<{
         <p className="text-sm font-semibold text-slate-700 mt-2">
           {selectedFile ? selectedFile.name : 'Arrastrar aquí o clic para seleccionar'}
         </p>
-        <p className="text-xs text-slate-400 mt-1">{FORMAT_INFO}</p>
+        <p className="text-xs text-slate-400 mt-1">{FORMAT_INFO} · Máximo 50MB</p>
       </div>
       <input ref={inputRef} type="file" accept={ACCEPTED_FORMATS} className="hidden"
         onChange={(e) => e.target.files?.[0] && handleFile(e.target.files[0])} />
@@ -83,7 +145,7 @@ const UploadZone: React.FC<{
         <div className="flex items-center justify-between p-3 bg-slate-50 rounded-lg border border-slate-200">
           <div>
             <p className="text-sm font-semibold text-slate-800">{selectedFile.name}</p>
-            <p className="text-xs text-slate-400">{(selectedFile.size / 1024 / 1024).toFixed(2)} MB</p>
+            <p className="text-xs text-slate-400">{formatBytes(selectedFile.size)}</p>
           </div>
           <AdminButton onClick={handleSubmit} loading={uploading} size="sm">
             Subir y Convertir
@@ -94,7 +156,7 @@ const UploadZone: React.FC<{
   );
 };
 
-// ─── Metadata expander ────────────────────────────────────────────────────────
+// ─── Panel expandible de metadata técnica ─────────────────────────────────────
 const MetadataRow: React.FC<{ asset: ProductAsset & { product?: any } }> = ({ asset }) => {
   const [open, setOpen] = useState(false);
   const meta = asset.metadata as any;
@@ -105,14 +167,85 @@ const MetadataRow: React.FC<{ asset: ProductAsset & { product?: any } }> = ({ as
         {open ? '▲ Ocultar' : '▼ Ver metadata'}
       </button>
       {open && (
-        <div className="mt-1 p-2 bg-slate-50 border border-slate-100 rounded text-[10px] font-mono space-y-0.5">
-          {meta.triangles !== undefined && <div>Triángulos: <strong>{meta.triangles?.toLocaleString()}</strong></div>}
-          {meta.materials !== undefined && <div>Materiales: <strong>{meta.materials}</strong></div>}
-          {meta.fileSizeMb !== undefined && <div>Tamaño GLB: <strong>{meta.fileSizeMb} MB</strong></div>}
-          {meta.originalSize !== undefined && <div>Tamaño original: <strong>{(meta.originalSize / 1024 / 1024).toFixed(2)} MB</strong></div>}
-          {meta.validation && <div>Validación: <strong>{meta.validation}</strong></div>}
+        <div className="mt-1 p-2.5 bg-slate-50 border border-slate-100 rounded-lg text-[10px] font-mono space-y-1">
+          {/* ── Geometría ── */}
+          {meta.triangles !== undefined && (
+            <div className="flex justify-between">
+              <span className="text-slate-500">Triángulos</span>
+              <strong>{meta.triangles.toLocaleString()}</strong>
+            </div>
+          )}
+          {meta.materials !== undefined && (
+            <div className="flex justify-between">
+              <span className="text-slate-500">Materiales</span>
+              <strong>{meta.materials}</strong>
+            </div>
+          )}
+
+          {/* ── Tamaños precisos ── */}
+          {meta.originalSizeBytes !== undefined && (
+            <div className="flex justify-between">
+              <span className="text-slate-500">Original</span>
+              <strong>{formatBytes(meta.originalSizeBytes)}</strong>
+            </div>
+          )}
+          {meta.optimizedSizeBytes !== undefined && (
+            <div className="flex justify-between">
+              <span className="text-slate-500">GLB optimizado</span>
+              <strong>{formatBytes(meta.optimizedSizeBytes)}</strong>
+            </div>
+          )}
+          {meta.compressionRatio !== undefined && meta.compressionRatio !== 0 && (
+            <div className="flex justify-between">
+              <span className="text-slate-500">Compresión</span>
+              <strong className={meta.compressionRatio > 0 ? 'text-emerald-600' : 'text-amber-600'}>
+                {meta.compressionRatio > 0 ? `↓ ${meta.compressionRatio}%` : `↑ ${Math.abs(meta.compressionRatio)}%`}
+              </strong>
+            </div>
+          )}
+
+          {/* ── Pipeline ── */}
+          <div className="flex justify-between">
+            <span className="text-slate-500">Draco</span>
+            <strong className={meta.dracoEnabled ? 'text-violet-600' : 'text-slate-400'}>
+              {meta.dracoEnabled ? '✓ Aplicado' : '✗ No aplicado'}
+            </strong>
+          </div>
+
+          {/* ── BBox con dimensiones ── */}
+          {meta.boundingBox?.width !== undefined && (
+            <div className="flex justify-between">
+              <span className="text-slate-500">Dimensiones</span>
+              <strong>
+                {meta.boundingBox.width.toFixed(3)} × {meta.boundingBox.height.toFixed(3)} × {meta.boundingBox.depth.toFixed(3)} m
+              </strong>
+            </div>
+          )}
+
+          {/* ── Orientación ── */}
+          {meta.orientation && (
+            <div className="flex justify-between">
+              <span className="text-slate-500">Orientación</span>
+              <strong className={meta.orientation.status === 'ok' ? 'text-emerald-600' : 'text-amber-600'}>
+                {meta.orientation.status === 'ok' ? '✓ Correcta' : '⚠ Revisar'}
+              </strong>
+            </div>
+          )}
+
+          {/* ── Warnings ── */}
           {meta.validationWarnings?.length > 0 && (
-            <div className="text-amber-700">⚠ {meta.validationWarnings.join('; ')}</div>
+            <div className="mt-1 p-1.5 bg-amber-50 border border-amber-200 rounded text-amber-700 space-y-0.5">
+              {meta.validationWarnings.map((w: string, i: number) => (
+                <div key={i}>⚠ {w}</div>
+              ))}
+            </div>
+          )}
+
+          {/* ── Error fallback info ── */}
+          {meta.errorType && (
+            <div className="mt-1 p-1.5 bg-red-50 border border-red-200 rounded text-red-700">
+              Tipo: <strong>{meta.errorType}</strong>
+            </div>
           )}
         </div>
       )}
@@ -120,7 +253,47 @@ const MetadataRow: React.FC<{ asset: ProductAsset & { product?: any } }> = ({ as
   );
 };
 
-// ─── Main Page ────────────────────────────────────────────────────────────────
+// ─── Modal de Preview 3D ──────────────────────────────────────────────────────
+const Preview3DModal: React.FC<{
+  url: string;
+  assetName: string;
+  onClose: () => void;
+}> = ({ url, assetName, onClose }) => {
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm">
+      <div className="w-full max-w-3xl mx-4 bg-white rounded-2xl shadow-2xl overflow-hidden">
+        <div className="flex items-center justify-between px-5 py-3 bg-slate-50 border-b border-slate-200">
+          <div className="flex items-center gap-2">
+            <span className="text-lg">🎲</span>
+            <h3 className="text-sm font-bold text-slate-800">Preview 3D: {assetName}</h3>
+          </div>
+          <button
+            onClick={onClose}
+            className="w-8 h-8 rounded-lg bg-slate-200 hover:bg-red-100 text-slate-500 hover:text-red-600 flex items-center justify-center transition-colors"
+          >
+            ✕
+          </button>
+        </div>
+        <Suspense fallback={
+          <div className="flex items-center justify-center h-[400px] bg-slate-800 text-slate-400">
+            <div className="text-center">
+              <div className="animate-spin w-8 h-8 border-2 border-slate-400 border-t-transparent rounded-full mx-auto mb-2" />
+              <p className="text-sm">Cargando modelo 3D...</p>
+            </div>
+          </div>
+        }>
+          <ModelViewer url={url} height={400} />
+        </Suspense>
+        <div className="px-5 py-3 bg-slate-50 border-t border-slate-200 flex items-center justify-between">
+          <p className="text-[10px] text-slate-400 font-mono">Arrastrar = Rotar · Scroll = Zoom · Shift+Drag = Pan</p>
+          <AdminButton onClick={onClose} variant="outline" size="sm">Cerrar</AdminButton>
+        </div>
+      </div>
+    </div>
+  );
+};
+
+// ─── Página principal ─────────────────────────────────────────────────────────
 export default function CompanyAssetsPage() {
   const {
     assets, products,
@@ -134,6 +307,7 @@ export default function CompanyAssetsPage() {
   const [uploadingId, setUploadingId] = useState<string | null>(null);
   const [retryingId, setRetryingId] = useState<string | null>(null);
   const [pollingActive, setPollingActive] = useState(false);
+  const [previewAsset, setPreviewAsset] = useState<{ url: string; name: string } | null>(null);
 
   const load = useCallback(() => {
     fetchAssets();
@@ -142,10 +316,10 @@ export default function CompanyAssetsPage() {
 
   useEffect(() => { load(); }, [load]);
 
-  // Auto-poll while any asset is in processing/uploaded state
+  // Auto-poll mientras hay assets en procesamiento
   useEffect(() => {
     const hasProcessing = assets.some(a =>
-      (a as any).conversionStatus === 'processing' || (a as any).conversionStatus === 'uploaded'
+      ['processing', 'uploaded'].includes((a as any).conversionStatus || '')
     );
     if (hasProcessing && !pollingActive) {
       setPollingActive(true);
@@ -190,35 +364,24 @@ export default function CompanyAssetsPage() {
       )
     },
     {
-      header: 'Tipo',
+      header: 'Formato',
       accessor: (a: any) => (
-        <span className={`px-2 py-0.5 rounded text-xs font-semibold uppercase ${
-          a.assetType === 'model_3d' ? 'bg-purple-100 text-purple-800' : 'bg-blue-100 text-blue-800'
-        }`}>
-          {a.assetType}
-        </span>
-      )
-    },
-    {
-      header: 'Formato original',
-      accessor: (a: any) => (
-        <span className="text-xs font-mono uppercase text-slate-600 font-bold">
+        <span className="text-xs font-mono uppercase text-slate-600 font-bold bg-slate-100 px-2 py-0.5 rounded">
           {(a as any).originalFormat || '—'}
         </span>
       )
     },
     {
-      header: 'Pipeline',
+      header: 'Estado',
       accessor: (a: any) => (
-        <ConversionBadge
-          status={(a as any).conversionStatus || 'pending'}
-          error={(a as any).conversionError}
-        />
+        <div>
+          <ConversionBadge
+            status={(a as any).conversionStatus || 'pending'}
+            error={(a as any).conversionError}
+          />
+          <PropertyBadges asset={a} />
+        </div>
       )
-    },
-    {
-      header: 'Validación',
-      accessor: (a: any) => <ValidationBadge status={(a as any).metadata?.validation} />
     },
     {
       header: 'GLB / Metadata',
@@ -230,7 +393,9 @@ export default function CompanyAssetsPage() {
               {a.model3dUrl.split('/').pop()}
             </a>
           ) : (
-            <span className="text-xs text-slate-400">Sin GLB aún</span>
+            <span className="text-xs text-slate-400">
+              {(a as any).conversionStatus === 'error' ? 'Conversión fallida' : 'Sin GLB aún'}
+            </span>
           )}
           <MetadataRow asset={a} />
         </div>
@@ -240,7 +405,18 @@ export default function CompanyAssetsPage() {
       header: 'Acciones',
       accessor: (a: any) => (
         <div className="flex gap-2">
-          {(a.conversionStatus === 'failed' || a.conversionStatus === 'uploaded') && (
+          {a.model3dUrl && ['validated', 'converted'].includes(a.conversionStatus) && (
+            <AdminButton
+              variant="outline" size="sm"
+              onClick={() => setPreviewAsset({
+                url: a.model3dUrl,
+                name: a.product?.name || a.model3dUrl.split('/').pop() || 'Modelo',
+              })}
+            >
+              Ver 3D
+            </AdminButton>
+          )}
+          {['failed', 'error', 'uploaded'].includes(a.conversionStatus) && (
             <AdminButton
               variant="outline" size="sm"
               loading={retryingId === a.id}
@@ -260,7 +436,7 @@ export default function CompanyAssetsPage() {
         <div>
           <h2 className="text-lg font-semibold text-slate-900">Biblioteca de Assets 3D</h2>
           <p className="text-sm text-slate-500">
-            Sube archivos 3D multi-formato. El sistema los convierte automáticamente a GLB.
+            Sube archivos 3D multi-formato. Pipeline automático: conversión → Draco → validación.
             {pollingActive && <span className="ml-2 text-amber-600 font-bold animate-pulse">● Conversión en progreso...</span>}
           </p>
         </div>
@@ -272,7 +448,6 @@ export default function CompanyAssetsPage() {
         </AdminButton>
       </div>
 
-      {/* ── Upload panel ─────────────────────────────────────── */}
       {isUploadOpen && (
         <div className="mb-6 p-5 bg-slate-50 border border-slate-200 rounded-xl">
           <h3 className="text-sm font-bold text-slate-800 mb-4">Subir Modelo 3D</h3>
@@ -296,18 +471,26 @@ export default function CompanyAssetsPage() {
           )}
           <div className="mt-3 p-3 bg-amber-50 border border-amber-200 rounded text-xs text-amber-800">
             <strong>Formatos aceptados:</strong> {FORMAT_INFO}<br />
-            <strong>DWG:</strong> No soportado — exportar como DXF desde AutoCAD.
+            <strong>DWG:</strong> No soportado — exportar como DXF desde AutoCAD.<br />
+            <strong>Pipeline:</strong> Conversión → Draco compression → Validación orientación/piso → Metadata
           </div>
         </div>
       )}
 
-      {/* ── Table ────────────────────────────────────────────── */}
       <AdminTable
         columns={columns as any}
         data={assets}
         loading={isLoading}
         emptyMessage="Sin assets. Sube un modelo 3D para comenzar."
       />
+
+      {previewAsset && (
+        <Preview3DModal
+          url={previewAsset.url}
+          assetName={previewAsset.name}
+          onClose={() => setPreviewAsset(null)}
+        />
+      )}
     </AdminLayout>
   );
 }

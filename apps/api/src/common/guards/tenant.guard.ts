@@ -13,14 +13,30 @@ export class TenantGuard implements CanActivate {
   canActivate(context: ExecutionContext): boolean {
     const request = context.switchToHttp().getRequest();
     const user = request.user;
-    
-    if (!user || (!user.tenantId && user.roles?.indexOf('ADMIN') === -1)) {
+
+    if (!user) {
+      throw new ForbiddenException('Se requiere autenticación');
+    }
+
+    // PLATFORM_USER ve todo — no tiene tenantId fijo, se le permite siempre
+    if (user.userType === 'PLATFORM_USER') {
+      request.tenantId = request.headers['x-tenant-id'] || null;
+      return true;
+    }
+
+    // DISTRIBUTOR_USER no tiene tenantId propio — su acceso se filtra por distributorId
+    if (user.userType === 'DISTRIBUTOR_USER') {
+      request.tenantId = null;
+      request.distributorId = user.distributorId;
+      return true;
+    }
+
+    // COMPANY_USER y END_USER requieren tenantId válido
+    if (!user.tenantId) {
       throw new ForbiddenException('Se requiere acceso de Tenant');
     }
 
-    // Example feature: We could inject the tenantId in body or header to make sure they match
     request.tenantId = user.tenantId;
-
     return true;
   }
 }

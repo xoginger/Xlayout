@@ -14,7 +14,13 @@ export interface Product {
   width: number;
   depth: number;
   height: number;
+  // Precio base en la lista de precios asignada al usuario (sin markup)
   price?: number | null;
+  // Precio de venta final (con markup del distribuidor aplicado si aplica)
+  finalPrice?: number | null;
+  // Lista de precios activa para este usuario ('A'|'B'|'C'|'D'|'E')
+  priceListType?: string;
+  // Mapa completo de precios base para todos los tipos (solo visible para admin del fabricante)
   pricesMap?: Record<string, number> | null;
   currency?: string;
   hasPriceAccess: boolean;

@@ -8,23 +8,42 @@ import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 import { api } from '@/lib/api';
 
-export type UserType = 'PLATFORM_USER' | 'COMPANY_USER' | 'END_USER';
+// Tipos de usuarios del sistema
+export type UserType = 'PLATFORM_USER' | 'COMPANY_USER' | 'DISTRIBUTOR_USER' | 'END_USER';
 
 export interface TenantContext {
   tenantId: string;
   tenantName: string;
+  // Lista de precios asignada al distribuidor para este fabricante (A/B/C/D/E)
+  priceListType?: string;
   access: {
     pricesEnabled: boolean;
     conditionsEnabled: boolean;
   };
 }
 
+// Regla de markup del distribuidor — recibida desde el backend al autenticarse
+export interface PriceMarkup {
+  id: string;
+  scope: 'GLOBAL' | 'BY_TENANT' | 'BY_LINE' | 'BY_PRODUCT';
+  markupPercent: number;
+  tenantId?: string;
+  productLineId?: string;
+  productId?: string;
+  priority: number;
+}
+
 interface User {
   id: string;
   email: string;
-  role: 'platform_admin' | 'company_admin' | 'end_user';
+  role: 'platform_admin' | 'company_admin' | 'distributor_user' | 'end_user';
   preferences?: any;
   tenants: TenantContext[];
+  // Campos específicos del usuario distribuidor
+  distributorId?: string;
+  distributorName?: string;
+  distributorRole?: 'DISTRIBUTOR_ADMIN' | 'DESIGNER' | 'SALES';
+  priceMarkups?: PriceMarkup[];
 }
 
 interface AuthState {
@@ -40,6 +59,8 @@ interface AuthState {
   updatePreferences: (prefs: any) => Promise<void>;
   setActiveTenantId: (id: string) => void;
   getActiveTenant: () => TenantContext | null;
+  // Devuelve true si el usuario es de tipo distribuidor (diseñador o admin)
+  isDistributorUser: () => boolean;
   logout: () => void;
 }
 
@@ -89,14 +110,14 @@ export const useAuthStore = create<AuthState>()(
         
         const newPrefs = { ...currentUser.preferences, ...prefs };
         
-        // Actualización optimista
+        // Actualización optimista en el store
         set({ user: { ...currentUser, preferences: newPrefs } });
         
         try {
           await api.post('/auth/preferences', newPrefs);
         } catch (err) {
-          console.error("Failed to save preferences", err);
-          // Revertir si es necesario
+          console.error("Error al guardar preferencias", err);
+          // Revertir si falla
           set({ user: currentUser });
         }
       },
@@ -113,6 +134,11 @@ export const useAuthStore = create<AuthState>()(
         const { user, activeTenantId } = get();
         if (!user || !activeTenantId) return null;
         return user.tenants.find(t => t.tenantId === activeTenantId) || null;
+      },
+
+      isDistributorUser: () => {
+        const { user } = get();
+        return user?.role === 'distributor_user';
       },
 
       logout: () => set({ 
@@ -134,3 +160,4 @@ export const useAuthStore = create<AuthState>()(
     }
   )
 );
+

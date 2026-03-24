@@ -26,6 +26,9 @@ import { PlatformInfoModule } from './platform-info/platform-info.module';
 import { CompanyInfoModule } from './company-info/company-info.module';
 import { TenantMiddleware } from './prisma/tenant.middleware';
 import { HealthModule } from './health/health.module';
+// Módulos del modelo comercial multi-tenant de distribuidores
+import { DistributorsModule } from './distributors/distributors.module';
+import { DistributorUsersModule } from './distributor-users/distributor-users.module';
 
 @Module({
   imports: [
@@ -54,6 +57,9 @@ import { HealthModule } from './health/health.module';
     PlatformInfoModule,
     CompanyInfoModule,
     HealthModule,
+    // Módulos del modelo comercial de distribuidores
+    DistributorsModule,
+    DistributorUsersModule,
   ],
   controllers: [AppController],
   providers: [AppService],

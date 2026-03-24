@@ -333,21 +333,105 @@ export class CatalogService {
     return this.prisma.client.productPrice.update({ where: { id }, data });
   }
 
+  // ─── Variantes de Producto ─────────────────────────────────────────────────
+
+  /** Lista variantes activas de un producto */
+  async getProductVariants(tenantId: string, productId: string) {
+    return this.prisma.client.productVariant.findMany({
+      where: { tenantId, productId, active: true },
+      orderBy: { sortOrder: 'asc' },
+    });
+  }
+
+  /** Crea una nueva variante para un producto */
+  async createProductVariant(tenantId: string, productId: string, data: any) {
+    // Verificar que el producto pertenece al tenant
+    const product = await this.prisma.client.product.findUnique({ where: { id: productId } });
+    if (!product || product.tenantId !== tenantId) {
+      throw new ForbiddenException('Producto no pertenece a este fabricante');
+    }
+
+    return this.prisma.client.productVariant.create({
+      data: {
+        tenantId,
+        productId,
+        name: data.name,
+        variantType: data.variantType || 'color',
+        metadata: data.metadata || {},
+        sortOrder: data.sortOrder ?? 0,
+        active: true,
+      },
+    });
+  }
+
+  /** Actualiza datos de una variante */
+  async updateProductVariant(tenantId: string, variantId: string, data: any) {
+    const variant = await this.prisma.client.productVariant.findUnique({ where: { id: variantId } });
+    if (!variant || variant.tenantId !== tenantId) {
+      throw new ForbiddenException('Variante no pertenece a este fabricante');
+    }
+    return this.prisma.client.productVariant.update({
+      where: { id: variantId },
+      data,
+    });
+  }
+
+  /** Elimina una variante (soft delete — marca como inactiva) */
+  async deleteProductVariant(tenantId: string, variantId: string) {
+    const variant = await this.prisma.client.productVariant.findUnique({ where: { id: variantId } });
+    if (!variant || variant.tenantId !== tenantId) {
+      throw new ForbiddenException('Variante no pertenece a este fabricante');
+    }
+    return this.prisma.client.productVariant.update({
+      where: { id: variantId },
+      data: { active: false },
+    });
+  }
+
   // ─── Catálogo del Editor — filtros por estado PUBLISHED ─────────────────────────
   async getAvailableCatalog(userId: string, userType: string) {
-    let tenantAccessMap = new Map<string, { pricesEnabled: boolean }>();
+    // Mapa: tenantId → { pricesEnabled: boolean, priceListType: string }
+    let tenantAccessMap = new Map<string, { pricesEnabled: boolean; priceListType: string }>();
+
+    // ID del distribuidor si aplica (para calcular markup)
+    let distributorId: string | null = null;
 
     if (userType === 'PLATFORM_USER') {
+      // La plataforma ve todos los tenants activos con acceso completo y precio A
       const activeTenants = await this.prisma.client.tenant.findMany({ where: { status: 'ACTIVE' } });
-      activeTenants.forEach((t: any) => tenantAccessMap.set(t.id, { pricesEnabled: true }));
+      activeTenants.forEach((t: any) => tenantAccessMap.set(t.id, { pricesEnabled: true, priceListType: 'A' }));
     } else if (userType === 'COMPANY_USER') {
+      // El usuario del fabricante ve su propio catálogo con acceso completo y precio A
       const user = await this.prisma.client.companyUser.findUnique({ where: { id: userId } });
-      if (user) tenantAccessMap.set(user.tenantId, { pricesEnabled: true });
+      if (user) tenantAccessMap.set(user.tenantId, { pricesEnabled: true, priceListType: 'A' });
+    } else if (userType === 'DISTRIBUTOR_USER') {
+      // El diseñador ve catálogos autorizados a su distribuidor con la lista de precios asignada
+      const distUser = await this.prisma.client.distributorUser.findUnique({
+        where: { id: userId },
+        include: {
+          distributor: {
+            include: {
+              // Catálogos de fabricantes autorizados con su lista de precio asignada
+              catalogAccesses: { where: { active: true } },
+            },
+          },
+        },
+      });
+      if (distUser) {
+        distributorId = distUser.distributorId;
+        (distUser as any).distributor.catalogAccesses.forEach((ca: any) => {
+          tenantAccessMap.set(ca.tenantId, {
+            pricesEnabled: true,
+            priceListType: ca.priceListType || 'A',
+          });
+        });
+      }
     } else if (userType === 'END_USER') {
+      // El usuario final solo ve catálogos a los que fue dado de alta
       const accesses = await this.prisma.client.catalogAccess.findMany({
         where: { endUserId: userId, active: true, catalogEnabled: true },
       });
-      accesses.forEach((a: any) => tenantAccessMap.set(a.tenantId, { pricesEnabled: a.pricesEnabled }));
+      accesses.forEach((a: any) => tenantAccessMap.set(a.tenantId, { pricesEnabled: a.pricesEnabled, priceListType: 'A' }));
     }
 
     const tenantIds = Array.from(tenantAccessMap.keys());
@@ -374,22 +458,63 @@ export class CatalogService {
       }
     });
 
+    // Obtener reglas de markup del distribuidor si aplica
+    let distributorMarkups: any[] = [];
+    if (distributorId) {
+      distributorMarkups = await this.prisma.client.distributorPriceMarkup.findMany({
+        where: { distributorId, active: true },
+        orderBy: { priority: 'desc' },
+      });
+    }
+
+    /**
+     * Calcula el precio de venta final aplicando el markupPercent del distribuidor.
+     * Prioridad: BY_PRODUCT > BY_LINE > BY_TENANT > GLOBAL
+     */
+    const applyMarkup = (basePrice: number, context: { tenantId: string; lineId: string; productId: string }): number => {
+      if (!distributorMarkups.length) return basePrice;
+
+      let applicable: any = null;
+      for (const markup of distributorMarkups) {
+        if (markup.scope === 'BY_PRODUCT' && markup.productId === context.productId) { applicable = markup; break; }
+        if (markup.scope === 'BY_LINE' && markup.productLineId === context.lineId) { applicable = markup; break; }
+        if (markup.scope === 'BY_TENANT' && markup.tenantId === context.tenantId) { applicable = markup; break; }
+        if (markup.scope === 'GLOBAL' && !applicable) { applicable = markup; }
+      }
+
+      if (!applicable) return basePrice;
+      return basePrice * (1 + Number(applicable.markupPercent) / 100);
+    };
+
     // Filtrar líneas sin productos publicados
     return tenantsData
       .map((tenant: any) => {
         const access = tenantAccessMap.get(tenant.id);
+        // Lista de precios asignada al distribuidor para este fabricante ('A','B','C','D','E')
+        const priceListType = access?.priceListType || 'A';
+
         const linesWithProducts = tenant.productLines
           .filter((line: any) => line.products.length > 0)
           .map((line: any) => ({
             lineId: line.id,
             lineName: line.name,
             products: line.products.map((product: any) => {
-              // Convertir arreglo de precios de Prisma a diccionario útil: { A: 100, B: 200 }
+              // Construir diccionario completo de precios base: { A: 100, B: 200 }
               const pricesMap: Record<string, number> = {};
               let currency = 'MXN';
               product.prices.forEach((p: any) => {
                 pricesMap[p.priceType] = Number(p.basePrice);
                 currency = p.currency;
+              });
+
+              // Precio base según la lista de precios asignada al usuario/distribuidor
+              const basePrice = pricesMap[priceListType] ?? pricesMap['A'] ?? 0;
+
+              // Precio final con markup del distribuidor aplicado
+              const finalPrice = applyMarkup(basePrice, {
+                tenantId: tenant.id,
+                lineId: line.id,
+                productId: product.id,
               });
 
               const model3dAsset = product.assets.find((a: any) => a.assetType === 'model_3d');
@@ -400,7 +525,14 @@ export class CatalogService {
                 width: product.width,
                 depth: product.depth,
                 height: product.height,
-                pricesMap: access?.pricesEnabled ? pricesMap : null, // Entregar todos los precios si tiene acceso
+                // Precio base con la lista asignada (sin markup)
+                price: access?.pricesEnabled ? basePrice : null,
+                // Precio de venta final (con markup del distribuidor si aplica)
+                finalPrice: access?.pricesEnabled ? Math.round(finalPrice * 100) / 100 : null,
+                // Tipo de lista de precios activa para el usuario
+                priceListType: priceListType,
+                // Mapa completo de precios base (solo si tiene acceso — para admin del fabricante)
+                pricesMap: access?.pricesEnabled ? pricesMap : null,
                 currency: currency,
                 hasPriceAccess: access?.pricesEnabled ?? false,
                 thumbnail: product.assets.find((a: any) => a.assetType === 'thumbnail')?.fileUrl || null,
@@ -418,3 +550,4 @@ export class CatalogService {
       .filter((t: any) => t.lines.length > 0);
   }
 }
+

@@ -15,10 +15,14 @@ import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { TenantGuard } from '../common/guards/tenant.guard';
 import * as path from 'path';
 
-// Formatos 3D aceptados
+// Formatos 3D aceptados — incluye IFC, WRL, XSI
 const ACCEPTED_EXTENSIONS = new Set([
   'glb', 'gltf', 'obj', 'dae', 'fbx', '3ds', 'dxf', 'kmz', 'stl', 'ply',
+  'ifc', 'wrl', 'xsi',
 ]);
+
+// Tamaño máximo permitido para archivos 3D (50 MB)
+const MAX_FILE_SIZE_BYTES = 50 * 1024 * 1024;
 // DWG: rechazado explícitamente con un mensaje claro
 const DWG_NOTE = 'DWG requiere ODA Platform (licencia comercial). Use la exportación DXF desde su herramienta CAD en su lugar.';
 
@@ -174,6 +178,40 @@ export class CatalogController {
     };
   }
 
+  // ─── Upload 3D dedicado — validación estricta de formato y tamaño ──────────
+  @Post('assets/upload-3d')
+  @UseInterceptors(FileInterceptor('file'))
+  async upload3DModel(
+    @Req() req: any,
+    @UploadedFile() file: Express.Multer.File,
+    @Body() body: { productId: string },
+  ) {
+    if (!file) throw new BadRequestException('No se cargó ningún archivo');
+    if (!body.productId) throw new BadRequestException('productId es requerido');
+
+    // Validar tamaño máximo
+    if (file.size > MAX_FILE_SIZE_BYTES) {
+      throw new BadRequestException(
+        `El archivo excede el tamaño máximo de 50MB (${(file.size / 1024 / 1024).toFixed(1)}MB)`
+      );
+    }
+
+    const format = getFormatFromFile(file.originalname);
+
+    // Validar que sea un formato 3D reconocido
+    if (format === 'dwg') {
+      throw new BadRequestException(DWG_NOTE);
+    }
+    if (!ACCEPTED_EXTENSIONS.has(format)) {
+      throw new BadRequestException(
+        `Formato '.${format}' no es un modelo 3D soportado. Aceptados: ${[...ACCEPTED_EXTENSIONS].join(', ')}`
+      );
+    }
+
+    // Reutilizar la lógica de upload existente
+    return this.uploadAsset(req, file, body);
+  }
+
   @Post('assets/:id/retry-conversion')
   async retryConversion(@Req() req: any, @Param('id') id: string) {
     return this.catalogService.retryAssetConversion(req.tenantId, id, this.conversionService);
@@ -199,9 +237,36 @@ export class CatalogController {
     return this.catalogService.updatePriceStatus(req.tenantId, id, { active: body.active });
   }
 
+  // ─── Variantes de Producto ──────────────────────────────────────────────
+  @Get('products/:productId/variants')
+  async getVariants(@Req() req: any, @Param('productId') productId: string) {
+    return this.catalogService.getProductVariants(req.tenantId, productId);
+  }
+  @Post('products/:productId/variants')
+  async createVariant(@Req() req: any, @Param('productId') productId: string, @Body() body: any) {
+    return this.catalogService.createProductVariant(req.tenantId, productId, body);
+  }
+  @Patch('variants/:id')
+  async updateVariant(@Req() req: any, @Param('id') id: string, @Body() body: any) {
+    return this.catalogService.updateProductVariant(req.tenantId, id, body);
+  }
+  @Delete('variants/:id')
+  async deleteVariant(@Req() req: any, @Param('id') id: string) {
+    return this.catalogService.deleteProductVariant(req.tenantId, id);
+  }
+
   // ─── Catálogo del Editor ───────────────────────────────────────────────────────
   @Get('available')
   async getAvailableCatalog(@Req() req: any) {
     return this.catalogService.getAvailableCatalog(req.user.sub, req.user.userType);
+  }
+
+  // ─── Catálogo filtrado para DISTRIBUTOR_USER ──────────────────────────────────
+  // Este endpoint NO usa TenantGuard — el distribuidor no tiene tenantId propio.
+  // Se filtra automáticamente por los catálogos autorizados al distribuidor.
+  @Get('distributor/products')
+  async getDistributorCatalog(@Req() req: any) {
+    // Forzar tipo DISTRIBUTOR_USER para garantizar filtrado correcto
+    return this.catalogService.getAvailableCatalog(req.user.sub, 'DISTRIBUTOR_USER');
   }
 }

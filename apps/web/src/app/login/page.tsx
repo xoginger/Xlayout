@@ -1,3 +1,8 @@
+/**
+ * Creado y diseñado por XO
+ * XLayout System — Página de Login
+ */
+
 "use client";
 
 import React, { useState } from 'react';
@@ -13,6 +18,22 @@ export default function LoginPage() {
   const [error, setError] = useState('');
   const router = useRouter();
   const setAuth = useAuthStore(state => state.setAuth);
+  const fetchMe = useAuthStore(state => state.fetchMe);
+
+  // Determina la ruta de redirección según el tipo de usuario
+  const getRedirectPath = (userType: string): string => {
+    switch (userType) {
+      case 'PLATFORM_USER':
+        return '/admin/platform/overview';
+      case 'COMPANY_USER':
+        return '/admin/company/dashboard';
+      case 'DISTRIBUTOR_USER':
+        return '/admin/distributor/dashboard';
+      case 'END_USER':
+      default:
+        return '/editor';
+    }
+  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -22,11 +43,15 @@ export default function LoginPage() {
     try {
       const res = await api.post<{ access_token: string, user: any }>('/auth/login', { email, password });
       setAuth(res.access_token, res.user);
-      
-      // Always redirect to editor as requested for professional flow
-      router.push('/editor');
+
+      // Hidratar el store con datos completos del usuario (/auth/me)
+      await fetchMe();
+
+      // Redirigir según el tipo de usuario retornado por el login
+      const userType = res.user?.userType || 'END_USER';
+      router.push(getRedirectPath(userType));
     } catch (err: any) {
-      setError(err.message || 'Login failed. Please check your credentials.');
+      setError(err.message || 'Error de autenticación. Verifica tus credenciales.');
     } finally {
       setIsLoading(false);
     }

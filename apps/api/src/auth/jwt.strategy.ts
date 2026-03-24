@@ -26,6 +26,9 @@ export class JwtStrategy extends PassportStrategy(Strategy, 'jwt') {
       user = await this.prisma.client.platformUser.findUnique({ where: { id: sub } });
     } else if (userType === 'COMPANY_USER') {
       user = await this.prisma.client.companyUser.findUnique({ where: { id: sub } });
+    } else if (userType === 'DISTRIBUTOR_USER') {
+      // El diseñador o administrador de un distribuidor
+      user = await this.prisma.client.distributorUser.findUnique({ where: { id: sub } });
     } else if (userType === 'END_USER') {
       user = await this.prisma.client.endUser.findUnique({ where: { id: sub } });
     }
@@ -38,7 +41,11 @@ export class JwtStrategy extends PassportStrategy(Strategy, 'jwt') {
       sub: sub, 
       email: payload.email, 
       userType, 
-      tenantId: (user as any).tenantId || null 
+      // tenantId presente para COMPANY_USER
+      tenantId: (user as any).tenantId || null,
+      // distributorId y rol presentes para DISTRIBUTOR_USER
+      distributorId: payload.distributorId || (user as any).distributorId || null,
+      distributorRole: payload.distributorRole || (user as any).role || null,
     };
   }
 }

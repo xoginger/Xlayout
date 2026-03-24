@@ -1,6 +1,8 @@
+// Creado y diseñado por XO
 // schema.prisma — XLayout Master SaaS Backend
-// Version: master-backend-v1 | Build: 2026-03-16
+// Version: commercial-multitenant-v2 | Build: 2026-03-23
 // Architecture: Multi-tenant, single schema, tenant_id column strategy
+// Incluye modelo comercial: Fabricante → Distribuidor → Diseñador → Usuario Final
 
 generator client {
   provider      = "prisma-client-js"
@@ -58,8 +60,24 @@ enum ImportJobStatus {
 enum AuditActorType {
   PLATFORM_USER
   COMPANY_USER
+  DISTRIBUTOR_USER
   END_USER
   SYSTEM
+}
+
+// Rol del usuario dentro de la empresa distribuidora
+enum DistributorUserRole {
+  DISTRIBUTOR_ADMIN  // Administrador de la empresa distribuidora
+  DESIGNER           // Diseñador — usa el editor y genera propuestas
+  SALES              // Vendedor — genera cotizaciones comerciales
+}
+
+// Alcance del incremento comercial del distribuidor
+enum MarkupScope {
+  GLOBAL       // Aplica a todos los productos de todos los fabricantes
+  BY_TENANT    // Aplica a todos los productos de un fabricante específico
+  BY_LINE      // Aplica a una línea de producto
+  BY_PRODUCT   // Aplica a un producto específico
 }
 
 // ============================================================
@@ -108,10 +126,15 @@ model Tenant {
   productAssets    ProductAsset[]
   productPrices    ProductPrice[]
   productConditions ProductCondition[]
+  productVariants  ProductVariant[]
   catalogAccesses  CatalogAccess[]
   activationCodes  ActivationCode[]
   importJobs       ImportJob[]
   auditLogs        AuditLog[]       @relation("TenantAudit")
+
+  // Relaciones del modelo comercial de distribuidores
+  distributorAccesses        ManufacturerDistributorAccess[]
+  distributorCatalogAccesses DistributorCatalogAccess[]
 
   // Legacy backward-compat relations (existing schema)
   legacyBrands     Brand[]              @relation("LegacyBrands")
@@ -233,6 +256,7 @@ model Product {
   assets     ProductAsset[]
   prices     ProductPrice[]
   conditions ProductCondition[]
+  variants   ProductVariant[]
 
   @@unique([tenantId, sku])
   @@map("products")
@@ -384,6 +408,134 @@ model ImportJob {
   createdBy CompanyUser @relation("ImportCreator", fields: [createdById], references: [id])
 
   @@map("import_jobs")
+}
+
+// ============================================================
+// MODELO COMERCIAL — DISTRIBUIDORES (commercial-multitenant-v2)
+// ============================================================
+
+// Empresa distribuidora — actor comercial intermedio entre fabricante y diseñador
+model DistributorCompany {
+  id           String     @id @default(uuid())
+  name         String
+  slug         String     @unique
+  contactEmail String?    @map("contact_email")
+  phone        String?
+  country      String?
+  status       UserStatus @default(ACTIVE)
+  metadata     Json?
+  createdAt    DateTime   @default(now()) @map("created_at")
+  updatedAt    DateTime   @updatedAt @map("updated_at")
+
+  // Usuarios internos del distribuidor (diseñadores, administradores, vendedores)
+  users                  DistributorUser[]
+  // Catálogos de fabricantes autorizados
+  manufacturerAccesses   ManufacturerDistributorAccess[]
+  // Acceso específico a listas de precio de cada fabricante
+  catalogAccesses        DistributorCatalogAccess[]
+  // Reglas de incremento comercial
+  priceMarkups           DistributorPriceMarkup[]
+
+  @@map("distributor_companies")
+}
+
+// Usuario dentro de una empresa distribuidora — diseñadores, comerciales, admin
+model DistributorUser {
+  id             String              @id @default(uuid())
+  distributorId  String              @map("distributor_id")
+  email          String              @unique
+  passwordHash   String              @map("password_hash")
+  firstName      String              @map("first_name")
+  lastName       String              @map("last_name")
+  role           DistributorUserRole @default(DESIGNER)
+  status         UserStatus          @default(ACTIVE)
+  preferences    Json?
+  createdAt      DateTime            @default(now()) @map("created_at")
+  updatedAt      DateTime            @updatedAt @map("updated_at")
+
+  // Relación con su empresa distribuidora
+  distributor    DistributorCompany @relation(fields: [distributorId], references: [id], onDelete: Cascade)
+
+  @@map("distributor_users")
+}
+
+// Autorización de un fabricante hacia un distribuidor — tabla de control de acceso macro
+model ManufacturerDistributorAccess {
+  id             String    @id @default(uuid())
+  tenantId       String    @map("tenant_id")       // Fabricante (Tenant)
+  distributorId  String    @map("distributor_id")  // Distribuidor autorizado
+  active         Boolean   @default(true)
+  grantedAt      DateTime  @default(now()) @map("granted_at")
+  expiresAt      DateTime? @map("expires_at")
+  notes          String?   // Notas internas del fabricante sobre esta autorización
+
+  tenant       Tenant             @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  distributor  DistributorCompany @relation(fields: [distributorId], references: [id], onDelete: Cascade)
+
+  // Un distribuidor solo puede tener UN acceso activo por fabricante
+  @@unique([tenantId, distributorId])
+  @@map("manufacturer_distributor_accesses")
+}
+
+// Qué lista de precios recibe el distribuidor para un fabricante específico
+model DistributorCatalogAccess {
+  id             String   @id @default(uuid())
+  distributorId  String   @map("distributor_id")
+  tenantId       String   @map("tenant_id")        // Fabricante
+  // Tipo de lista de precios asignada: 'A'|'B'|'C'|'D'|'E'
+  priceListType  String   @default("A") @map("price_list_type")
+  active         Boolean  @default(true)
+  grantedAt      DateTime @default(now()) @map("granted_at")
+
+  distributor  DistributorCompany @relation(fields: [distributorId], references: [id], onDelete: Cascade)
+  tenant       Tenant             @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  // Un distribuidor solo puede tener UN acceso de catálogo por fabricante
+  @@unique([distributorId, tenantId])
+  @@map("distributor_catalog_accesses")
+}
+
+// Regla de incremento comercial del distribuidor — flexible por scope
+// Precio final = precioBase * (1 + markupPercent / 100)
+model DistributorPriceMarkup {
+  id             String      @id @default(uuid())
+  distributorId  String      @map("distributor_id")
+  scope          MarkupScope @default(GLOBAL)
+  // Contexto del scope — null si no aplica para el nivel seleccionado
+  tenantId       String?     @map("tenant_id")        // Si scope = BY_TENANT
+  productLineId  String?     @map("product_line_id")  // Si scope = BY_LINE
+  productId      String?     @map("product_id")       // Si scope = BY_PRODUCT
+  // Porcentaje de incremento: 15.0000 = 15%
+  markupPercent  Decimal     @map("markup_percent") @db.Decimal(8, 4)
+  active         Boolean     @default(true)
+  // Mayor prioridad = se aplica primero si hay múltiples reglas que apliquen
+  priority       Int         @default(0)
+  createdAt      DateTime    @default(now()) @map("created_at")
+  updatedAt      DateTime    @updatedAt @map("updated_at")
+
+  distributor  DistributorCompany @relation(fields: [distributorId], references: [id], onDelete: Cascade)
+
+  @@map("distributor_price_markups")
+}
+
+// Variante de producto — preparada para expansión futura (colores, texturas, materiales)
+// No tiene UI ni endpoints activos en esta fase; es la estructura base lista para fase 2
+model ProductVariant {
+  id          String   @id @default(uuid())
+  productId   String   @map("product_id")
+  tenantId    String   @map("tenant_id")
+  name        String                          // "Blanco Mate", "Roble Natural"
+  variantType String   @map("variant_type")  // 'color'|'texture'|'material'|'finish'
+  sku         String?
+  // Datos técnicos de la variante: hex de color, URL de textura, etc.
+  metadata    Json?
+  active      Boolean  @default(true)
+  createdAt   DateTime @default(now()) @map("created_at")
+
+  product  Product @relation(fields: [productId], references: [id], onDelete: Cascade)
+  tenant   Tenant  @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@map("product_variants")
 }
 
 // ============================================================

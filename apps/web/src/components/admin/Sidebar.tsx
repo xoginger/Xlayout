@@ -8,12 +8,14 @@ import React from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 
-export type SidebarType = 'platform' | 'company';
+// Tipos de sidebar: platform (Xocotzin), company (fabricante), distributor (distribuidor)
+export type SidebarType = 'platform' | 'company' | 'distributor';
 
 interface SidebarProps {
   type: SidebarType;
 }
 
+// Iconos para la navegación lateral
 const NavIcon = ({ name }: { name: string }) => {
   switch (name) {
     case 'overview':
@@ -32,14 +34,24 @@ const NavIcon = ({ name }: { name: string }) => {
       return <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-3 7h3m-3 4h3m-6-4h.01M9 16h.01"/></svg>;
     case 'editor':
       return <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9.75 17L9 20l-1 1h8l-1-1-.75-3M3 13h18M5 17h14a2 2 0 002-2V5a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"/></svg>;
+    // Ícono de edificio para distribuidores
+    case 'distributors':
+      return <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M8 14v3m4-3v3m4-3v3M3 21h18M3 10h18M3 7l9-4 9 4M4 10h16v11H4V10z"/></svg>;
+    // Ícono de porcentaje para markup de precios
+    case 'markup':
+      return <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M7 7h.01M17 17h.01M7 17L17 7"/></svg>;
+    // Ícono de paleta para variantes
+    case 'variants':
+      return <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M7 21a4 4 0 01-4-4V5a2 2 0 012-2h4a2 2 0 012 2v12a4 4 0 01-4 4zm0 0h12a2 2 0 002-2v-4a2 2 0 00-2-2h-2.343M11 7.343l1.657-1.657a2 2 0 012.828 0l2.829 2.829a2 2 0 010 2.828l-8.486 8.485M7 17h.01"/></svg>;
     default:
       return <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/></svg>;
   }
 };
 
+// Ítem de navegación individual con estado activo
 const SidebarItem = ({ href, label, icon }: { href: string; label: string; icon: string }) => {
   const pathname = usePathname();
-  const isActive = pathname === href;
+  const isActive = pathname === href || pathname.startsWith(href + '/');
 
   return (
     <Link 
@@ -56,40 +68,68 @@ const SidebarItem = ({ href, label, icon }: { href: string; label: string; icon:
   );
 };
 
+// Configuración de secciones por tipo de sidebar
+const getSections = (type: SidebarType) => {
+  if (type === 'platform') {
+    const base = '/admin/platform';
+    return [
+      { label: 'Vista General', href: `${base}/overview`, icon: 'overview' },
+      { label: 'Inquilinos', href: `${base}/tenants`, icon: 'tenants' },
+      { label: 'Usuarios', href: `${base}/users`, icon: 'users' },
+      { label: 'Actividad', href: `${base}/activity`, icon: 'audit' },
+      { label: 'Configuración', href: `${base}/config`, icon: 'config' },
+    ];
+  }
+
+  if (type === 'distributor') {
+    const base = '/admin/distributor';
+    return [
+      { label: 'Tablero', href: `${base}/dashboard`, icon: 'overview' },
+      { label: 'Catálogos', href: `${base}/catalogs`, icon: 'catalog' },
+      { label: 'Markup de Precios', href: `${base}/markup`, icon: 'markup' },
+      { label: 'Diseñadores', href: `${base}/designers`, icon: 'users' },
+    ];
+  }
+
+  // company (fabricante)
+  const base = '/admin/company';
+  return [
+    { label: 'Tablero', href: `${base}/dashboard`, icon: 'overview' },
+    { label: 'Catálogo', href: `${base}/catalog`, icon: 'catalog' },
+    { label: 'Variantes', href: `${base}/catalog/variants`, icon: 'variants' },
+    { label: 'Precios', href: `${base}/pricing`, icon: 'pricing' },
+    { label: 'Distribuidores', href: `${base}/distributors`, icon: 'distributors' },
+    { label: 'Códigos de Acceso', href: `${base}/access/codes`, icon: 'users' },
+    { label: 'Importaciones', href: `${base}/imports`, icon: 'imports' },
+    { label: 'Usuarios', href: `${base}/users`, icon: 'users' },
+    { label: 'Auditoría', href: `${base}/audit`, icon: 'audit' },
+  ];
+};
+
+// Título según tipo de panel
+const getPanelTitle = (type: SidebarType) => {
+  if (type === 'platform') return 'Gestión de Plataforma';
+  if (type === 'distributor') return 'Panel de Distribuidor';
+  return 'Espacio de Empresa';
+};
+
 export const Sidebar = ({ type }: SidebarProps) => {
-  const base = type === 'platform' ? '/admin/platform' : '/admin/company';
-  
-  const sections = type === 'platform' 
-    ? [
-        { label: 'Vista General', href: `${base}/overview`, icon: 'overview' },
-        { label: 'Inquilinos', href: `${base}/tenants`, icon: 'tenants' },
-        { label: 'Usuarios', href: `${base}/users`, icon: 'users' },
-        { label: 'Actividad', href: `${base}/activity`, icon: 'audit' },
-        { label: 'Configuración', href: `${base}/config`, icon: 'config' },
-      ]
-    : [
-        { label: 'Tablero', href: `${base}/dashboard`, icon: 'overview' },
-        { label: 'Catálogo', href: `${base}/catalog`, icon: 'catalog', subItems: [
-          { label: 'Líneas', href: `${base}/catalog/lines` },
-          { label: 'Productos', href: `${base}/catalog/products` },
-        ]},
-        { label: 'Precios', href: `${base}/pricing`, icon: 'pricing' },
-        { label: 'Códigos de Acceso', href: `${base}/access/codes`, icon: 'users' },
-        { label: 'Importaciones', href: `${base}/imports`, icon: 'imports' },
-        { label: 'Usuarios', href: `${base}/users`, icon: 'users' },
-        { label: 'Auditoría', href: `${base}/audit`, icon: 'audit' },
-      ];
+  const sections = getSections(type);
 
   return (
     <aside className="w-64 admin-sidebar flex flex-col p-4 gap-6">
       <div className="flex items-center gap-2 px-2 pb-4 border-b border-slate-200">
-        <div className="w-8 h-8 bg-blue-600 rounded-lg flex items-center justify-center text-white font-bold">XL</div>
-        <span className="font-bold text-slate-900 tracking-tight">XLayout Admin</span>
+        <div className={`w-8 h-8 rounded-lg flex items-center justify-center text-white font-bold ${
+          type === 'distributor' ? 'bg-emerald-600' : 'bg-blue-600'
+        }`}>XL</div>
+        <span className="font-bold text-slate-900 tracking-tight">
+          {type === 'distributor' ? 'XLayout Dist.' : 'XLayout Admin'}
+        </span>
       </div>
       
       <nav className="flex-1 flex flex-col gap-1">
         <div className="text-[10px] font-bold text-slate-400 uppercase tracking-widest px-4 mb-2">
-          {type === 'platform' ? 'Gestión de Plataforma' : 'Espacio de Empresa'}
+          {getPanelTitle(type)}
         </div>
         {sections.map((item) => (
           <SidebarItem key={item.href} {...item} icon={item.icon || 'default'} />
@@ -111,8 +151,8 @@ export const Sidebar = ({ type }: SidebarProps) => {
         </Link>
         <div className="px-4 py-2 text-[10px] text-slate-400 font-mono">
           Módulo: Panel de Administración<br/>
-          Versión: admin-panel-v2-full<br/>
-          Build: 2026-03-16
+          Versión: commercial-multitenant-v2<br/>
+          Build: 2026-03-23
         </div>
       </div>
     </aside>
