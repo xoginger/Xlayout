@@ -14,13 +14,14 @@ export interface QuoteLineItem {
   unitPrice: number | null;
   subtotal: number | null;
   hasPrice: boolean;
+  thumbnail?: string | null;
 }
 
 export interface SceneQuote {
   items: QuoteLineItem[];
   total: number;
-  totalItems: number;
-  itemsWithoutPrice: number;
+  totalItems: number; // total de piezas físicas
+  itemsWithoutPrice: number; // número de partidas (productos distintos) sin precio
 }
 
 // ─── Construir cotización a partir de los items de la escena ─────────────────
@@ -28,10 +29,10 @@ export interface SceneQuote {
 /**
  * Agrupa los SceneItem por productId, calcula cantidades,
  * y resuelve el precio unitario usando la jerarquía:
- *   finalPrice → price → metadata.basePrice → null
+ *   finalPrice (con markup) → price (lista asignada) → basePrice (fallback)
  */
-export function buildSceneQuote(items: SceneItem[]): SceneQuote {
-  // Solo procesar items de tipo 'catalog-item' (productos del catálogo)
+export function buildSceneQuote(items: any[]): SceneQuote {
+  // Solo procesar items de tipo 'catalog-item'
   const catalogItems = items.filter(i => i.type === 'catalog-item');
 
   // Agrupar por productId
@@ -41,6 +42,7 @@ export function buildSceneQuote(items: SceneItem[]): SceneQuote {
     sku: string;
     quantity: number;
     unitPrice: number | null;
+    thumbnail?: string | null;
   }>();
 
   for (const item of catalogItems) {
@@ -49,7 +51,6 @@ export function buildSceneQuote(items: SceneItem[]): SceneQuote {
     if (existing) {
       existing.quantity += 1;
     } else {
-      // Resolver precio con jerarquía: finalPrice → price → basePrice → null
       const resolvedPrice = resolvePrice(item);
 
       groupMap.set(item.productId, {
@@ -58,6 +59,7 @@ export function buildSceneQuote(items: SceneItem[]): SceneQuote {
         sku: item.metadata?.sku || '',
         quantity: 1,
         unitPrice: resolvedPrice,
+        thumbnail: item.metadata?.thumbnail,
       });
     }
   }
@@ -73,6 +75,7 @@ export function buildSceneQuote(items: SceneItem[]): SceneQuote {
       unitPrice: g.unitPrice,
       subtotal: g.unitPrice !== null ? g.unitPrice * g.quantity : null,
       hasPrice: g.unitPrice !== null,
+      thumbnail: g.thumbnail,
     }));
 
   // Calcular totales
@@ -85,19 +88,18 @@ export function buildSceneQuote(items: SceneItem[]): SceneQuote {
 
 // ─── Resolver precio con jerarquía ──────────────────────────────────────────
 
-function resolvePrice(item: SceneItem): number | null {
-  // 1. finalPrice del metadata (precio con markup del distribuidor)
+function resolvePrice(item: any): number | null {
+  // 1. finalPrice del metadata (precio con markup del distribuidor aplicado)
   const finalPrice = item.metadata?.finalPrice;
   if (typeof finalPrice === 'number' && finalPrice > 0) return finalPrice;
 
-  // 2. price del SceneItem (precio base de la lista asignada)
+  // 2. price del SceneItem (precio base de la lista asignada p.ej 'A')
   if (typeof item.price === 'number' && item.price > 0) return item.price;
 
-  // 3. basePrice del metadata (precio base sin lista)
+  // 3. basePrice del metadata (precio de referencia si no hay lista)
   const basePrice = item.metadata?.basePrice;
   if (typeof basePrice === 'number' && basePrice > 0) return basePrice;
 
-  // 4. Sin precio disponible
   return null;
 }
 

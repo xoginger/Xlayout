@@ -168,6 +168,7 @@ export interface Opening {
 export interface ProjectInfo {
   id: string;
   name: string;
+  priceType?: string; // 'A', 'B', 'C', 'D', 'E'
   lastSavedAt?: string | null;
   isDirty: boolean;
   isSaving: boolean;
@@ -263,6 +264,7 @@ interface EditorState {
   setCalibrationState: (data: Partial<CalibrationState>) => void;
   updateBlueprint: (data: Partial<BlueprintState>) => void;
   clearBlueprint: () => void;
+  setPriceType: (type: string) => void;
 }
 
 export const useEditorStore = create<EditorState>((set, get) => ({
@@ -771,9 +773,15 @@ export const useEditorStore = create<EditorState>((set, get) => ({
   setCalibrationState: (data) => set((state) => ({
     calibrationState: { ...state.calibrationState, ...data }
   })),
-  clearBlueprint: () => set((state) => ({
+  clearBlueprint: () => set({
     blueprint: {
       url: null, position: [0, -0.01, 0], scale: 1, rotation: 0, opacity: 0.5, locked: false, visible: true
     }
-  }))
+  }),
+
+  setPriceType: (type) => {
+    set((state) => ({
+      project: { ...state.project, priceType: type, isDirty: true }
+    }));
+  }
 }));
