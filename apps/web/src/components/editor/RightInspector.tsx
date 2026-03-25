@@ -6,6 +6,7 @@ import React, { useState } from 'react';
 import { useEditorStore, Scene, Layer } from '@/store/editor-store';
 import { calculateDistance } from '@/utils/cad-math';
 import { extractFirstPageAsImage } from '@/utils/pdf-extractor';
+import { QuoteInspectorSection } from './QuoteInspectorSection';
 
 export const RightInspector: React.FC = () => {
   const { 
@@ -16,7 +17,7 @@ export const RightInspector: React.FC = () => {
     addScene, updateScene, removeScene, applyScene, setProjectName, updateBlueprint, setActiveTool
   } = useEditorStore();
 
-  const [activeTab, setActiveTab] = useState<'properties' | 'scene' | 'layers' | 'components' | 'blueprint'>('properties');
+  const [activeTab, setActiveTab] = useState<'properties' | 'scene' | 'layers' | 'components' | 'quote' | 'blueprint'>('properties');
   const [isCollapsed, setIsCollapsed] = useState(false);
 
   const selectedId = selectedIds.length === 1 ? selectedIds[0] : null;
@@ -610,6 +611,7 @@ export const RightInspector: React.FC = () => {
             <button onClick={() => setActiveTab('properties')} className={`flex-1 py-1.5 px-2 text-[9px] font-black uppercase tracking-widest transition-all rounded-md whitespace-nowrap ${activeTab === 'properties' ? 'text-zinc-900 bg-white border border-zinc-200 shadow-sm' : 'text-zinc-400 hover:text-zinc-600'}`}>Props</button>
             <button onClick={() => setActiveTab('scene')} className={`flex-1 py-1.5 px-2 text-[9px] font-black uppercase tracking-widest transition-all rounded-md whitespace-nowrap ${activeTab === 'scene' ? 'text-zinc-900 bg-white border border-zinc-200 shadow-sm' : 'text-zinc-400 hover:text-zinc-600'}`}>Visuales</button>
             <button onClick={() => setActiveTab('layers')} className={`flex-1 py-1.5 px-2 text-[9px] font-black uppercase tracking-widest transition-all rounded-md whitespace-nowrap ${activeTab === 'layers' ? 'text-zinc-900 bg-white border border-zinc-200 shadow-sm' : 'text-zinc-400 hover:text-zinc-600'}`}>Capas</button>
+            <button onClick={() => setActiveTab('quote')} className={`flex-1 py-1.5 px-2 text-[9px] font-black uppercase tracking-widest transition-all rounded-md whitespace-nowrap ${activeTab === 'quote' ? 'text-emerald-700 bg-emerald-50 border border-emerald-200 shadow-sm' : 'text-zinc-400 hover:text-zinc-600'}`}>💰</button>
             <button onClick={() => setActiveTab('blueprint')} className={`flex-1 py-1.5 px-2 text-[9px] font-black uppercase tracking-widest transition-all rounded-md whitespace-nowrap ${activeTab === 'blueprint' ? 'text-zinc-900 bg-white border border-zinc-200 shadow-sm' : 'text-zinc-400 hover:text-zinc-600'}`}>Plano</button>
           </div>
 
@@ -618,6 +620,7 @@ export const RightInspector: React.FC = () => {
             {activeTab === 'scene' && renderScene()}
             {activeTab === 'layers' && renderLayers()}
             {activeTab === 'components' && renderComponents()}
+            {activeTab === 'quote' && <QuoteInspectorSection />}
             {activeTab === 'blueprint' && renderBlueprint()}
           </div>
         </>
