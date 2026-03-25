@@ -36,6 +36,7 @@ export interface PriceMarkup {
 interface User {
   id: string;
   email: string;
+  userType: UserType;
   role: 'platform_admin' | 'company_admin' | 'distributor_user' | 'end_user';
   preferences?: any;
   tenants: TenantContext[];
@@ -43,6 +44,10 @@ interface User {
   distributorId?: string;
   distributorName?: string;
   distributorRole?: 'DISTRIBUTOR_ADMIN' | 'DESIGNER' | 'SALES';
+  // Campos específicos del usuario de empresa
+  companyRole?: 'TENANT_ADMIN' | 'BUSINESS_OWNER' | 'CATALOG_MANAGER' | 'SALES_USER';
+  tenantId?: string;
+  platformRole?: 'PLATFORM_OWNER' | 'PLATFORM_ADMIN';
   priceMarkups?: PriceMarkup[];
 }
 
@@ -53,14 +58,20 @@ interface AuthState {
   isLoading: boolean;
   activeTenantId: string | null;
   activeTenantName: string | null;
+  // userType persistido del login para redirección pre-fetch
+  loginUserType: UserType | null;
   
   setAuth: (token: string, userData: any) => void;
   fetchMe: () => Promise<void>;
   updatePreferences: (prefs: any) => Promise<void>;
   setActiveTenantId: (id: string) => void;
   getActiveTenant: () => TenantContext | null;
-  // Devuelve true si el usuario es de tipo distribuidor (diseñador o admin)
+  // Helpers de tipo y rol
+  getUserType: () => UserType | null;
+  getDistributorRole: () => string | null;
   isDistributorUser: () => boolean;
+  isPlatformUser: () => boolean;
+  isCompanyUser: () => boolean;
   logout: () => void;
 }
 
@@ -73,10 +84,13 @@ export const useAuthStore = create<AuthState>()(
       isLoading: false,
       activeTenantId: null,
       activeTenantName: null,
+      loginUserType: null,
 
       setAuth: (token, userData) => set({ 
         token, 
-        isAuthenticated: true 
+        isAuthenticated: true,
+        // Guardar userType del login para redirección inmediata
+        loginUserType: userData?.userType || null,
       }),
 
       fetchMe: async () => {
@@ -96,11 +110,12 @@ export const useAuthStore = create<AuthState>()(
             user: me, 
             isLoading: false, 
             isAuthenticated: true,
+            loginUserType: me.userType || null,
             activeTenantId: activeTenant?.tenantId || null,
             activeTenantName: activeTenant?.tenantName || null
           });
         } catch (err) {
-          set({ user: null, isAuthenticated: false, token: null, isLoading: false, activeTenantId: null, activeTenantName: null });
+          set({ user: null, isAuthenticated: false, token: null, isLoading: false, activeTenantId: null, activeTenantName: null, loginUserType: null });
         }
       },
 
@@ -136,9 +151,31 @@ export const useAuthStore = create<AuthState>()(
         return user.tenants.find(t => t.tenantId === activeTenantId) || null;
       },
 
+      // ─── Helpers de tipo y rol ─────────────────────────────────────────
+
+      getUserType: () => {
+        const { user, loginUserType } = get();
+        return user?.userType || loginUserType || null;
+      },
+
+      getDistributorRole: () => {
+        const { user } = get();
+        return user?.distributorRole || null;
+      },
+
       isDistributorUser: () => {
         const { user } = get();
-        return user?.role === 'distributor_user';
+        return user?.userType === 'DISTRIBUTOR_USER';
+      },
+
+      isPlatformUser: () => {
+        const { user } = get();
+        return user?.userType === 'PLATFORM_USER';
+      },
+
+      isCompanyUser: () => {
+        const { user } = get();
+        return user?.userType === 'COMPANY_USER';
       },
 
       logout: () => set({ 
@@ -146,7 +183,8 @@ export const useAuthStore = create<AuthState>()(
         user: null, 
         isAuthenticated: false,
         activeTenantId: null,
-        activeTenantName: null
+        activeTenantName: null,
+        loginUserType: null,
       }),
     }),
     {
@@ -155,9 +193,9 @@ export const useAuthStore = create<AuthState>()(
         token: state.token, 
         isAuthenticated: state.isAuthenticated,
         activeTenantId: state.activeTenantId,
-        activeTenantName: state.activeTenantName
+        activeTenantName: state.activeTenantName,
+        loginUserType: state.loginUserType,
       }),
     }
   )
 );
-

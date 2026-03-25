@@ -7,8 +7,12 @@ import { Controller, Get, Post, Body, Param, UseGuards, Req, Patch, Delete } fro
 import { ProjectsService } from './projects.service';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { TenantGuard } from '../common/guards/tenant.guard';
+import { UserTypeGuard } from '../common/guards/user-type.guard';
+import { AllowedUserTypes } from '../common/decorators/user-type.decorator';
 
-@UseGuards(JwtAuthGuard, TenantGuard)
+// Proyectos — accesible para PLATFORM, COMPANY y DISTRIBUTOR (no END_USER)
+@UseGuards(JwtAuthGuard, TenantGuard, UserTypeGuard)
+@AllowedUserTypes('PLATFORM_USER', 'COMPANY_USER', 'DISTRIBUTOR_USER')
 @Controller('projects')
 export class ProjectsController {
   constructor(private readonly projectsService: ProjectsService) {}

@@ -6,10 +6,14 @@
 import { Controller, Post, Get, Patch, Param, Body, UseGuards } from '@nestjs/common';
 import { CompanyUsersService } from './company-users.service';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
+import { UserTypeGuard } from '../common/guards/user-type.guard';
+import { AllowedUserTypes } from '../common/decorators/user-type.decorator';
 import { CompanyUserRole } from '@prisma/client';
 
+// Solo PLATFORM_USER y COMPANY_USER pueden gestionar usuarios de empresa
 @Controller('company-users')
-@UseGuards(JwtAuthGuard)
+@UseGuards(JwtAuthGuard, UserTypeGuard)
+@AllowedUserTypes('PLATFORM_USER', 'COMPANY_USER')
 export class CompanyUsersController {
   constructor(private readonly service: CompanyUsersService) {}
 

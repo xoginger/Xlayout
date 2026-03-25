@@ -6,9 +6,12 @@
 import { Controller, Get, Post, Body, Param, UseGuards } from '@nestjs/common';
 import { OrganizationsService } from './organizations.service';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
-import { TenantGuard } from '../common/guards/tenant.guard';
+import { UserTypeGuard } from '../common/guards/user-type.guard';
+import { AllowedUserTypes } from '../common/decorators/user-type.decorator';
 
-@UseGuards(JwtAuthGuard, TenantGuard)
+// Organizaciones/Tenants — solo PLATFORM_USER (superadmin)
+@UseGuards(JwtAuthGuard, UserTypeGuard)
+@AllowedUserTypes('PLATFORM_USER')
 @Controller('organizations')
 export class OrganizationsController {
   constructor(private readonly orgService: OrganizationsService) {}

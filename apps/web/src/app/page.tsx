@@ -4,7 +4,7 @@ import React, { useEffect } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useAuthStore } from '@/store/auth-store';
-
+import { getPostLoginRedirect } from '@/lib/route-permissions';
 // ─── Primitives matching the editor UI ─────────────────────────────────────
 
 const XLogo = () => (
@@ -144,10 +144,13 @@ const EditorMock = () => (
 export default function LandingPage() {
   const router = useRouter();
   const { token } = useAuthStore();
+  const getUserType = useAuthStore(s => s.getUserType);
 
   useEffect(() => {
     if (token) {
-      router.replace('/editor');
+      // Redirigir a la ruta correcta según el tipo de usuario
+      const redirect = getPostLoginRedirect(getUserType() || undefined);
+      router.replace(redirect);
     }
   }, [token, router]);
 

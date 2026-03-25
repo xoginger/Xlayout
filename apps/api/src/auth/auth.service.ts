@@ -51,6 +51,9 @@ export class AuthService {
   }
 
   async login(user: any) {
+    // Determinar el rol de empresa si es COMPANY_USER
+    const companyRole = user.userType === 'COMPANY_USER' ? (user.role || null) : null;
+
     const payload = {
       email: user.email,
       sub: user.id,
@@ -58,7 +61,10 @@ export class AuthService {
       // tenantId para COMPANY_USER; distributorId para DISTRIBUTOR_USER
       tenantId: user.tenantId || null,
       distributorId: (user.distributor?.id || user.distributorId) || null,
-      distributorRole: user.role || null,
+      // Rol interno de distribuidor (DISTRIBUTOR_ADMIN, DESIGNER, SALES)
+      distributorRole: user.userType === 'DISTRIBUTOR_USER' ? (user.role || null) : null,
+      // Rol interno de empresa (TENANT_ADMIN, BUSINESS_OWNER, CATALOG_MANAGER, SALES_USER)
+      companyRole,
     };
     return {
       access_token: this.jwtService.sign(payload),
@@ -66,8 +72,10 @@ export class AuthService {
         id: user.id,
         email: user.email,
         userType: user.userType,
+        tenantId: payload.tenantId,
         distributorId: payload.distributorId,
         distributorRole: payload.distributorRole,
+        companyRole,
       },
     };
   }
@@ -80,7 +88,9 @@ export class AuthService {
       return {
         id: user.id,
         email: user.email,
+        userType: 'PLATFORM_USER',
         role: 'platform_admin',
+        platformRole: user.role,
         preferences: user.preferences,
         tenants: tenants.map((t: any) => ({
           tenantId: t.id,
@@ -99,7 +109,10 @@ export class AuthService {
       return {
         id: user.id,
         email: user.email,
+        userType: 'COMPANY_USER',
         role: 'company_admin',
+        companyRole: user.role,
+        tenantId: user.tenantId,
         preferences: user.preferences,
         tenants: [{
           tenantId: user.tenantId,
@@ -123,6 +136,7 @@ export class AuthService {
       return {
         id: user.id,
         email: user.email,
+        userType: 'END_USER',
         role: 'end_user',
         preferences: user.preferences,
         tenants: (user as any).catalogAccesses.map((ca: any) => ({
@@ -162,6 +176,7 @@ export class AuthService {
       return {
         id: user.id,
         email: user.email,
+        userType: 'DISTRIBUTOR_USER',
         role: 'distributor_user',
         distributorRole: user.role,
         distributorId: user.distributorId,

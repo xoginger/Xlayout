@@ -6,9 +6,13 @@
 import { Controller, Post, Get, Delete, Param, Body, UseGuards, Req } from '@nestjs/common';
 import { CatalogAccessService } from './catalog-access.service';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
+import { UserTypeGuard } from '../common/guards/user-type.guard';
+import { AllowedUserTypes } from '../common/decorators/user-type.decorator';
 
+// Solo PLATFORM_USER y COMPANY_USER pueden gestionar acceso a catálogos
 @Controller('catalog-access')
-@UseGuards(JwtAuthGuard)
+@UseGuards(JwtAuthGuard, UserTypeGuard)
+@AllowedUserTypes('PLATFORM_USER', 'COMPANY_USER')
 export class CatalogAccessController {
   constructor(private readonly service: CatalogAccessService) {}
 

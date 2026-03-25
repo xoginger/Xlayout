@@ -13,6 +13,8 @@ import { CatalogService } from './catalog.service';
 import { ConversionService } from '../conversion/conversion.service';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { TenantGuard } from '../common/guards/tenant.guard';
+import { UserTypeGuard } from '../common/guards/user-type.guard';
+import { AllowedUserTypes } from '../common/decorators/user-type.decorator';
 import * as path from 'path';
 
 // Formatos 3D aceptados — incluye IFC, WRL, XSI
@@ -37,7 +39,9 @@ export class CatalogController {
     private readonly conversionService: ConversionService,
   ) {}
 
-  // ─── Marcas ─────────────────────────────────────────────────────────────
+  // ─── Marcas — solo PLATFORM_USER y COMPANY_USER pueden escribir ────────
+  @UseGuards(UserTypeGuard)
+  @AllowedUserTypes('PLATFORM_USER', 'COMPANY_USER')
   @Post('brands')
   async createBrand(@Req() req: any, @Body() body: { name: string; description?: string; logoUrl?: string }) {
     return this.catalogService.createBrand(req.tenantId, body);
@@ -49,14 +53,20 @@ export class CatalogController {
   @Get('lines')
   async getLines(@Req() req: any) { return this.catalogService.getProductLines(req.tenantId); }
 
+  @UseGuards(UserTypeGuard)
+  @AllowedUserTypes('PLATFORM_USER', 'COMPANY_USER')
   @Post('lines')
   async createLine(@Req() req: any, @Body() body: { name: string }) {
     return this.catalogService.createProductLine(req.tenantId, body.name);
   }
+  @UseGuards(UserTypeGuard)
+  @AllowedUserTypes('PLATFORM_USER', 'COMPANY_USER')
   @Patch('lines/:id')
   async updateLine(@Req() req: any, @Param('id') id: string, @Body() body: any) {
     return this.catalogService.updateProductLine(req.tenantId, id, body);
   }
+  @UseGuards(UserTypeGuard)
+  @AllowedUserTypes('PLATFORM_USER', 'COMPANY_USER')
   @Patch('lines/:id/status')
   async updateLineStatus(@Req() req: any, @Param('id') id: string, @Body() body: { active: boolean }) {
     return this.catalogService.updateProductLine(req.tenantId, id, { active: body.active });
@@ -65,16 +75,22 @@ export class CatalogController {
   // ─── Categorías ──────────────────────────────────────────────────────────
   @Get('categories')
   async getCategories(@Req() req: any) { return this.catalogService.getCategories(req.tenantId); }
+  @UseGuards(UserTypeGuard)
+  @AllowedUserTypes('PLATFORM_USER', 'COMPANY_USER')
   @Post('categories')
   async createCategory(@Req() req: any, @Body() body: { name: string; parentId?: string }) {
     return this.catalogService.createCategory(req.tenantId, body.name, body.parentId);
   }
+  @UseGuards(UserTypeGuard)
+  @AllowedUserTypes('PLATFORM_USER', 'COMPANY_USER')
   @Patch('categories/:id/status')
   async updateCategoryStatus(@Req() req: any, @Param('id') id: string, @Body() body: { active: boolean }) {
     return this.catalogService.updateCategoryStatus(req.tenantId, id, { active: body.active });
   }
 
   // ─── Productos ────────────────────────────────────────────────────────────
+  @UseGuards(UserTypeGuard)
+  @AllowedUserTypes('PLATFORM_USER', 'COMPANY_USER')
   @Post('products')
   async createProduct(@Req() req: any, @Body() body: any) {
     return this.catalogService.createProduct(req.tenantId, body);
@@ -83,22 +99,32 @@ export class CatalogController {
   async getProducts(@Req() req: any, @Query() query: any) {
     return this.catalogService.getProducts(req.tenantId, query);
   }
+  @UseGuards(UserTypeGuard)
+  @AllowedUserTypes('PLATFORM_USER', 'COMPANY_USER')
   @Patch('products/:id')
   async updateProduct(@Req() req: any, @Param('id') id: string, @Body() body: any) {
     return this.catalogService.updateProduct(req.tenantId, id, body);
   }
+  @UseGuards(UserTypeGuard)
+  @AllowedUserTypes('PLATFORM_USER', 'COMPANY_USER')
   @Patch('products/:id/status')
   async updateProductStatus(@Req() req: any, @Param('id') id: string, @Body() body: { active: boolean }) {
     return this.catalogService.updateProductStatus(req.tenantId, id, { active: body.active });
   }
+  @UseGuards(UserTypeGuard)
+  @AllowedUserTypes('PLATFORM_USER', 'COMPANY_USER')
   @Patch('products/:id/publish')
   async publishProduct(@Req() req: any, @Param('id') id: string) {
     return this.catalogService.publishProduct(req.tenantId, id);
   }
+  @UseGuards(UserTypeGuard)
+  @AllowedUserTypes('PLATFORM_USER', 'COMPANY_USER')
   @Patch('products/:id/unpublish')
   async unpublishProduct(@Req() req: any, @Param('id') id: string) {
     return this.catalogService.unpublishProduct(req.tenantId, id);
   }
+  @UseGuards(UserTypeGuard)
+  @AllowedUserTypes('PLATFORM_USER', 'COMPANY_USER')
   @Post('products/:id/prices')
   async createProductPrice(@Req() req: any, @Param('id') id: string, @Body() body: any) {
     return this.catalogService.createProductPrice(req.tenantId, id, body);
@@ -108,6 +134,8 @@ export class CatalogController {
   @Get('assets')
   async getAssets(@Req() req: any) { return this.catalogService.getAssets(req.tenantId); }
 
+  @UseGuards(UserTypeGuard)
+  @AllowedUserTypes('PLATFORM_USER', 'COMPANY_USER')
   @Post('assets')
   async createAsset(@Req() req: any, @Body() body: any) {
     // Marcar assets registrados por URL como url_only (no requiere conversión)
@@ -118,12 +146,16 @@ export class CatalogController {
     return asset;
   }
 
+  @UseGuards(UserTypeGuard)
+  @AllowedUserTypes('PLATFORM_USER', 'COMPANY_USER')
   @Delete('assets/:id')
   async deleteAsset(@Req() req: any, @Param('id') id: string) {
     return this.catalogService.deleteAsset(req.tenantId, id);
   }
 
   // ─── Assets — Carga de archivos (nuevo pipeline) ─────────────────────────
+  @UseGuards(UserTypeGuard)
+  @AllowedUserTypes('PLATFORM_USER', 'COMPANY_USER')
   @Post('assets/upload')
   @UseInterceptors(FileInterceptor('file'))
   async uploadAsset(
@@ -179,6 +211,8 @@ export class CatalogController {
   }
 
   // ─── Upload 3D dedicado — validación estricta de formato y tamaño ──────────
+  @UseGuards(UserTypeGuard)
+  @AllowedUserTypes('PLATFORM_USER', 'COMPANY_USER')
   @Post('assets/upload-3d')
   @UseInterceptors(FileInterceptor('file'))
   async upload3DModel(
@@ -212,6 +246,8 @@ export class CatalogController {
     return this.uploadAsset(req, file, body);
   }
 
+  @UseGuards(UserTypeGuard)
+  @AllowedUserTypes('PLATFORM_USER', 'COMPANY_USER')
   @Post('assets/:id/retry-conversion')
   async retryConversion(@Req() req: any, @Param('id') id: string) {
     return this.catalogService.retryAssetConversion(req.tenantId, id, this.conversionService);
@@ -220,10 +256,14 @@ export class CatalogController {
   // ─── Condiciones ──────────────────────────────────────────────────────────
   @Get('conditions')
   async getConditions(@Req() req: any) { return this.catalogService.getConditions(req.tenantId); }
+  @UseGuards(UserTypeGuard)
+  @AllowedUserTypes('PLATFORM_USER', 'COMPANY_USER')
   @Post('conditions')
   async createCondition(@Req() req: any, @Body() body: any) {
     return this.catalogService.createCondition(req.tenantId, body);
   }
+  @UseGuards(UserTypeGuard)
+  @AllowedUserTypes('PLATFORM_USER', 'COMPANY_USER')
   @Patch('conditions/:id/status')
   async updateConditionStatus(@Req() req: any, @Param('id') id: string, @Body() body: { active: boolean }) {
     return this.catalogService.updateConditionStatus(req.tenantId, id, { active: body.active });
@@ -232,6 +272,8 @@ export class CatalogController {
   // ─── Precios ──────────────────────────────────────────────────────────────
   @Get('prices')
   async getPrices(@Req() req: any) { return this.catalogService.getPrices(req.tenantId); }
+  @UseGuards(UserTypeGuard)
+  @AllowedUserTypes('PLATFORM_USER', 'COMPANY_USER')
   @Patch('prices/:id/status')
   async updatePriceStatus(@Req() req: any, @Param('id') id: string, @Body() body: { active: boolean }) {
     return this.catalogService.updatePriceStatus(req.tenantId, id, { active: body.active });
@@ -242,14 +284,20 @@ export class CatalogController {
   async getVariants(@Req() req: any, @Param('productId') productId: string) {
     return this.catalogService.getProductVariants(req.tenantId, productId);
   }
+  @UseGuards(UserTypeGuard)
+  @AllowedUserTypes('PLATFORM_USER', 'COMPANY_USER')
   @Post('products/:productId/variants')
   async createVariant(@Req() req: any, @Param('productId') productId: string, @Body() body: any) {
     return this.catalogService.createProductVariant(req.tenantId, productId, body);
   }
+  @UseGuards(UserTypeGuard)
+  @AllowedUserTypes('PLATFORM_USER', 'COMPANY_USER')
   @Patch('variants/:id')
   async updateVariant(@Req() req: any, @Param('id') id: string, @Body() body: any) {
     return this.catalogService.updateProductVariant(req.tenantId, id, body);
   }
+  @UseGuards(UserTypeGuard)
+  @AllowedUserTypes('PLATFORM_USER', 'COMPANY_USER')
   @Delete('variants/:id')
   async deleteVariant(@Req() req: any, @Param('id') id: string) {
     return this.catalogService.deleteProductVariant(req.tenantId, id);
@@ -262,8 +310,10 @@ export class CatalogController {
   }
 
   // ─── Catálogo filtrado para DISTRIBUTOR_USER ──────────────────────────────────
-  // Este endpoint NO usa TenantGuard — el distribuidor no tiene tenantId propio.
-  // Se filtra automáticamente por los catálogos autorizados al distribuidor.
+  // Solo DISTRIBUTOR_USER puede acceder a este endpoint
+  // Se filtra automáticamente por los catálogos autorizados al distribuidor
+  @UseGuards(UserTypeGuard)
+  @AllowedUserTypes('DISTRIBUTOR_USER')
   @Get('distributor/products')
   async getDistributorCatalog(@Req() req: any) {
     // Forzar tipo DISTRIBUTOR_USER para garantizar filtrado correcto

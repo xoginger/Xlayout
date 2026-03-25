@@ -7,8 +7,12 @@ import { Controller, Post, Body, Get, Param, UseGuards, Req } from '@nestjs/comm
 import { ImportsService } from './imports.service';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { TenantGuard } from '../common/guards/tenant.guard';
+import { UserTypeGuard } from '../common/guards/user-type.guard';
+import { AllowedUserTypes } from '../common/decorators/user-type.decorator';
 
-@UseGuards(JwtAuthGuard, TenantGuard)
+// Importaciones masivas — solo PLATFORM_USER y COMPANY_USER (gestión de catálogo)
+@UseGuards(JwtAuthGuard, TenantGuard, UserTypeGuard)
+@AllowedUserTypes('PLATFORM_USER', 'COMPANY_USER')
 @Controller('imports')
 export class ImportsController {
   constructor(private readonly importsService: ImportsService) {}

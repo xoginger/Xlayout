@@ -14,9 +14,14 @@ import {
   Delete,
 } from '@nestjs/common';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
+import { UserTypeGuard } from '../common/guards/user-type.guard';
+import { RolesGuard } from '../common/guards/roles.guard';
+import { DistributorOwnershipGuard } from '../common/guards/distributor-ownership.guard';
+import { AllowedUserTypes } from '../common/decorators/user-type.decorator';
+import { AllowedRoles } from '../common/decorators/roles.decorator';
 import { DistributorsService } from './distributors.service';
 
-// Controlador de distribuidores — accesible para fabricantes (COMPANY_USER) y plataforma (PLATFORM_USER)
+// Controlador de distribuidores — accesible según tipo de usuario y ownership
 @Controller('distributors')
 export class DistributorsController {
   constructor(private readonly distributorsService: DistributorsService) {}
@@ -36,17 +41,17 @@ export class DistributorsController {
       ...body,
       metadata: { registeredAt: new Date().toISOString(), source: 'public_form' },
     });
-    // TODO: Enviar notificación por email al(los) fabricante(s) registrados
     return { 
       message: 'Solicitud de registro recibida. Un administrador revisará tu solicitud.',
       id: distributor.id,
     };
   }
 
-  // ── Operaciones protegidas ────────────────────────────────────────────────
+  // ── Operaciones protegidas — solo PLATFORM_USER y COMPANY_USER ────────────
 
   /** Crea una nueva empresa distribuidora */
-  @UseGuards(JwtAuthGuard)
+  @UseGuards(JwtAuthGuard, UserTypeGuard)
+  @AllowedUserTypes('PLATFORM_USER', 'COMPANY_USER')
   @Post()
   async create(@Body() body: {
     name: string;
@@ -59,21 +64,24 @@ export class DistributorsController {
   }
 
   /** Lista todos los distribuidores del sistema */
-  @UseGuards(JwtAuthGuard)
+  @UseGuards(JwtAuthGuard, UserTypeGuard)
+  @AllowedUserTypes('PLATFORM_USER', 'COMPANY_USER')
   @Get()
   async findAll() {
     return this.distributorsService.findAll();
   }
 
-  /** Obtiene el detalle completo de un distribuidor */
-  @UseGuards(JwtAuthGuard)
-  @Get(':id')
-  async findOne(@Param('id') id: string) {
-    return this.distributorsService.findOne(id);
+  /** Obtiene el detalle de un distribuidor — con validación de ownership para DISTRIBUTOR_USER */
+  @UseGuards(JwtAuthGuard, UserTypeGuard, DistributorOwnershipGuard)
+  @AllowedUserTypes('PLATFORM_USER', 'COMPANY_USER', 'DISTRIBUTOR_USER')
+  @Get(':distributorId')
+  async findOne(@Param('distributorId') distributorId: string) {
+    return this.distributorsService.findOne(distributorId);
   }
 
   /** Actualiza datos de un distribuidor */
-  @UseGuards(JwtAuthGuard)
+  @UseGuards(JwtAuthGuard, UserTypeGuard)
+  @AllowedUserTypes('PLATFORM_USER', 'COMPANY_USER')
   @Patch(':id')
   async update(@Param('id') id: string, @Body() body: any) {
     return this.distributorsService.updateDistributor(id, body);
@@ -85,7 +93,8 @@ export class DistributorsController {
    * El fabricante (tenantId del token) autoriza a un distribuidor.
    * Devuelve el DistributorCatalogAccess creado o actualizado.
    */
-  @UseGuards(JwtAuthGuard)
+  @UseGuards(JwtAuthGuard, UserTypeGuard)
+  @AllowedUserTypes('PLATFORM_USER', 'COMPANY_USER')
   @Post(':distributorId/grant-access')
   async grantAccess(
     @Param('distributorId') distributorId: string,
@@ -112,7 +121,8 @@ export class DistributorsController {
   }
 
   /** Revoca el acceso de un distribuidor al catálogo del fabricante */
-  @UseGuards(JwtAuthGuard)
+  @UseGuards(JwtAuthGuard, UserTypeGuard)
+  @AllowedUserTypes('PLATFORM_USER', 'COMPANY_USER')
   @Delete(':distributorId/revoke-access')
   async revokeAccess(
     @Param('distributorId') distributorId: string,
@@ -123,17 +133,20 @@ export class DistributorsController {
   }
 
   /** Lista los distribuidores autorizados para el fabricante actual */
-  @UseGuards(JwtAuthGuard)
+  @UseGuards(JwtAuthGuard, UserTypeGuard)
+  @AllowedUserTypes('PLATFORM_USER', 'COMPANY_USER')
   @Get('by-tenant/authorized')
   async findByTenant(@Request() req: any) {
     const tenantId = req.user.tenantId;
     return this.distributorsService.findDistributorsByTenant(tenantId);
   }
 
-  // ── Markup de precios ────────────────────────────────────────────────────
+  // ── Markup — solo DISTRIBUTOR_ADMIN de su propio distribuidor ─────────────
 
-  /** Crea una regla de incremento de precio para un distribuidor */
-  @UseGuards(JwtAuthGuard)
+  /** Crea una regla de incremento de precio — validación de ownership */
+  @UseGuards(JwtAuthGuard, UserTypeGuard, RolesGuard, DistributorOwnershipGuard)
+  @AllowedUserTypes('PLATFORM_USER', 'DISTRIBUTOR_USER')
+  @AllowedRoles('DISTRIBUTOR_ADMIN')
   @Post(':distributorId/markup')
   async setMarkup(
     @Param('distributorId') distributorId: string,
@@ -149,8 +162,10 @@ export class DistributorsController {
     return this.distributorsService.setMarkup(distributorId, body);
   }
 
-  /** Desactiva una regla de markup */
-  @UseGuards(JwtAuthGuard)
+  /** Desactiva una regla de markup — validación de ownership */
+  @UseGuards(JwtAuthGuard, UserTypeGuard, RolesGuard, DistributorOwnershipGuard)
+  @AllowedUserTypes('PLATFORM_USER', 'DISTRIBUTOR_USER')
+  @AllowedRoles('DISTRIBUTOR_ADMIN')
   @Delete(':distributorId/markup/:markupId')
   async deactivateMarkup(
     @Param('distributorId') distributorId: string,

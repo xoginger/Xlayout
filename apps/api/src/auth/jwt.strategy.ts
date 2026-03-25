@@ -45,7 +45,9 @@ export class JwtStrategy extends PassportStrategy(Strategy, 'jwt') {
       tenantId: (user as any).tenantId || null,
       // distributorId y rol presentes para DISTRIBUTOR_USER
       distributorId: payload.distributorId || (user as any).distributorId || null,
-      distributorRole: payload.distributorRole || (user as any).role || null,
+      distributorRole: payload.distributorRole || (userType === 'DISTRIBUTOR_USER' ? (user as any).role : null),
+      // Rol interno de COMPANY_USER (TENANT_ADMIN, BUSINESS_OWNER, etc.)
+      companyRole: payload.companyRole || (userType === 'COMPANY_USER' ? (user as any).role : null),
     };
   }
 }

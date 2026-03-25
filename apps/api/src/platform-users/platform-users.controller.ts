@@ -6,9 +6,13 @@
 import { Controller, Get, Post, Body, UseGuards, Patch, Param } from '@nestjs/common';
 import { PlatformUsersService } from './platform-users.service';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
+import { UserTypeGuard } from '../common/guards/user-type.guard';
+import { AllowedUserTypes } from '../common/decorators/user-type.decorator';
 
+// Solo PLATFORM_USER puede gestionar usuarios de plataforma
 @Controller('platform-users')
-@UseGuards(JwtAuthGuard)
+@UseGuards(JwtAuthGuard, UserTypeGuard)
+@AllowedUserTypes('PLATFORM_USER')
 export class PlatformUsersController {
   constructor(private readonly service: PlatformUsersService) {}
 

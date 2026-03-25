@@ -13,7 +13,7 @@ import { Tooltip } from '@/components/ui/Tooltip';
 import { ProjectManager } from '@/components/editor/ProjectManager';
 import { CustomizeToolbarModal } from '@/components/editor/CustomizeToolbarModal';
 import { extractFirstPageAsImage } from '@/utils/pdf-extractor';
-import { getNavModulesForRole } from '@/lib/nav-permissions';
+import { getNavModules } from '@/lib/nav-permissions';
 
 // ─── Sistema de Menús Desplegables ───
 
@@ -89,7 +89,7 @@ export const GlobalHeader: React.FC<{ pathname: string }> = ({ pathname }) => {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const headerRef = useRef<HTMLElement>(null);
 
-  const modules = getNavModulesForRole(user?.role);
+  const modules = getNavModules(user?.userType, user?.distributorRole);
   const initials = user?.email?.slice(0, 2).toUpperCase() || 'US';
 
   const isEditor = pathname.startsWith('/editor');
