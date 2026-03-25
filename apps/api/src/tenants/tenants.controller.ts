@@ -6,9 +6,12 @@
 import { Controller, Get, Post, Param, Body, Patch, UseGuards } from '@nestjs/common';
 import { TenantsService } from './tenants.service';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
+import { UserTypeGuard } from '../common/guards/user-type.guard';
+import { AllowedUserTypes } from '../common/decorators/user-type.decorator';
 
 @Controller('tenants')
-@UseGuards(JwtAuthGuard)
+@UseGuards(JwtAuthGuard, UserTypeGuard)
+@AllowedUserTypes('PLATFORM_USER')
 export class TenantsController {
   constructor(private readonly service: TenantsService) {}
 

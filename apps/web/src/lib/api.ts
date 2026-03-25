@@ -12,7 +12,7 @@ interface RequestOptions extends RequestInit {
   params?: Record<string, string>;
 }
 
-// Construir una cadena de URL segura que funcione con URLs base absolutas y relativas
+// Construir URL segura con base absoluta/relativa y query params
 function buildUrl(base: string, endpoint: string, params?: Record<string, string>): string {
   const path = `${base}${endpoint.startsWith('/') ? endpoint : `/${endpoint}`}`;
   if (!params || Object.keys(params).length === 0) return path;
@@ -22,14 +22,23 @@ function buildUrl(base: string, endpoint: string, params?: Record<string, string
 
 export const api = {
   async request<T>(endpoint: string, options: RequestOptions = {}): Promise<T> {
-    const { token } = useAuthStore.getState();
+    const { token, activeTenantId } = useAuthStore.getState();
     
     const url = buildUrl(API_BASE_URL, endpoint, options.params);
 
     const headers = new Headers(options.headers);
+
+    // Token de autenticación JWT
     if (token) {
       headers.set('Authorization', `Bearer ${token}`);
     }
+
+    // Contexto de tenant activo — necesario para que PLATFORM_USER
+    // pueda operar sobre endpoints multi-tenant como catálogo
+    if (activeTenantId) {
+      headers.set('x-tenant-id', activeTenantId);
+    }
+
     if (!(options.body instanceof FormData)) {
       headers.set('Content-Type', 'application/json');
     }

@@ -130,6 +130,26 @@ export class CatalogController {
     return this.catalogService.createProductPrice(req.tenantId, id, body);
   }
 
+  // ─── Vincular / desvincular asset existente a producto ─────────────────────
+  @UseGuards(UserTypeGuard)
+  @AllowedUserTypes('PLATFORM_USER', 'COMPANY_USER')
+  @Post('products/:id/link-asset')
+  async linkAsset(@Req() req: any, @Param('id') id: string, @Body() body: { assetId: string }) {
+    return this.catalogService.linkAssetToProduct(req.tenantId, id, body.assetId);
+  }
+
+  @UseGuards(UserTypeGuard)
+  @AllowedUserTypes('PLATFORM_USER', 'COMPANY_USER')
+  @Post('products/:id/unlink-asset')
+  async unlinkAsset(@Req() req: any, @Param('id') id: string, @Body() body: { assetId: string }) {
+    return this.catalogService.unlinkAssetFromProduct(req.tenantId, id, body.assetId);
+  }
+
+  // ─── Assets sin producto asignado (para selector de biblioteca) ────────────
+  @Get('assets/unlinked')
+  async getUnlinkedAssets(@Req() req: any) {
+    return this.catalogService.getUnlinkedAssets(req.tenantId);
+  }
   // ─── Assets (Registro de URL — legado) ──────────────────────────────────
   @Get('assets')
   async getAssets(@Req() req: any) { return this.catalogService.getAssets(req.tenantId); }

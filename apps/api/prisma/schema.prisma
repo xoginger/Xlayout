@@ -265,7 +265,7 @@ model Product {
 model ProductAsset {
   id                String   @id @default(uuid())
   tenantId          String   @map("tenant_id")
-  productId         String   @map("product_id")
+  productId         String?  @map("product_id")
   assetType         String   // 'image' | 'model_3d' | 'footprint_svg' | 'thumbnail'
   fileUrl           String?  @map("file_url")
   thumbnailUrl      String?  @map("thumbnail_url")
@@ -279,8 +279,8 @@ model ProductAsset {
   metadata          Json?    // technical: triangles, materials, bbox, fileSize, validationStatus
   createdAt         DateTime @default(now()) @map("created_at")
 
-  tenant  Tenant  @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-  product Product @relation(fields: [productId], references: [id], onDelete: Cascade)
+  tenant  Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  product Product? @relation(fields: [productId], references: [id], onDelete: Cascade)
 
   @@map("product_assets")
 }

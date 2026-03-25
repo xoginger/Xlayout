@@ -76,7 +76,7 @@ export interface PlatformMetrics {
 export interface Asset3D {
   id: string;
   tenantId: string;
-  productId: string;
+  productId?: string | null;
   assetType: string;
   originalFormat?: string;
   conversionStatus: string;

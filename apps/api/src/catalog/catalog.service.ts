@@ -12,7 +12,11 @@ export class CatalogService {
 
   private validateTenantId(tenantId: string) {
     if (!tenantId) {
-      throw new BadRequestException('tenantId is required');
+      throw new BadRequestException(
+        'No se pudo resolver el contexto de tenant. ' +
+        'Para PLATFORM_USER, envíe el header x-tenant-id. ' +
+        'Para COMPANY_USER, verifique que el usuario tiene tenant asignado.'
+      );
     }
   }
 
@@ -245,13 +249,30 @@ export class CatalogService {
     return this.prisma.client.productAsset.delete({ where: { id } });
   }
 
-  // Llamado por el endpoint de subida — guarda metadatos del archivo subido, aún sin URL
+  /**
+   * Llamado por el endpoint de subida — guarda metadatos del archivo subido.
+   * Si es un modelo 3D, desvincula automáticamente cualquier modelo previo del mismo producto.
+   */
   async createAssetFromUpload(tenantId: string, data: any) {
     this.validateTenantId(tenantId);
+    
+    // Verificar que el producto pertenece al tenant
     const product = await this.prisma.client.product.findUnique({ where: { id: data.productId } });
     if (!product || product.tenantId !== tenantId) {
-      throw new ForbiddenException('You can only add assets to your own products');
+      throw new ForbiddenException('No puedes agregar assets a productos ajenos');
     }
+
+    // Si es un modelo 3D, desvincular modelos previos del mismo producto
+    if (data.assetType === 'model_3d') {
+      await this.prisma.client.productAsset.updateMany({
+        where: { 
+          productId: data.productId, 
+          assetType: 'model_3d' 
+        },
+        data: { productId: null }
+      });
+    }
+
     return this.prisma.client.productAsset.create({
       data: { ...data, tenantId },
       include: { product: true },
@@ -385,6 +406,78 @@ export class CatalogService {
     return this.prisma.client.productVariant.update({
       where: { id: variantId },
       data: { active: false },
+    });
+  }
+
+  // ─── Métodos para vincular/desvincular assets ──────────────────────────────
+  
+  /**
+   * Vincula un asset existente a un producto.
+   * Si es un modelo 3D, desvincula automáticamente cualquier modelo previo del mismo producto.
+   */
+  async linkAssetToProduct(tenantId: string, productId: string, assetId: string) {
+    this.validateTenantId(tenantId);
+    
+    // 1. Verificar existencia y pertenencia
+    const product = await this.prisma.client.product.findUnique({ where: { id: productId }, include: { assets: true } });
+    if (!product || product.tenantId !== tenantId) {
+      throw new ForbiddenException('Producto no encontrado o acceso denegado');
+    }
+
+    const asset = await this.prisma.client.productAsset.findUnique({ where: { id: assetId } });
+    if (!asset || asset.tenantId !== tenantId) {
+      throw new ForbiddenException('Asset no encontrado o acceso denegado');
+    }
+
+    // 2. Si el asset a vincular es un modelo 3D, desvincular otros modelos 3D del mismo producto
+    if (asset.assetType === 'model_3d') {
+      await this.prisma.client.productAsset.updateMany({
+        where: { 
+          productId, 
+          assetType: 'model_3d',
+          id: { not: assetId } 
+        },
+        data: { productId: null }
+      });
+    }
+
+    // 3. Vincular el nuevo asset
+    return this.prisma.client.productAsset.update({
+      where: { id: assetId },
+      data: { productId },
+      include: { product: true }
+    });
+  }
+
+  /**
+   * Desvincula un asset de un producto sin eliminar el asset.
+   */
+  async unlinkAssetFromProduct(tenantId: string, productId: string, assetId: string) {
+    this.validateTenantId(tenantId);
+    
+    const asset = await this.prisma.client.productAsset.findUnique({ where: { id: assetId } });
+    if (!asset || asset.tenantId !== tenantId || asset.productId !== productId) {
+      throw new ForbiddenException('Relación no encontrada o acceso denegado');
+    }
+
+    return this.prisma.client.productAsset.update({
+      where: { id: assetId },
+      data: { productId: null },
+      include: { product: true }
+    });
+  }
+
+  /**
+   * Obtiene assets que no están vinculados a ningún producto.
+   */
+  async getUnlinkedAssets(tenantId: string) {
+    this.validateTenantId(tenantId);
+    return this.prisma.client.productAsset.findMany({
+      where: { 
+        tenantId,
+        productId: null
+      },
+      orderBy: { createdAt: 'desc' }
     });
   }
 

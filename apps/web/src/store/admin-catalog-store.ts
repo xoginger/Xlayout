@@ -43,7 +43,7 @@ export interface Product {
 export interface ProductAsset {
   id: string;
   tenantId: string;
-  productId: string;
+  productId?: string | null;
   assetType: 'image' | 'model_3d' | 'footprint_svg' | 'thumbnail';
   fileUrl?: string;
   thumbnailUrl?: string;
@@ -74,6 +74,7 @@ export interface ProductPrice {
   id: string;
   tenantId: string;
   productId: string;
+  priceType: string;
   currency: string;
   basePrice: number | string;
   active: boolean;
@@ -101,15 +102,19 @@ interface CatalogState {
 
   fetchProducts: (filters?: any) => Promise<void>;
   createProduct: (data: Partial<Product>) => Promise<Product>;
+  updateProduct: (id: string, data: Partial<Product>) => Promise<Product>;
   updateProductStatus: (id: string, active: boolean) => Promise<void>;
   publishProduct: (id: string) => Promise<void>;
   unpublishProduct: (id: string) => Promise<void>;
 
   fetchAssets: () => Promise<void>;
+  fetchUnlinkedAssets: () => Promise<ProductAsset[]>;
   createAsset: (data: Partial<ProductAsset>) => Promise<ProductAsset>;
   uploadAsset: (file: File, productId: string) => Promise<ProductAsset>;
   retryConversion: (assetId: string) => Promise<void>;
   deleteAsset: (id: string) => Promise<void>;
+  linkAsset: (productId: string, assetId: string) => Promise<void>;
+  unlinkAsset: (productId: string, assetId: string) => Promise<void>;
 
   fetchConditions: () => Promise<void>;
   createCondition: (data: Partial<ProductCondition>) => Promise<ProductCondition>;
@@ -182,8 +187,16 @@ export const useAdminCatalogStore = create<CatalogState>((set) => ({
 
   createProduct: async (data) => {
     const newProd = await api.post<Product>('/catalog/products', data);
-    set((state) => ({ products: [...state.products, newProd] }));
+    set((state) => ({ products: [newProd, ...state.products] }));
     return newProd;
+  },
+
+  updateProduct: async (id, data) => {
+    const updated = await api.patch<Product>(`/catalog/products/${id}`, data);
+    set((state) => ({
+      products: state.products.map(p => p.id === id ? updated : p)
+    }));
+    return updated;
   },
 
   updateProductStatus: async (id, active) => {
@@ -237,6 +250,30 @@ export const useAdminCatalogStore = create<CatalogState>((set) => ({
     const newAsset = await api.post<ProductAsset>('/catalog/assets/upload', formData);
     set((state) => ({ assets: [newAsset, ...state.assets] }));
     return newAsset;
+  },
+
+  fetchUnlinkedAssets: async () => {
+    return api.get<ProductAsset[]>('/catalog/assets/unlinked');
+  },
+
+  linkAsset: async (productId, assetId) => {
+    const updatedAsset = await api.post<ProductAsset>(`/catalog/products/${productId}/link-asset`, { assetId });
+    // Actualizar el producto en el estado local para reflejar el nuevo asset
+    set((state) => ({
+      products: state.products.map(p => 
+        p.id === productId ? { ...p, assets: [...(p.assets || []).filter(a => a.assetType !== 'model_3d'), updatedAsset] } : p
+      )
+    }));
+  },
+
+  unlinkAsset: async (productId, assetId) => {
+    await api.post(`/catalog/products/${productId}/unlink-asset`, { assetId });
+    // Quitar el asset del producto en el estado local
+    set((state) => ({
+      products: state.products.map(p => 
+        p.id === productId ? { ...p, assets: (p.assets || []).filter(a => a.id !== assetId) } : p
+      )
+    }));
   },
 
   retryConversion: async (assetId) => {
