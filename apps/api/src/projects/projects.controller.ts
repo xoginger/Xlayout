@@ -43,6 +43,11 @@ export class ProjectsController {
     return this.projectsService.getQuotes(req.tenantId, id);
   }
 
+  @Post(':id/quotes')
+  async createQuote(@Req() req: any, @Param('id') projectId: string, @Body() body: any) {
+    return this.projectsService.createQuote(req.tenantId, req.user.sub, projectId, body);
+  }
+
   @Patch(':id')
   async updateProject(@Req() req: any, @Param('id') id: string, @Body() body: { name?: string; description?: string }) {
     return this.projectsService.updateProject(req.tenantId, id, body);

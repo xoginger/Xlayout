@@ -44,5 +44,13 @@ export const projectService = {
 
   async duplicateProject(id: string) {
     return api.post<any>(`/projects/${id}/duplicate`, {});
+  },
+
+  async getQuotes(projectId: string) {
+    return api.get<any[]>(`/projects/${projectId}/quotes`);
+  },
+
+  async saveQuote(projectId: string, quoteData: any) {
+    return api.post<any>(`/projects/${projectId}/quotes`, quoteData);
   }
 };

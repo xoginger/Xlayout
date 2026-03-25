@@ -265,6 +265,13 @@ interface EditorState {
   updateBlueprint: (data: Partial<BlueprintState>) => void;
   clearBlueprint: () => void;
   setPriceType: (type: string) => void;
+  
+  // Quotes
+  quotes: any[];
+  isLoadingQuotes: boolean;
+  isSavingQuote: boolean;
+  fetchQuotes: () => Promise<void>;
+  saveQuote: (data: any) => Promise<any>;
 }
 
 export const useEditorStore = create<EditorState>((set, get) => ({
@@ -315,6 +322,9 @@ export const useEditorStore = create<EditorState>((set, get) => ({
   },
   history: [],
   historyIndex: -1,
+  quotes: [],
+  isLoadingQuotes: false,
+  isSavingQuote: false,
 
   setProjectName: (name) => set((state) => ({ project: { ...state.project, name, isDirty: true } })),
   setDirty: (isDirty) => set((state) => ({ project: { ...state.project, isDirty } })),
@@ -446,6 +456,7 @@ export const useEditorStore = create<EditorState>((set, get) => ({
       selectedType: 'opening',
       activeTool: 'select',
       pendingOpeningType: null,
+      exportRequest: null,
     }));
   },
 
@@ -499,9 +510,9 @@ export const useEditorStore = create<EditorState>((set, get) => ({
     const current = get().items.find(it => it.id === id);
     if (current) {
       const EPS = 1e-6;
-      const posOk = !updates.position || updates.position.every((v, i) => Math.abs(v - current.position[i]) > EPS);
-      const rotOk = !updates.rotation || updates.rotation.every((v, i) => Math.abs(v - current.rotation[i]) > EPS);
-      const scaleOk = !updates.scale || updates.scale.every((v, i) => Math.abs(v - current.scale[i]) > EPS);
+      const posOk = !updates.position || updates.position.every((v, i) => Math.abs(v - (current.position as any)[i]) > EPS);
+      const rotOk = !updates.rotation || updates.rotation.every((v, i) => Math.abs(v - (current.rotation as any)[i]) > EPS);
+      const scaleOk = !updates.scale || updates.scale.every((v, i) => Math.abs(v - (current.scale as any)[i]) > EPS);
       if (!posOk && !rotOk && !scaleOk) return; // nothing changed — skip
     }
     set((state) => ({
@@ -657,8 +668,6 @@ export const useEditorStore = create<EditorState>((set, get) => ({
     }
   },
 
-
-
   saveProject: async () => {
     const { project, items, walls, openings, dimensions, lines, rectangles, faces, volumes, layers, scenes, blueprint } = get();
     if (project.isSaving) return;
@@ -708,6 +717,7 @@ export const useEditorStore = create<EditorState>((set, get) => ({
           project: {
             id: projectData.id,
             name: projectData.name,
+            priceType: projectData.priceType || 'A',
             isDirty: false,
             isSaving: false,
             lastSavedAt: latestVersion.createdAt
@@ -722,6 +732,7 @@ export const useEditorStore = create<EditorState>((set, get) => ({
           project: {
             id: projectData.id,
             name: projectData.name,
+            priceType: projectData.priceType || 'A',
             isDirty: false,
             isSaving: false,
             lastSavedAt: projectData.updatedAt
@@ -745,6 +756,7 @@ export const useEditorStore = create<EditorState>((set, get) => ({
         project: {
           id: newProj.id,
           name: newProj.name,
+          priceType: 'A',
           isDirty: false,
           isSaving: false,
           lastSavedAt: newProj.createdAt
@@ -783,5 +795,45 @@ export const useEditorStore = create<EditorState>((set, get) => ({
     set((state) => ({
       project: { ...state.project, priceType: type, isDirty: true }
     }));
+  },
+
+  fetchQuotes: async () => {
+    const { project } = get();
+    if (!project.id || project.id === 'default') return;
+    
+    set({ isLoadingQuotes: true });
+    try {
+      const response = await projectService.getQuotes(project.id);
+      set({ quotes: response, isLoadingQuotes: false });
+    } catch (error) {
+      console.error('Error fetching quotes:', error);
+      set({ quotes: [], isLoadingQuotes: false });
+    }
+  },
+
+  saveQuote: async (quoteData) => {
+    const { project } = get();
+    if (!project.id || project.id === 'default') {
+        throw new Error('Guarda primero el proyecto para poder emitir una cotización formal');
+    }
+
+    set({ isSavingQuote: true });
+    try {
+      const response = await projectService.saveQuote(project.id, {
+        totalAmount: quoteData.total,
+        totalItems: quoteData.totalItems,
+        priceType: project.priceType || 'A',
+        quoteData: quoteData
+      });
+      
+      // Actualizar lista local de quotes
+      const quotes = await projectService.getQuotes(project.id);
+      set({ quotes, isSavingQuote: false });
+      
+      return response;
+    } catch (error) {
+      set({ isSavingQuote: false });
+      throw error;
+    }
   }
 }));

@@ -572,6 +572,7 @@ model User {
   company  Company    @relation("CompanyUsers", fields: [tenantId], references: [id])
   roles    UserRole[]
   projects Project[]  @relation("ProjectCreator")
+  quotes   Quote[]
 
   @@map("users")
 }
@@ -709,11 +710,15 @@ model Quote {
   tenantId         String   @map("tenant_id")
   projectVersionId String   @map("project_version_id")
   totalAmount      Decimal  @map("total_amount") @db.Decimal(10, 2)
+  totalPieces      Int      @default(0) @map("total_pieces")
+  priceType        String   @default("A") @map("price_type")
   status           String   @default("DRAFT")
   quoteData        Json
+  creatorId        String?  @map("creator_id")
   createdAt        DateTime @default(now())
 
   projectVersion ProjectVersion @relation(fields: [projectVersionId], references: [id])
+  creator        User?          @relation(fields: [creatorId], references: [id])
 
   @@map("quotes")
 }

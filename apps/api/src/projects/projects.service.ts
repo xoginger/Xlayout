@@ -85,7 +85,43 @@ export class ProjectsService {
         tenantId,
         projectVersion: { projectId }
       },
-      include: { projectVersion: true }
+      include: { 
+        projectVersion: { select: { versionNum: true, createdAt: true } },
+        creator: { select: { id: true, firstName: true, lastName: true } }
+      },
+      orderBy: { createdAt: 'desc' }
+    });
+  }
+
+  async createQuote(tenantId: string, userId: string, projectId: string, data: any) {
+    // 1. Validar que el proyecto pertenece al tenant
+    const project = await this.prisma.client.project.findFirst({
+        where: { id: projectId, tenantId },
+        select: { id: true }
+    });
+
+    if (!project) throw new NotFoundException('Proyecto no encontrado');
+
+    // 2. Obtener la última versión disponible para el proyecto si no se especifica una
+    const version = await this.prisma.client.projectVersion.findFirst({
+        where: { projectId },
+        orderBy: { versionNum: 'desc' }
+    });
+
+    if (!version) throw new NotFoundException('El proyecto no tiene versiones de layout guardadas');
+
+    // 3. Persistir la cotización con su snapshot completo
+    return this.prisma.client.quote.create({
+        data: {
+            tenantId,
+            projectVersionId: version.id,
+            totalAmount: data.totalAmount,
+            totalPieces: data.totalItems || data.totalPieces || 0,
+            priceType: data.priceType || 'A',
+            status: 'DRAFT',
+            quoteData: data.quoteData || data, // Guardar el snapshot JSON entero
+            creatorId: userId
+        }
     });
   }
 
