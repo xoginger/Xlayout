@@ -48,4 +48,25 @@ export class CompanyUsersService {
     if (!user) throw new NotFoundException(`CompanyUser '${id}' no encontrado`);
     return this.prisma.client.companyUser.update({ where: { id }, data: { role } });
   }
+
+  async updateStatus(id: string, status: string) {
+    const user = await this.prisma.client.companyUser.findUnique({ where: { id } });
+    if (!user) throw new NotFoundException(`CompanyUser '${id}' no encontrado`);
+    return this.prisma.client.companyUser.update({ where: { id }, data: { status: status as any } });
+  }
+
+  async update(id: string, data: { firstName?: string; lastName?: string; email?: string; role?: CompanyUserRole }) {
+    const user = await this.prisma.client.companyUser.findUnique({ where: { id } });
+    if (!user) throw new NotFoundException(`CompanyUser '${id}' no encontrado`);
+    
+    if (data.email && data.email !== user.email) {
+      const existing = await this.prisma.client.companyUser.findUnique({ where: { email: data.email } });
+      if (existing) throw new ConflictException('El correo ya está en uso por otro usuario');
+    }
+
+    return this.prisma.client.companyUser.update({
+      where: { id },
+      data
+    });
+  }
 }

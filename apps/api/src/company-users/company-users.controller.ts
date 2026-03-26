@@ -38,4 +38,14 @@ export class CompanyUsersController {
   updateRole(@Param('id') id: string, @Body() body: { role: CompanyUserRole }) {
     return this.service.updateRole(id, body.role);
   }
+
+  @Patch(':id/status')
+  updateStatus(@Param('id') id: string, @Body() body: { status: string }) {
+    return this.service.updateStatus(id, body.status);
+  }
+
+  @Patch(':id')
+  update(@Param('id') id: string, @Body() body: { firstName?: string; lastName?: string; email?: string; role?: CompanyUserRole }) {
+    return this.service.update(id, body);
+  }
 }

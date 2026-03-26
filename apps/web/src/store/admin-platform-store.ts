@@ -23,6 +23,7 @@ export interface Tenant {
     companyUsers?: number;
     distributorAccesses?: number;
   };
+  productLines?: { id: string; name: string; slug: string; active: boolean }[];
 }
 
 export interface Distributor {
@@ -164,6 +165,15 @@ interface PlatformState {
   suspendTenant: (id: string) => Promise<void>;
   activateTenant: (id: string) => Promise<void>;
   updateTenantStatus: (id: string, status: string) => Promise<void>;
+  updateTenant: (id: string, data: Partial<Tenant>) => Promise<Tenant>;
+  deleteTenant: (id: string) => Promise<void>;
+
+  // ── Acciones de usuarios de tenant ──
+  tenantUsers: any[];
+  fetchTenantUsers: (tenantId: string) => Promise<void>;
+  createTenantUser: (data: any) => Promise<any>;
+  updateTenantUserStatus: (id: string, status: string) => Promise<void>;
+  updateTenantUserRole: (id: string, role: string) => Promise<void>;
 }
 
 // ── Store ──────────────────────────────────────────────────────────────────
@@ -178,6 +188,7 @@ export const usePlatformStore = create<PlatformState>((set, get) => ({
   config: null,
   health: null,
   allUsers: [],
+  tenantUsers: [],
   isLoading: false,
   loadingSection: null,
   error: null,
@@ -203,7 +214,7 @@ export const usePlatformStore = create<PlatformState>((set, get) => ({
     }
   },
 
-  createTenant: async (data) => {
+  createTenant: async (data: any) => {
     set({ isLoading: true });
     try {
       const newTenant = await api.post<Tenant>('/tenants', data);
@@ -218,7 +229,7 @@ export const usePlatformStore = create<PlatformState>((set, get) => ({
     }
   },
 
-  suspendTenant: async (id) => {
+  suspendTenant: async (id: string) => {
     await api.patch(`/tenants/${id}/status`, { status: 'SUSPENDED' });
     set((state) => ({
       tenants: state.tenants.map((t) =>
@@ -227,7 +238,7 @@ export const usePlatformStore = create<PlatformState>((set, get) => ({
     }));
   },
 
-  activateTenant: async (id) => {
+  activateTenant: async (id: string) => {
     await api.patch(`/tenants/${id}/status`, { status: 'ACTIVE' });
     set((state) => ({
       tenants: state.tenants.map((t) =>
@@ -236,13 +247,44 @@ export const usePlatformStore = create<PlatformState>((set, get) => ({
     }));
   },
 
-  updateTenantStatus: async (id, status) => {
+  updateTenantStatus: async (id: string, status: string) => {
     await api.patch(`/tenants/${id}/status`, { status });
     set((state) => ({
       tenants: state.tenants.map((t) =>
         t.id === id ? { ...t, status: status as Tenant['status'] } : t,
       ),
     }));
+  },
+
+  updateTenant: async (id: string, data: Partial<Tenant>) => {
+    set({ isLoading: true });
+    try {
+      const updated = await api.patch<Tenant>(`/tenants/${id}`, data);
+      set((state) => ({
+        tenants: state.tenants.map((t) => (t.id === id ? updated : t)),
+        isLoading: false,
+      }));
+      return updated;
+    } catch (err: any) {
+      set({ isLoading: false });
+      throw err;
+    }
+  },
+
+  deleteTenant: async (id: string) => {
+    set({ isLoading: true });
+    try {
+      await api.delete(`/tenants/${id}`);
+      set((state) => ({
+        tenants: state.tenants.map((t) =>
+          t.id === id ? { ...t, status: 'INACTIVE' as const } : t,
+        ),
+        isLoading: false,
+      }));
+    } catch (err: any) {
+      set({ isLoading: false });
+      throw err;
+    }
   },
 
   // ── Distribuidores ──
@@ -257,7 +299,7 @@ export const usePlatformStore = create<PlatformState>((set, get) => ({
   },
 
   // ── Assets 3D ──
-  fetchAssets3d: async (filters) => {
+  fetchAssets3d: async (filters: { status?: string; tenantId?: string } | undefined) => {
     set({ isLoading: true, loadingSection: 'assets3d', error: null });
     try {
       const params: Record<string, string> = {};
@@ -282,7 +324,7 @@ export const usePlatformStore = create<PlatformState>((set, get) => ({
   },
 
   // ── Auditoría ──
-  fetchAuditLogs: async (filters) => {
+  fetchAuditLogs: async (filters: Record<string, string> | undefined) => {
     set({ isLoading: true, loadingSection: 'audit', error: null });
     try {
       const auditLogs = await api.get<AuditEntry[]>('/audit/platform', filters);
@@ -334,5 +376,44 @@ export const usePlatformStore = create<PlatformState>((set, get) => ({
     } catch (err: any) {
       set({ error: err.message, isLoading: false, loadingSection: null });
     }
+  },
+
+  fetchTenantUsers: async (tenantId: string) => {
+    set({ isLoading: true, loadingSection: 'tenantUsers' });
+    try {
+      const users = await api.get<any[]>(`/company-users/tenant/${tenantId}`);
+      set({ tenantUsers: users, isLoading: false, loadingSection: null });
+    } catch (err: any) {
+      set({ error: err.message, isLoading: false, loadingSection: null });
+    }
+  },
+
+  createTenantUser: async (data: any) => {
+    set({ isLoading: true });
+    try {
+      const newUser = await api.post<any>('/company-users', data);
+      set((state) => ({
+        tenantUsers: [...state.tenantUsers, newUser],
+        isLoading: false
+      }));
+      return newUser;
+    } catch (err: any) {
+      set({ isLoading: false });
+      throw err;
+    }
+  },
+
+  updateTenantUserStatus: async (id: string, status: string) => {
+    await api.patch(`/company-users/${id}/status`, { status });
+    set((state) => ({
+      tenantUsers: state.tenantUsers.map((u) => u.id === id ? { ...u, status } : u)
+    }));
+  },
+
+  updateTenantUserRole: async (id: string, role: string) => {
+    await api.patch(`/company-users/${id}/role`, { role });
+    set((state) => ({
+      tenantUsers: state.tenantUsers.map((u) => u.id === id ? { ...u, role } : u)
+    }));
   },
 }));

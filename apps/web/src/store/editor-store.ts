@@ -266,6 +266,11 @@ interface EditorState {
   clearBlueprint: () => void;
   setPriceType: (type: string) => void;
   
+  // Nuevas acciones de Proyecto
+  saveAs: (newName: string) => Promise<void>;
+  exportProject: () => void;
+  importProject: (jsonData: any) => void;
+  
   // Quotes
   quotes: any[];
   isLoadingQuotes: boolean;
@@ -698,6 +703,90 @@ export const useEditorStore = create<EditorState>((set, get) => ({
       console.error('Failed to save project', e);
       set((state) => ({ project: { ...state.project, isSaving: false } }));
       throw e;
+    }
+  },
+
+  saveAs: async (newName: string) => {
+    const { items, walls, openings, dimensions, lines, rectangles, faces, volumes, layers, scenes, blueprint, project } = get();
+    set((state) => ({ project: { ...state.project, isSaving: true } }));
+
+    try {
+      // 1. Crear nuevo proyecto con el nuevo nombre
+      const newProj = await projectService.createProject(newName, `Copia de ${project.name}`);
+      const sceneState = { items, walls, openings, dimensions, lines, rectangles, faces, volumes, layers, scenes, blueprint };
+
+      // 2. Guardar la versión actual en el nuevo proyecto
+      await projectService.saveVersion(newProj.id, sceneState);
+
+      // 3. Cambiar el contexto del editor al nuevo proyecto
+      set({
+        project: {
+          id: newProj.id,
+          name: newProj.name,
+          priceType: project.priceType || 'A',
+          isDirty: false,
+          isSaving: false,
+          lastSavedAt: new Date().toISOString()
+        }
+      });
+    } catch (e) {
+      console.error('Failed to save as', e);
+      set((state) => ({ project: { ...state.project, isSaving: false } }));
+      throw e;
+    }
+  },
+
+  exportProject: () => {
+    const { project, items, walls, openings, dimensions, lines, rectangles, faces, volumes, layers, scenes, blueprint } = get();
+    const data = {
+      version: "2.0",
+      metadata: {
+        name: project.name,
+        exportedAt: new Date().toISOString(),
+        priceType: project.priceType
+      },
+      sceneState: { items, walls, openings, dimensions, lines, rectangles, faces, volumes, layers, scenes, blueprint }
+    };
+
+    const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = `${project.name.replace(/[^a-z0-9]/gi, '_').toLowerCase()}.xlayout`;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+  },
+
+  importProject: (jsonData: any) => {
+    try {
+      // Soporte para formato exportado o sceneState directo
+      const state = jsonData.sceneState || jsonData;
+      const metadata = jsonData.metadata || {};
+
+      if (!state.items && !state.walls) {
+        throw new Error('Formato de archivo inválido');
+      }
+
+      set({
+        ...state,
+        project: {
+          id: 'default', // Al importar, se considera un nuevo proyecto local hasta que se guarde en nube
+          name: metadata.name || 'Proyecto Importado',
+          priceType: metadata.priceType || 'A',
+          isDirty: true,
+          isSaving: false,
+          lastSavedAt: null
+        },
+        history: [],
+        historyIndex: -1
+      });
+      
+      get().saveToHistory();
+    } catch (e) {
+      console.error('Failed to import project', e);
+      alert('Error al importar: archivo no reconocido o corrupto');
     }
   },
 

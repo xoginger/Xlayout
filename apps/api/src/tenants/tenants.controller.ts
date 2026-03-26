@@ -3,7 +3,7 @@
  * XLayout System
  */
 
-import { Controller, Get, Post, Param, Body, Patch, UseGuards } from '@nestjs/common';
+import { Controller, Get, Post, Param, Body, Patch, Delete, UseGuards } from '@nestjs/common';
 import { TenantsService } from './tenants.service';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { UserTypeGuard } from '../common/guards/user-type.guard';
@@ -46,5 +46,23 @@ export class TenantsController {
   @Patch(':id/status')
   updateStatus(@Param('id') id: string, @Body() body: { status: any }) {
     return this.service.updateStatus(id, body.status);
+  }
+
+  /** PATCH /tenants/:id — Actualizar datos de un tenant */
+  @Patch(':id')
+  update(@Param('id') id: string, @Body() body: {
+    name?: string;
+    slug?: string;
+    contactEmail?: string;
+    logoUrl?: string;
+    status?: any;
+  }) {
+    return this.service.update(id, body);
+  }
+
+  /** DELETE /tenants/:id — Eliminar un tenant (soft delete) */
+  @Delete(':id')
+  remove(@Param('id') id: string) {
+    return this.service.delete(id);
   }
 }

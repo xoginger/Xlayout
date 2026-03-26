@@ -50,7 +50,7 @@ export const AdminDrawer = ({
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex justify-end">
+    <div className="fixed inset-0 z-[200] flex justify-end">
       {/* Overlay oscuro */}
       <div
         className="absolute inset-0 bg-slate-900/40 backdrop-blur-sm transition-opacity"

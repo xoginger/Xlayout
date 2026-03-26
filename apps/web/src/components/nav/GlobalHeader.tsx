@@ -78,7 +78,7 @@ export const GlobalHeader: React.FC<{ pathname: string }> = ({ pathname }) => {
   const {
     project, setProjectName, viewMode, setViewMode,
     undo, redo, historyIndex, history,
-    saveProject, createNewProject, updateBlueprint
+    saveProject, saveAs, exportProject, importProject, createNewProject, updateBlueprint
   } = useEditorStore();
 
   const [activeMenu, setActiveMenu] = useState<string | null>(null);
@@ -124,12 +124,23 @@ export const GlobalHeader: React.FC<{ pathname: string }> = ({ pathname }) => {
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [saveProject, isEditor]);
 
-  const handleImportPlan = async (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleImportFile = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
     setActiveMenu(null);
     try {
-      if (file.type === 'application/pdf') {
+      if (file.name.endsWith('.xlayout') || file.name.endsWith('.json')) {
+        const reader = new FileReader();
+        reader.onload = (rev) => {
+          try {
+            const data = JSON.parse(rev.target?.result as string);
+            importProject(data);
+          } catch (err) {
+            alert('Error al procesar el archivo de proyecto');
+          }
+        };
+        reader.readAsText(file);
+      } else if (file.type === 'application/pdf') {
         const dataUrl = await extractFirstPageAsImage(file);
         updateBlueprint({ url: dataUrl, visible: true });
       } else if (file.type.startsWith('image/')) {
@@ -162,7 +173,7 @@ export const GlobalHeader: React.FC<{ pathname: string }> = ({ pathname }) => {
 
   return (
     <header ref={headerRef} className="flex h-12 w-full shrink-0 items-center justify-between border-b border-zinc-200 bg-white px-3 z-[100] shadow-sm relative">
-      <input type="file" ref={fileInputRef} className="hidden" accept="image/png, image/jpeg, image/webp, application/pdf" onChange={handleImportPlan} />
+      <input type="file" ref={fileInputRef} className="hidden" accept=".xlayout,.json,image/png,image/jpeg,image/webp,application/pdf" onChange={handleImportFile} />
 
       {/* ── IZQUIERDA: Logo Global Launcher & Dynamic Menus ── */}
       <div className="flex items-center gap-2">
@@ -210,12 +221,18 @@ export const GlobalHeader: React.FC<{ pathname: string }> = ({ pathname }) => {
                      if (name) createNewProject(name); 
                      setActiveMenu(null); 
                    }} />
-                   <MenuAction label="Abrir Biblioteca" icon={<FolderIcon />} shortcut="Ctrl+O" onClick={() => { setIsProjectManagerOpen(true); setActiveMenu(null); }} />
-                   <MenuDivider />
-                   <MenuAction label="Guardar Proyecto" icon={<SaveIcon />} shortcut="Ctrl+S" disabled={!project.isDirty || project.isSaving} onClick={() => { saveProject(); setActiveMenu(null); }} />
-                   <MenuDivider />
-                   <MenuAction label="Importar Blueprint" icon={<ImportIcon />} onClick={() => fileInputRef.current?.click()} />
-                 </div>
+                    <MenuAction label="Abrir Biblioteca" icon={<FolderIcon />} shortcut="Ctrl+O" onClick={() => { setIsProjectManagerOpen(true); setActiveMenu(null); }} />
+                    <MenuDivider />
+                    <MenuAction label="Guardar Proyecto" icon={<SaveIcon />} shortcut="Ctrl+S" disabled={!project.isDirty || project.isSaving} onClick={() => { saveProject(); setActiveMenu(null); }} />
+                    <MenuAction label="Guardar Como..." icon={<SaveIcon />} onClick={() => { 
+                      const name = prompt('NUEVO NOMBRE DEL PROYECTO:', `${project.name} (COPIA)`);
+                      if (name) saveAs(name); 
+                      setActiveMenu(null); 
+                    }} />
+                    <MenuDivider />
+                    <MenuAction label="Exportar Proyecto (.xlayout)" icon={<SaveIcon />} onClick={() => { exportProject(); setActiveMenu(null); }} />
+                    <MenuAction label="Importar Proyecto / Plano" icon={<ImportIcon />} onClick={() => fileInputRef.current?.click()} />
+                  </div>
               )}
             </div>
 

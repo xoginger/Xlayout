@@ -52,6 +52,7 @@ export class ProjectsService {
       where: { projectId }
     }) + 1;
 
+    // 1. Crear la versión base con el JSON
     const version = await this.prisma.client.projectVersion.create({
       data: {
         projectId,
@@ -60,18 +61,70 @@ export class ProjectsService {
       }
     });
 
-    // Generar automáticamente una cotización basada en los placements
-    const placements = sceneState.placements || [];
-    if (placements.length > 0) {
-       const quoteData = await this.pricingEngine.calculateQuote(tenantId, placements);
+    // 2. Persistencia Relacional (Muros, Huecos, Placements)
+    const walls = sceneState.walls || [];
+    const openings = sceneState.openings || [];
+    const items = sceneState.items || [];
+
+    // Mapeo selectivo para evitar errores de esquema si vienen campos extra
+    if (walls.length > 0) {
+      await this.prisma.client.wall.createMany({
+        data: walls.map((w: any) => ({
+          id: w.id, // Mantener IDs del frontend para consistencia de referencias
+          projectVersionId: version.id,
+          startX: w.start[0],
+          startY: w.start[2], // En 3D usualmente Z es profundidad, mapeamos a Y 2D
+          endX: w.end[0],
+          endY: w.end[2],
+          thickness: w.thickness,
+          height: w.height
+        }))
+      });
+    }
+
+    if (openings.length > 0) {
+      await this.prisma.client.opening.createMany({
+        data: openings.map((o: any) => ({
+          id: o.id,
+          projectVersionId: version.id,
+          wallId: o.wallId,
+          type: o.type,
+          positionX: o.offset,
+          width: o.width,
+          height: o.height
+        }))
+      });
+    }
+
+    if (items.length > 0) {
+      await this.prisma.client.placement.createMany({
+        data: items.map((it: any) => ({
+          id: it.id,
+          projectVersionId: version.id,
+          productId: it.productId,
+          posX: it.position[0],
+          posY: it.position[1],
+          posZ: it.position[2],
+          rotX: it.rotation[0],
+          rotY: it.rotation[1],
+          rotZ: it.rotation[2]
+        }))
+      });
+    }
+
+    // 3. Generar automáticamente una cotización basada en los placements
+    if (items.length > 0) {
+       const quoteData = await this.pricingEngine.calculateQuote(tenantId, items);
        
        await this.prisma.client.quote.create({
          data: {
            tenantId,
            projectVersionId: version.id,
            totalAmount: quoteData.total,
-           quoteData: quoteData.lines as any, // Instantánea del estado desnormalizado
-           status: 'DRAFT'
+           quoteData: quoteData.lines as any,
+           status: 'DRAFT',
+           totalPieces: items.length,
+           priceType: sceneState.project?.priceType || 'A'
          }
        });
     }
