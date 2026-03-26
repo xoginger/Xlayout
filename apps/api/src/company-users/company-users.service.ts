@@ -6,6 +6,7 @@
 import { Injectable, NotFoundException, ConflictException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { CompanyUserRole } from '@prisma/client';
+import * as bcrypt from 'bcryptjs';
 
 @Injectable()
 export class CompanyUsersService {
@@ -22,7 +23,7 @@ export class CompanyUsersService {
     const existing = await this.prisma.client.companyUser.findUnique({ where: { email: data.email } });
     if (existing) throw new ConflictException('El correo ya está registrado');
 
-    const passwordHash = Buffer.from(data.password).toString('base64');
+    const passwordHash = await bcrypt.hash(data.password, 10);
     return this.prisma.client.companyUser.create({
       data: {
         tenantId: data.tenantId,

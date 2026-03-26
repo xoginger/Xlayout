@@ -26,9 +26,9 @@ export class TenantGuard implements CanActivate {
       throw new ForbiddenException('Se requiere autenticación');
     }
 
-    // PLATFORM_USER ve todo — tenantId viene del header x-tenant-id
+    // PLATFORM_USER ve todo — tenantId viene del header x-tenant-id o query param
     if (user.userType === 'PLATFORM_USER') {
-      request.tenantId = request.headers['x-tenant-id'] || null;
+      request.tenantId = request.headers['x-tenant-id'] || request.query.tenantId || null;
       return true;
     }
 

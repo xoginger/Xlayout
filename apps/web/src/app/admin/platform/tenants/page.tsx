@@ -13,11 +13,262 @@ import { AdminDrawer } from '@/components/admin/AdminDrawer';
 import { AdminTabs } from '@/components/admin/AdminTabs';
 import { AdminFilterBar } from '@/components/admin/AdminFilterBar';
 import { usePlatformStore, Tenant } from '@/store/admin-platform-store';
+import { useAdminCatalogStore } from '@/store/admin-catalog-store';
+import { useAuthStore } from '@/store/auth-store';
+
+// ── Componentes Locales ──────────────────────────────────────────────────────
+
+const PlusIcon = () => (
+  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 4v16m8-8H4"/>
+  </svg>
+);
+
+const TenantUsersTable = ({ users, onStatusChange, onRoleChange }: { 
+  users: any[], 
+  onStatusChange: (u: any, s: string) => void,
+  onRoleChange: (u: any, r: string) => void 
+}) => {
+  return (
+    <div className="overflow-x-auto border border-slate-200 rounded-xl bg-white">
+      <table className="min-w-full divide-y divide-slate-200">
+        <thead className="bg-slate-50">
+          <tr>
+            <th className="px-4 py-3 text-left text-[10px] font-bold text-slate-400 uppercase tracking-wider">Usuario</th>
+            <th className="px-4 py-3 text-left text-[10px] font-bold text-slate-400 uppercase tracking-wider">Rol</th>
+            <th className="px-4 py-3 text-left text-[10px] font-bold text-slate-400 uppercase tracking-wider">Estado</th>
+            <th className="px-4 py-3 text-right text-[10px] font-bold text-slate-400 uppercase tracking-wider">Acciones</th>
+          </tr>
+        </thead>
+        <tbody className="divide-y divide-slate-100 italic non-italic">
+          {users.map((u) => (
+            <tr key={u.id} className="hover:bg-slate-50/50 transition-colors">
+              <td className="px-4 py-3">
+                <div className="flex flex-col">
+                  <span className="text-sm font-semibold text-slate-700">{u.firstName} {u.lastName}</span>
+                  <span className="text-[10px] font-mono text-slate-400">{u.email}</span>
+                </div>
+              </td>
+              <td className="px-4 py-3">
+                <select 
+                  className="text-xs bg-slate-100 border-none rounded py-1 px-2 focus:ring-0"
+                  value={u.role}
+                  onChange={(e) => onRoleChange(u, e.target.value)}
+                >
+                  <option value="TENANT_ADMIN">Admin</option>
+                  <option value="BUSINESS_OWNER">Owner</option>
+                  <option value="CATALOG_MANAGER">Catalog</option>
+                  <option value="SALES_USER">Sales</option>
+                </select>
+              </td>
+              <td className="px-4 py-3">
+                <StatusBadge status={u.status} />
+              </td>
+              <td className="px-4 py-3 text-right">
+                <div className="flex justify-end gap-1">
+                  {u.status === 'ACTIVE' ? (
+                    <AdminButton variant="ghost" size="sm" onClick={() => onStatusChange(u, 'SUSPENDED')}>
+                      Suspender
+                    </AdminButton>
+                  ) : (
+                    <AdminButton variant="ghost" size="sm" onClick={() => onStatusChange(u, 'ACTIVE')}>
+                      Activar
+                    </AdminButton>
+                  )}
+                </div>
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  );
+};
+
+const CatalogLinesTable = ({ lines, onStatusChange }: { lines: any[], onStatusChange: (id: string, s: boolean) => void }) => (
+  <div className="border border-slate-100 rounded-lg overflow-hidden">
+    <table className="min-w-full divide-y divide-slate-100 italic non-italic">
+      <thead className="bg-slate-50/50">
+        <tr>
+          <th className="px-4 py-2 text-left text-[10px] uppercase font-bold text-slate-400 tracking-wider">Línea</th>
+          <th className="px-4 py-2 text-left text-[10px] uppercase font-bold text-slate-400 tracking-wider">Estado</th>
+          <th className="px-4 py-2 text-right text-[10px] uppercase font-bold text-slate-400 tracking-wider">Acciones</th>
+        </tr>
+      </thead>
+      <tbody className="divide-y divide-slate-100">
+        {lines.map((l) => (
+          <tr key={l.id} className="hover:bg-slate-50/30 transition-colors">
+            <td className="px-4 py-3">
+              <div className="flex flex-col">
+                <span className="text-sm font-semibold text-slate-700">{l.name}</span>
+                <span className="text-[10px] font-mono text-slate-400">{l.slug}</span>
+              </div>
+            </td>
+            <td className="px-4 py-3">
+              <StatusBadge status={l.active ? 'ACTIVE' : 'INACTIVE'} />
+            </td>
+            <td className="px-4 py-3 text-right">
+              <AdminButton variant="ghost" size="sm" onClick={() => onStatusChange(l.id, !l.active)}>
+                {l.active ? 'Desactivar' : 'Activar'}
+              </AdminButton>
+            </td>
+          </tr>
+        ))}
+        {lines.length === 0 && (
+          <tr><td colSpan={3} className="px-4 py-8 text-center text-slate-400 text-xs italic">Marca sin líneas registradas</td></tr>
+        )}
+      </tbody>
+    </table>
+  </div>
+);
+
+const CatalogCategoriesTable = ({ categories, onStatusChange }: { categories: any[], onStatusChange: (id: string, s: boolean) => void }) => (
+  <div className="border border-slate-100 rounded-lg overflow-hidden">
+    <table className="min-w-full divide-y divide-slate-100 italic non-italic">
+      <thead className="bg-slate-50/50">
+        <tr>
+          <th className="px-4 py-2 text-left text-[10px] uppercase font-bold text-slate-400 tracking-wider">Categoría</th>
+          <th className="px-4 py-2 text-left text-[10px] uppercase font-bold text-slate-400 tracking-wider">Padre</th>
+          <th className="px-4 py-2 text-left text-[10px] uppercase font-bold text-slate-400 tracking-wider">Estado</th>
+          <th className="px-4 py-2 text-right text-[10px] uppercase font-bold text-slate-400 tracking-wider">Acciones</th>
+        </tr>
+      </thead>
+      <tbody className="divide-y divide-slate-100">
+        {categories.map((c) => (
+          <tr key={c.id} className="hover:bg-slate-50/30 transition-colors">
+            <td className="px-4 py-3">
+              <span className="text-sm font-semibold text-slate-700">{c.name}</span>
+            </td>
+            <td className="px-4 py-3 text-xs text-slate-500">
+              {c.parent?.name || '-'}
+            </td>
+            <td className="px-4 py-3">
+              <StatusBadge status={c.active ? 'ACTIVE' : 'INACTIVE'} />
+            </td>
+            <td className="px-4 py-3 text-right">
+              <AdminButton variant="ghost" size="sm" onClick={() => onStatusChange(c.id, !c.active)}>
+                {c.active ? 'Desactivar' : 'Activar'}
+              </AdminButton>
+            </td>
+          </tr>
+        ))}
+        {categories.length === 0 && (
+          <tr><td colSpan={4} className="px-4 py-8 text-center text-slate-400 text-xs italic">Crea una categoría para organizar el catálogo</td></tr>
+        )}
+      </tbody>
+    </table>
+  </div>
+);
+
+const CatalogProductsTable = ({ 
+  products, onStatusChange, onPublish, onUnpublish 
+}: { 
+  products: any[], onStatusChange: (id: string, s: boolean) => void,
+  onPublish: (id: string) => void, onUnpublish: (id: string) => void
+}) => (
+  <div className="border border-slate-100 rounded-lg overflow-hidden">
+    <table className="min-w-full divide-y divide-slate-100 italic non-italic text-xs">
+      <thead className="bg-slate-50/50">
+        <tr>
+          <th className="px-4 py-2 text-left text-[10px] uppercase font-bold text-slate-400 tracking-wider">Producto</th>
+          <th className="px-4 py-2 text-left text-[10px] uppercase font-bold text-slate-400 tracking-wider">Estructura</th>
+          <th className="px-4 py-2 text-left text-[10px] uppercase font-bold text-slate-400 tracking-wider">Estado</th>
+          <th className="px-4 py-2 text-left text-[10px] uppercase font-bold text-slate-400 tracking-wider">3D</th>
+          <th className="px-4 py-2 text-right text-[10px] uppercase font-bold text-slate-400 tracking-wider">Acciones</th>
+        </tr>
+      </thead>
+      <tbody className="divide-y divide-slate-100">
+        {products.map((p) => (
+          <tr key={p.id} className="hover:bg-slate-50/30 transition-colors">
+            <td className="px-4 py-3">
+              <div className="flex flex-col">
+                <span className="font-semibold text-slate-700">{p.name}</span>
+                <span className="text-[10px] font-mono text-slate-400">{p.sku}</span>
+              </div>
+            </td>
+            <td className="px-4 py-3 text-[10px]">
+              <div className="flex flex-col">
+                <span className="text-blue-600 font-medium">L: {p.line?.name || 'ERR'}</span>
+                <span className="text-slate-400">C: {p.category?.name || 'N/A'}</span>
+              </div>
+            </td>
+            <td className="px-4 py-3">
+              <StatusBadge status={p.status} />
+            </td>
+            <td className="px-4 py-3">
+              {p.assets?.some((a: any) => a.assetType === 'model_3d') ? (
+                <div className="flex items-center gap-1 text-emerald-600 font-bold uppercase text-[9px]">
+                   <div className="w-1.5 h-1.5 rounded-full bg-emerald-500" /> SI
+                </div>
+              ) : (
+                <span className="text-slate-300 font-bold uppercase text-[9px]">NO</span>
+              )}
+            </td>
+            <td className="px-4 py-3 text-right">
+              <div className="flex justify-end gap-1">
+                {p.status === 'DRAFT' ? (
+                  <AdminButton variant="primary" size="sm" onClick={() => onPublish(p.id)}>Publicar</AdminButton>
+                ) : (
+                  <AdminButton variant="outline" size="sm" onClick={() => onUnpublish(p.id)}>Draft</AdminButton>
+                )}
+                <AdminButton variant="ghost" size="sm" onClick={() => onStatusChange(p.id, !p.active)}>
+                  {p.active ? 'Off' : 'On'}
+                </AdminButton>
+              </div>
+            </td>
+          </tr>
+        ))}
+        {products.length === 0 && (
+          <tr><td colSpan={5} className="px-4 py-8 text-center text-slate-400 text-xs italic">Marca sin productos. Sube el catálogo maestro o crea uno.</td></tr>
+        )}
+      </tbody>
+    </table>
+  </div>
+);
+
+const CatalogAssetsGrid = ({ assets }: { assets: any[] }) => (
+  <div className="space-y-4">
+    <div className="grid grid-cols-2 gap-3">
+      {assets.map((a) => (
+        <div key={a.id} className="p-3 bg-slate-50 border border-slate-100 rounded-xl hover:shadow-md transition-shadow">
+          <div className="flex items-start justify-between mb-2">
+            <div className="flex flex-col">
+              <span className="text-[10px] font-bold text-slate-400 uppercase tracking-tighter">Producto Asoc.</span>
+              <span className="text-xs font-semibold text-slate-700 truncate max-w-[120px]">
+                {a.product?.name || 'Biblioteca (Sin uso)'}
+              </span>
+            </div>
+            <div className={`px-1.5 py-0.5 rounded text-[8px] font-black uppercase ${
+              a.conversionStatus === 'converted' ? 'bg-emerald-100 text-emerald-700' : 
+              a.conversionStatus === 'failed' ? 'bg-rose-100 text-rose-700' : 'bg-blue-100 text-blue-700'
+            }`}>
+              {a.conversionStatus}
+            </div>
+          </div>
+          <div className="flex items-center gap-2 mt-3 pt-3 border-t border-slate-200">
+            <div className="w-8 h-8 rounded bg-white border border-slate-100 flex items-center justify-center text-slate-300">
+               <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M14 10l-2 1m0 0l-2-1m2 1v2.5M20 7l-2 1m2-1l-2-1m2 1v2.5M14 4l-2-1-2 1M4 7l2-1M4 7l2 1M4 7v2.5M12 21l-2-1m2 1l2-1m-2 1V18.5M6 18l-2-1v-2.5M18 18l2-1v-2.5"/></svg>
+            </div>
+            <div className="flex flex-col min-w-0">
+               <span className="text-[10px] font-bold text-slate-600 truncate">{a.metadata?.originalName || 'Asset 3D'}</span>
+               <span className="text-[9px] text-slate-400 uppercase font-mono tracking-tighter">{a.originalFormat || 'bin'}</span>
+            </div>
+          </div>
+        </div>
+      ))}
+    </div>
+    {assets.length === 0 && (
+      <div className="py-12 text-center text-slate-400 text-xs italic">No hay assets 3D registrados para esta marca</div>
+    )}
+  </div>
+);
 
 export default function PlatformTenantsPage() {
   const { 
     tenants, fetchTenants, createTenant, updateTenant, deleteTenant, 
-    updateTenantStatus, isLoading 
+    updateTenantStatus, isLoading,
+    tenantUsers, fetchTenantUsers, createTenantUser, 
+    updateTenantUserStatus, updateTenantUserRole 
   } = usePlatformStore();
   
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -36,22 +287,48 @@ export default function PlatformTenantsPage() {
     adminFirstName: '', adminLastName: '', adminEmail: '', adminPassword: ''
   });
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [isLineModalOpen, setIsLineModalOpen] = useState(false);
+  const [isCategoryModalOpen, setIsCategoryModalOpen] = useState(false);
+  const [isProductModalOpen, setIsProductModalOpen] = useState(false);
+  const [newLineData, setNewLineData] = useState({ name: '', description: '' });
+  const [newCategoryData, setNewCategoryData] = useState({ name: '', parentId: '' });
+  const [newProductData, setNewProductData] = useState({ 
+    name: '', sku: '', lineId: '', categoryId: '', width: 0, depth: 0, height: 0
+  });
 
-  const { 
-    tenantUsers, fetchTenantUsers, createTenantUser, 
-    updateTenantUserStatus, updateTenantUserRole 
-  } = usePlatformStore();
+  const {
+    lines, categories, products, assets, isLoading: isCatalogLoading,
+    fetchLines, fetchCategories, fetchProducts, fetchAssets,
+    createLine, updateLineStatus, createCategory, updateCategoryStatus,
+    createProduct, updateProductStatus, publishProduct, unpublishProduct
+  } = useAdminCatalogStore();
+
+  const { setActiveTenantId, activeTenantId } = useAuthStore();
+
+  // Sub-tabs internas de catálogo
+  const [catalogSubTab, setCatalogSubTab] = useState('lines');
 
   useEffect(() => {
     fetchTenants();
   }, [fetchTenants]);
 
-  // Cargar usuarios cuando se activa la pestaña correspondiente
+  // Cargar usuarios o datos de catálogo cuando se activa la pestaña correspondiente
   useEffect(() => {
     if (selectedTenant && drawerTab === 'users') {
       fetchTenantUsers(selectedTenant.id);
     }
-  }, [selectedTenant, drawerTab, fetchTenantUsers]);
+    
+    if (selectedTenant && drawerTab === 'catalog') {
+      // Sincronizar activeTenantId para que las peticiones vayan al tenant correcto
+      setActiveTenantId(selectedTenant.id);
+      
+      // Cargar datos según la sub-tab activa
+      if (catalogSubTab === 'lines') fetchLines();
+      if (catalogSubTab === 'categories') fetchCategories();
+      if (catalogSubTab === 'products') fetchProducts();
+      if (catalogSubTab === 'assets') fetchAssets();
+    }
+  }, [selectedTenant, drawerTab, catalogSubTab, fetchTenantUsers, fetchLines, fetchCategories, fetchProducts, fetchAssets, setActiveTenantId]);
 
   const handleCreate = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -442,21 +719,67 @@ export default function PlatformTenantsPage() {
                 </div>
               )}
               {drawerTab === 'catalog' && (
-                <div className="text-sm text-slate-500 italic">
-                  <p className="mb-2">Resumen del catálogo cargado para esta marca.</p>
-                  <div className="p-4 bg-slate-50 rounded-lg border border-slate-200">
-                    <p className="text-slate-600 font-medium">Líneas de producto configuradas:</p>
-                    {selectedTenant.productLines && selectedTenant.productLines.length > 0 ? (
-                      <ul className="mt-2 space-y-1">
-                        {selectedTenant.productLines.map((pl: any) => (
-                          <li key={pl.id} className="flex items-center gap-2 text-xs text-slate-500">
-                            <span className="w-1.5 h-1.5 rounded-full bg-blue-400" />
-                            {pl.name} ({pl.slug})
-                          </li>
-                        ))}
-                      </ul>
-                    ) : (
-                      <p className="text-xs text-slate-400 mt-1 italic">No hay líneas de producto registradas.</p>
+                <div className="space-y-6">
+                  <div className="flex items-center justify-between border-b border-slate-100 pb-2">
+                    <div className="flex gap-4">
+                      {['lines', 'categories', 'products', 'assets'].map((tab) => (
+                        <button
+                          key={tab}
+                          onClick={() => setCatalogSubTab(tab)}
+                          className={`pb-2 text-xs font-bold uppercase tracking-wider transition-colors border-b-2 ${
+                            catalogSubTab === tab 
+                              ? 'text-blue-600 border-blue-600' 
+                              : 'text-slate-400 border-transparent hover:text-slate-600'
+                          }`}
+                        >
+                          {tab === 'lines' && 'Líneas'}
+                          {tab === 'categories' && 'Categorías'}
+                          {tab === 'products' && 'Productos'}
+                          {tab === 'assets' && 'Assets 3D'}
+                        </button>
+                      ))}
+                    </div>
+                    <AdminButton size="sm" onClick={() => {
+                      if (catalogSubTab === 'lines') setIsLineModalOpen(true);
+                      if (catalogSubTab === 'categories') setIsCategoryModalOpen(true);
+                      if (catalogSubTab === 'products') setIsProductModalOpen(true);
+                    }} icon={<PlusIcon />}>
+                      {catalogSubTab === 'lines' && 'Nueva Línea'}
+                      {catalogSubTab === 'categories' && 'Nueva Categoría'}
+                      {catalogSubTab === 'products' && 'Nuevo Producto'}
+                      {catalogSubTab === 'assets' && 'Subir Asset'}
+                    </AdminButton>
+                  </div>
+
+                  <div className="mt-4 min-h-[300px]">
+                    {catalogSubTab === 'lines' && (
+                      <CatalogLinesTable 
+                        lines={lines} 
+                        onStatusChange={updateLineStatus} 
+                      />
+                    )}
+                    {catalogSubTab === 'categories' && (
+                      <CatalogCategoriesTable 
+                        categories={categories} 
+                        onStatusChange={updateCategoryStatus} 
+                      />
+                    )}
+                    {catalogSubTab === 'products' && (
+                      <CatalogProductsTable 
+                        products={products}
+                        onStatusChange={updateProductStatus}
+                        onPublish={publishProduct}
+                        onUnpublish={unpublishProduct}
+                      />
+                    )}
+                    {catalogSubTab === 'assets' && (
+                      <CatalogAssetsGrid 
+                        assets={assets}
+                      />
+                    )}
+
+                    {isCatalogLoading && (
+                      <div className="py-12 text-center text-slate-400 text-sm">Cargando datos...</div>
                     )}
                   </div>
                 </div>
@@ -499,19 +822,182 @@ export default function PlatformTenantsPage() {
         footer={
           <>
             <AdminButton variant="outline" onClick={() => setIsUserModalOpen(false)}>Cancelar</AdminButton>
+            <AdminButton onClick={() => {
+              const form = document.getElementById('add-user-form') as HTMLFormElement;
+              if (form) form.requestSubmit();
+            }} loading={isSubmitting}>Crear Usuario</AdminButton>
+          </>
+        }
+      >
+        <form 
+          id="add-user-form"
+          onSubmit={async (e) => {
+            e.preventDefault();
+            if (!selectedTenant) return;
+            setIsSubmitting(true);
+            try {
+              await createTenantUser({ ...newUser, tenantId: selectedTenant.id });
+              setIsUserModalOpen(false);
+              setNewUser({ firstName: '', lastName: '', email: '', password: '', role: 'TENANT_ADMIN' as any });
+            } catch (err: any) {
+              alert(err.message || 'Error al crear usuario');
+            } finally {
+              setIsSubmitting(false);
+            }
+          }}
+          className="space-y-4"
+        >
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="block text-xs font-semibold text-slate-500 uppercase mb-1">Nombre</label>
+              <input 
+                type="text" required
+                className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 outline-hidden" 
+                value={newUser.firstName} onChange={e => setNewUser({...newUser, firstName: e.target.value})} 
+              />
+            </div>
+            <div>
+              <label className="block text-xs font-semibold text-slate-500 uppercase mb-1">Apellido</label>
+              <input 
+                type="text" required
+                className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 outline-hidden" 
+                value={newUser.lastName} onChange={e => setNewUser({...newUser, lastName: e.target.value})} 
+              />
+            </div>
+          </div>
+          <div>
+            <label className="block text-xs font-semibold text-slate-500 uppercase mb-1">Email</label>
+            <input 
+              type="email" required
+              className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 outline-hidden" 
+              value={newUser.email} onChange={e => setNewUser({...newUser, email: e.target.value})} 
+            />
+          </div>
+          <div>
+            <label className="block text-xs font-semibold text-slate-500 uppercase mb-1">Contraseña</label>
+            <input 
+              type="password" required minLength={8}
+              placeholder="Mínimo 8 caracteres" 
+              className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 outline-hidden" 
+              value={newUser.password} onChange={e => setNewUser({...newUser, password: e.target.value})} 
+            />
+          </div>
+          <div>
+            <label className="block text-xs font-semibold text-slate-500 uppercase mb-1">Rol de Usuario</label>
+            <select 
+              className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 outline-hidden" 
+              value={newUser.role} onChange={e => setNewUser({...newUser, role: e.target.value as any})}
+            >
+              <option value="TENANT_ADMIN">Administrador de Marca (Full)</option>
+              <option value="BUSINESS_OWNER">Propietario de Negocio</option>
+              <option value="CATALOG_MANAGER">Gestor de Catálogo</option>
+              <option value="SALES_USER">Usuario de Ventas</option>
+            </select>
+          </div>
+          <button type="submit" className="hidden" />
+        </form>
+      </AdminModal>
+
+      {/* Modales de Catálogo */}
+      <AdminModal
+        isOpen={isLineModalOpen}
+        onClose={() => setIsLineModalOpen(false)}
+        title="Nueva Línea de Producto"
+        footer={
+          <>
+            <AdminButton variant="outline" onClick={() => setIsLineModalOpen(false)}>Cancelar</AdminButton>
             <AdminButton onClick={async () => {
-              if (!selectedTenant) return;
               setIsSubmitting(true);
               try {
-                await createTenantUser({ ...newUser, tenantId: selectedTenant.id });
-                setIsUserModalOpen(false);
-                setNewUser({ firstName: '', lastName: '', email: '', password: '', role: 'TENANT_ADMIN' as any });
+                await createLine(newLineData.name);
+                setIsLineModalOpen(false);
+                setNewLineData({ name: '', description: '' });
               } catch (err: any) {
-                alert(err.message || 'Error al crear usuario');
+                alert(err.message || 'Error al crear la línea');
               } finally {
                 setIsSubmitting(false);
               }
-            }} loading={isSubmitting}>Crear Usuario</AdminButton>
+            }} loading={isSubmitting}>Crear Línea</AdminButton>
+          </>
+        }
+      >
+        <div className="space-y-4">
+          <div>
+            <label className="block text-xs font-semibold text-slate-500 uppercase mb-1">Nombre de la Línea</label>
+            <input type="text" className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm" value={newLineData.name} onChange={e => setNewLineData({...newLineData, name: e.target.value})} />
+          </div>
+          <div>
+            <label className="block text-xs font-semibold text-slate-500 uppercase mb-1">Descripción (Opcional)</label>
+            <textarea className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm" value={newLineData.description} onChange={e => setNewLineData({...newLineData, description: e.target.value})} />
+          </div>
+        </div>
+      </AdminModal>
+
+      <AdminModal
+        isOpen={isCategoryModalOpen}
+        onClose={() => setIsCategoryModalOpen(false)}
+        title="Nueva Categoría"
+        footer={
+          <>
+            <AdminButton variant="outline" onClick={() => setIsCategoryModalOpen(false)}>Cancelar</AdminButton>
+            <AdminButton onClick={async () => {
+              setIsSubmitting(true);
+              try {
+                await createCategory(newCategoryData.name, newCategoryData.parentId || undefined);
+                setIsCategoryModalOpen(false);
+                setNewCategoryData({ name: '', parentId: '' });
+              } catch (err: any) {
+                alert(err.message || 'Error al crear la categoría');
+              } finally {
+                setIsSubmitting(false);
+              }
+            }} loading={isSubmitting}>Crear Categoría</AdminButton>
+          </>
+        }
+      >
+        <div className="space-y-4">
+          <div>
+            <label className="block text-xs font-semibold text-slate-500 uppercase mb-1">Nombre de la Categoría</label>
+            <input type="text" className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm" value={newCategoryData.name} onChange={e => setNewCategoryData({...newCategoryData, name: e.target.value})} />
+          </div>
+          <div>
+            <label className="block text-xs font-semibold text-slate-500 uppercase mb-1">Categoría Padre (Opcional)</label>
+            <select className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm" value={newCategoryData.parentId} onChange={e => setNewCategoryData({...newCategoryData, parentId: e.target.value})}>
+              <option value="">Ninguna (Nivel Raíz)</option>
+              {categories.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+            </select>
+          </div>
+        </div>
+      </AdminModal>
+
+      <AdminModal
+        isOpen={isProductModalOpen}
+        onClose={() => setIsProductModalOpen(false)}
+        title="Nuevo Producto"
+        footer={
+          <>
+            <AdminButton variant="outline" onClick={() => setIsProductModalOpen(false)}>Cancelar</AdminButton>
+            <AdminButton onClick={async () => {
+              if (!newProductData.lineId) {
+                alert("Debes seleccionar una línea");
+                return;
+              }
+              setIsSubmitting(true);
+              try {
+                const { lineId, categoryId, ...productBody } = newProductData;
+                await createProduct({ 
+                  ...productBody, 
+                  lineId, 
+                  categoryId: categoryId || undefined 
+                });
+                setIsProductModalOpen(false);
+                setNewProductData({ name: '', sku: '', lineId: '', categoryId: '', width: 0, depth: 0, height: 0 });
+              } catch (err: any) {
+                alert(err.message || 'Error al crear el producto');
+              } finally {
+                setIsSubmitting(false);
+              }
+            }} loading={isSubmitting}>Crear Producto</AdminButton>
           </>
         }
       >
@@ -519,29 +1005,42 @@ export default function PlatformTenantsPage() {
           <div className="grid grid-cols-2 gap-3">
             <div>
               <label className="block text-xs font-semibold text-slate-500 uppercase mb-1">Nombre</label>
-              <input type="text" className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm" value={newUser.firstName} onChange={e => setNewUser({...newUser, firstName: e.target.value})} />
+              <input type="text" className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm" value={newProductData.name} onChange={e => setNewProductData({...newProductData, name: e.target.value})} />
             </div>
             <div>
-              <label className="block text-xs font-semibold text-slate-500 uppercase mb-1">Apellido</label>
-              <input type="text" className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm" value={newUser.lastName} onChange={e => setNewUser({...newUser, lastName: e.target.value})} />
+              <label className="block text-xs font-semibold text-slate-500 uppercase mb-1">SKU (Identificador)</label>
+              <input type="text" className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm font-mono uppercase" value={newProductData.sku} onChange={e => setNewProductData({...newProductData, sku: e.target.value.toUpperCase()})} />
             </div>
           </div>
-          <div>
-            <label className="block text-xs font-semibold text-slate-500 uppercase mb-1">Email</label>
-            <input type="email" className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm" value={newUser.email} onChange={e => setNewUser({...newUser, email: e.target.value})} />
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="block text-xs font-semibold text-slate-500 uppercase mb-1">Línea (Requerido)</label>
+              <select className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm" value={newProductData.lineId} onChange={e => setNewProductData({...newProductData, lineId: e.target.value})}>
+                <option value="">Seleccionar...</option>
+                {lines.map(l => <option key={l.id} value={l.id}>{l.name}</option>)}
+              </select>
+            </div>
+            <div>
+              <label className="block text-xs font-semibold text-slate-500 uppercase mb-1">Categoría</label>
+              <select className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm" value={newProductData.categoryId} onChange={e => setNewProductData({...newProductData, categoryId: e.target.value})}>
+                <option value="">Opcional...</option>
+                {categories.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+              </select>
+            </div>
           </div>
-          <div>
-            <label className="block text-xs font-semibold text-slate-500 uppercase mb-1">Contraseña</label>
-            <input type="password" placeholder="Mínimo 8 caracteres" className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm" value={newUser.password} onChange={e => setNewUser({...newUser, password: e.target.value})} />
-          </div>
-          <div>
-            <label className="block text-xs font-semibold text-slate-500 uppercase mb-1">Rol de Usuario</label>
-            <select className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm" value={newUser.role} onChange={e => setNewUser({...newUser, role: e.target.value as any})}>
-              <option value="TENANT_ADMIN">Administrador de Marca (Full)</option>
-              <option value="BUSINESS_OWNER">Propietario de Negocio</option>
-              <option value="CATALOG_MANAGER">Gestor de Catálogo</option>
-              <option value="SALES_USER">Usuario de Ventas</option>
-            </select>
+          <div className="grid grid-cols-3 gap-3">
+            <div>
+              <label className="block text-xs font-semibold text-slate-500 uppercase mb-1 text-[10px]">Ancho (cm)</label>
+              <input type="number" className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm" value={newProductData.width} onChange={e => setNewProductData({...newProductData, width: Number(e.target.value)})} />
+            </div>
+            <div>
+              <label className="block text-xs font-semibold text-slate-500 uppercase mb-1 text-[10px]">Fondo (cm)</label>
+              <input type="number" className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm" value={newProductData.depth} onChange={e => setNewProductData({...newProductData, depth: Number(e.target.value)})} />
+            </div>
+            <div>
+              <label className="block text-xs font-semibold text-slate-500 uppercase mb-1 text-[10px]">Alto (cm)</label>
+              <input type="number" className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm" value={newProductData.height} onChange={e => setNewProductData({...newProductData, height: Number(e.target.value)})} />
+            </div>
           </div>
         </div>
       </AdminModal>
@@ -549,71 +1048,3 @@ export default function PlatformTenantsPage() {
   );
 }
 
-// ── Componentes Locales ──────────────────────────────────────────────────────
-
-const PlusIcon = () => (
-  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 4v16m8-8H4"/>
-  </svg>
-);
-
-const TenantUsersTable = ({ users, onStatusChange, onRoleChange }: { 
-  users: any[], 
-  onStatusChange: (u: any, s: string) => void,
-  onRoleChange: (u: any, r: string) => void 
-}) => {
-  return (
-    <div className="overflow-x-auto border border-slate-200 rounded-xl bg-white">
-      <table className="min-w-full divide-y divide-slate-200">
-        <thead className="bg-slate-50">
-          <tr>
-            <th className="px-4 py-3 text-left text-[10px] font-bold text-slate-400 uppercase tracking-wider">Usuario</th>
-            <th className="px-4 py-3 text-left text-[10px] font-bold text-slate-400 uppercase tracking-wider">Rol</th>
-            <th className="px-4 py-3 text-left text-[10px] font-bold text-slate-400 uppercase tracking-wider">Estado</th>
-            <th className="px-4 py-3 text-right text-[10px] font-bold text-slate-400 uppercase tracking-wider">Acciones</th>
-          </tr>
-        </thead>
-        <tbody className="divide-y divide-slate-100 italic non-italic">
-          {users.map((u) => (
-            <tr key={u.id} className="hover:bg-slate-50/50 transition-colors">
-              <td className="px-4 py-3">
-                <div className="flex flex-col">
-                  <span className="text-sm font-semibold text-slate-700">{u.firstName} {u.lastName}</span>
-                  <span className="text-[10px] font-mono text-slate-400">{u.email}</span>
-                </div>
-              </td>
-              <td className="px-4 py-3">
-                <select 
-                  className="text-xs bg-slate-100 border-none rounded py-1 px-2 focus:ring-0"
-                  value={u.role}
-                  onChange={(e) => onRoleChange(u, e.target.value)}
-                >
-                  <option value="TENANT_ADMIN">Admin</option>
-                  <option value="BUSINESS_OWNER">Owner</option>
-                  <option value="CATALOG_MANAGER">Catalog</option>
-                  <option value="SALES_USER">Sales</option>
-                </select>
-              </td>
-              <td className="px-4 py-3">
-                <StatusBadge status={u.status} />
-              </td>
-              <td className="px-4 py-3 text-right">
-                <div className="flex justify-end gap-1">
-                  {u.status === 'ACTIVE' ? (
-                    <AdminButton variant="ghost" size="sm" onClick={() => onStatusChange(u, 'SUSPENDED')}>
-                      Suspender
-                    </AdminButton>
-                  ) : (
-                    <AdminButton variant="ghost" size="sm" onClick={() => onStatusChange(u, 'ACTIVE')}>
-                      Activar
-                    </AdminButton>
-                  )}
-                </div>
-              </td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
-    </div>
-  );
-};

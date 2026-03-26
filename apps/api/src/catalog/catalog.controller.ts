@@ -56,8 +56,8 @@ export class CatalogController {
   @UseGuards(UserTypeGuard)
   @AllowedUserTypes('PLATFORM_USER', 'COMPANY_USER')
   @Post('lines')
-  async createLine(@Req() req: any, @Body() body: { name: string }) {
-    return this.catalogService.createProductLine(req.tenantId, body.name);
+  async createLine(@Req() req: any, @Body() body: { name: string; description?: string }) {
+    return this.catalogService.createProductLine(req.tenantId, body);
   }
   @UseGuards(UserTypeGuard)
   @AllowedUserTypes('PLATFORM_USER', 'COMPANY_USER')
@@ -80,6 +80,12 @@ export class CatalogController {
   @Post('categories')
   async createCategory(@Req() req: any, @Body() body: { name: string; parentId?: string }) {
     return this.catalogService.createCategory(req.tenantId, body.name, body.parentId);
+  }
+  @UseGuards(UserTypeGuard)
+  @AllowedUserTypes('PLATFORM_USER', 'COMPANY_USER')
+  @Patch('categories/:id')
+  async updateCategory(@Req() req: any, @Param('id') id: string, @Body() body: any) {
+    return this.catalogService.updateCategory(req.tenantId, id, body);
   }
   @UseGuards(UserTypeGuard)
   @AllowedUserTypes('PLATFORM_USER', 'COMPANY_USER')

@@ -39,10 +39,15 @@ export class CatalogService {
     });
   }
 
-  async createProductLine(tenantId: string, name: string) {
+  async createProductLine(tenantId: string, data: { name: string; description?: string }) {
     this.validateTenantId(tenantId);
     return this.prisma.client.productLine.create({
-      data: { tenantId, name, slug: name.toLowerCase().replace(/\s+/g, '-') },
+      data: { 
+        tenantId, 
+        name: data.name, 
+        description: data.description,
+        slug: data.name.toLowerCase().replace(/\s+/g, '-') 
+      },
     });
   }
 
@@ -79,13 +84,23 @@ export class CatalogService {
     });
   }
 
-  async updateCategoryStatus(tenantId: string, id: string, data: { active?: boolean }) {
+  async updateCategory(tenantId: string, id: string, data: { name?: string; parentId?: string; active?: boolean }) {
     this.validateTenantId(tenantId);
     const category = await this.prisma.client.productCategory.findUnique({ where: { id } });
     if (!category || category.tenantId !== tenantId) {
       throw new ForbiddenException('You can only update your own categories');
     }
-    return this.prisma.client.productCategory.update({ where: { id }, data });
+    return this.prisma.client.productCategory.update({ 
+      where: { id }, 
+      data: {
+        ...data,
+        slug: data.name ? data.name.toLowerCase().replace(/\s+/g, '-') : undefined
+      } 
+    });
+  }
+
+  async updateCategoryStatus(tenantId: string, id: string, data: { active?: boolean }) {
+    return this.updateCategory(tenantId, id, data);
   }
 
   async createProduct(tenantId: string, data: any) {
