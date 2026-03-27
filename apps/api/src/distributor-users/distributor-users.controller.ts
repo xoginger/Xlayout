@@ -37,8 +37,8 @@ export class DistributorUsersController {
    * El ownership se valida contra body.distributorId.
    */
   @UseGuards(RolesGuard, DistributorOwnershipGuard)
-  @AllowedUserTypes('PLATFORM_USER', 'DISTRIBUTOR_USER')
-  @AllowedRoles('DISTRIBUTOR_ADMIN')
+  @AllowedUserTypes('PLATFORM_USER', 'COMPANY_USER', 'DISTRIBUTOR_USER')
+  @AllowedRoles('DISTRIBUTOR_ADMIN', 'TENANT_ADMIN', 'BUSINESS_OWNER')
   @Post()
   async create(
     @Body() body: {
@@ -58,8 +58,8 @@ export class DistributorUsersController {
    * DISTRIBUTOR_ADMIN solo ve los de su propio distribuidor.
    */
   @UseGuards(RolesGuard, DistributorOwnershipGuard)
-  @AllowedUserTypes('PLATFORM_USER', 'DISTRIBUTOR_USER')
-  @AllowedRoles('DISTRIBUTOR_ADMIN')
+  @AllowedUserTypes('PLATFORM_USER', 'COMPANY_USER', 'DISTRIBUTOR_USER')
+  @AllowedRoles('DISTRIBUTOR_ADMIN', 'TENANT_ADMIN', 'BUSINESS_OWNER')
   @Get('by-distributor/:distributorId')
   async findByDistributor(@Param('distributorId') distributorId: string) {
     return this.distributorUsersService.findByDistributor(distributorId);
@@ -82,8 +82,8 @@ export class DistributorUsersController {
    * La validación de ownership se refuerza a nivel de servicio.
    */
   @UseGuards(RolesGuard)
-  @AllowedUserTypes('PLATFORM_USER', 'DISTRIBUTOR_USER')
-  @AllowedRoles('DISTRIBUTOR_ADMIN')
+  @AllowedUserTypes('PLATFORM_USER', 'COMPANY_USER', 'DISTRIBUTOR_USER')
+  @AllowedRoles('DISTRIBUTOR_ADMIN', 'TENANT_ADMIN', 'BUSINESS_OWNER')
   @Get(':id')
   async findOne(@Request() req: any, @Param('id') id: string) {
     const result = await this.distributorUsersService.findOne(id);
@@ -102,8 +102,8 @@ export class DistributorUsersController {
    * Ownership validado por guard (distributorId en param) y servicio.
    */
   @UseGuards(RolesGuard, DistributorOwnershipGuard)
-  @AllowedUserTypes('PLATFORM_USER', 'DISTRIBUTOR_USER')
-  @AllowedRoles('DISTRIBUTOR_ADMIN')
+  @AllowedUserTypes('PLATFORM_USER', 'COMPANY_USER', 'DISTRIBUTOR_USER')
+  @AllowedRoles('DISTRIBUTOR_ADMIN', 'TENANT_ADMIN', 'BUSINESS_OWNER')
   @Patch(':distributorId/:userId')
   async update(
     @Param('distributorId') distributorId: string,

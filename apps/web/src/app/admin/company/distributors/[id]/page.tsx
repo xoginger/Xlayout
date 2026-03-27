@@ -68,8 +68,9 @@ export default function DistributorDetailPage() {
       setIsUserModalOpen(false);
       setUserForm({ email: '', password: '', firstName: '', lastName: '', role: 'DESIGNER' });
       loadDistributor(); // Refrescar
-    } catch (err) {
-      alert('Error al crear usuario');
+    } catch (err: any) {
+      const message = err.response?.data?.message || 'Error al crear usuario';
+      alert(message);
     } finally {
       setIsSubmitting(false);
     }
