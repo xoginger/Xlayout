@@ -30,9 +30,10 @@ const ASSIMP_FORMATS = new Set([
   'ifc',   // Industry Foundation Classes — soporte experimental en assimp
   'wrl',   // VRML — soportado nativamente por assimp
   'xsi',   // Softimage XSI — soportado nativamente por assimp
+  'dwg',   // AutoCAD — via dwg2dxf + assimp
 ]);
 const GLTF_FORMATS = new Set(['glb', 'gltf']);
-const UNSUPPORTED = new Set(['dwg']);
+const UNSUPPORTED = new Set<string>([]);
 
 // ─── Umbrales de validación ───────────────────────────────────────────────
 const LIMITS = {
@@ -89,6 +90,8 @@ export class ConversionProcessor extends WorkerHost {
         rawGlbPath = await this.normalizeGltf(originalFilePath, rawOutputPath, originalFormat);
       } else if (originalFormat === 'kmz') {
         rawGlbPath = await this.convertKmz(originalFilePath, rawOutputPath);
+      } else if (originalFormat === 'dwg') {
+        rawGlbPath = await this.convertDwg(originalFilePath, rawOutputPath);
       } else if (ASSIMP_FORMATS.has(originalFormat)) {
         rawGlbPath = await this.convertWithAssimp(originalFilePath, rawOutputPath);
       } else if (UNSUPPORTED.has(originalFormat)) {
@@ -219,6 +222,45 @@ export class ConversionProcessor extends WorkerHost {
       timeout: 60_000,
     });
     return outputPath;
+  }
+  
+  // ── DWG: dwg2dxf → assimp → GLB ───────────────────────────────────────────
+  private async convertDwg(inputPath: string, outputPath: string): Promise<string> {
+    const tmpDxfPath = outputPath.replace('.glb', '_dwg.dxf');
+    this.logger.log(`🏗️  Convirtiendo DWG a DXF intermedio: ${path.basename(inputPath)}`);
+
+    try {
+      // 1. DWG → DXF intermedio
+      // -m: metric units, -o: output file
+      await execFileAsync('dwg2dxf', ['-m', '-o', tmpDxfPath, inputPath], {
+        timeout: 120_000,
+      });
+
+      if (!fs.existsSync(tmpDxfPath) || fs.statSync(tmpDxfPath).size === 0) {
+        throw new Error('La herramienta dwg2dxf no produjo un archivo DXF válido. El DWG podría estar corrupto o ser una versión no soportada.');
+      }
+
+      // 2. DXF → GLB (via assimp)
+      const glbPath = await this.convertWithAssimp(tmpDxfPath, outputPath);
+
+      // 3. Validación de geometría 3D
+      // Extraemos metadata básica para ver si hay triángulos
+      const meta = await this.extractMetadata(glbPath);
+      if (meta.triangles === 0) {
+        throw new Error('El archivo DWG no contiene geometría 3D válida (solo 2D o vacío).');
+      }
+
+      return glbPath;
+
+    } catch (err: any) {
+      const msg = err.message || '';
+      if (msg.includes('triangles === 0') || msg.includes('geometría 3D')) {
+        throw err; // Relanzar error de validación de negocio
+      }
+      throw new Error(`Error en pipeline DWG: ${msg}`);
+    } finally {
+      this.cleanupTempFile(tmpDxfPath);
+    }
   }
 
   // ── Convertir con assimp (FBX, DAE, OBJ, 3DS, DXF, STL, IFC, WRL, XSI) ──

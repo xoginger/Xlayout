@@ -11,8 +11,12 @@ export interface ProductLine {
   id: string;
   name: string;
   slug: string;
+  description?: string;
   category?: string;
   active: boolean;
+  _count?: {
+    products: number;
+  };
 }
 
 export interface ProductCategory {
@@ -93,8 +97,10 @@ interface CatalogState {
   isLoading: boolean;
 
   fetchLines: () => Promise<void>;
-  createLine: (name: string) => Promise<ProductLine>;
+  createLine: (name: string, description?: string) => Promise<ProductLine>;
+  updateLine: (id: string, data: Partial<ProductLine>) => Promise<ProductLine>;
   updateLineStatus: (id: string, active: boolean) => Promise<void>;
+  deleteLine: (id: string) => Promise<void>;
   
   fetchCategories: () => Promise<void>;
   createCategory: (name: string, parentId?: string) => Promise<ProductCategory>;
@@ -144,16 +150,31 @@ export const useAdminCatalogStore = create<CatalogState>((set) => ({
     }
   },
 
-  createLine: async (name) => {
-    const newLine = await api.post<ProductLine>('/catalog/lines', { name });
-    set((state) => ({ lines: [...state.lines, newLine] }));
+  createLine: async (name, description) => {
+    const newLine = await api.post<ProductLine>('/catalog/lines', { name, description });
+    set((state) => ({ lines: [...state.lines, newLine].sort((a,b) => a.name.localeCompare(b.name)) }));
     return newLine;
+  },
+  
+  updateLine: async (id, data) => {
+    const updated = await api.patch<ProductLine>(`/catalog/lines/${id}`, data);
+    set((state) => ({
+      lines: state.lines.map(l => l.id === id ? updated : l).sort((a,b) => a.name.localeCompare(b.name))
+    }));
+    return updated;
   },
 
   updateLineStatus: async (id, active) => {
     await api.patch(`/catalog/lines/${id}/status`, { active });
     set((state) => ({
       lines: state.lines.map(l => l.id === id ? { ...l, active } : l)
+    }));
+  },
+
+  deleteLine: async (id) => {
+    await api.delete(`/catalog/lines/${id}`);
+    set((state) => ({
+      lines: state.lines.filter(l => l.id !== id)
     }));
   },
 

@@ -10,6 +10,7 @@
 
 import React, { useEffect, useState, useCallback, useRef } from 'react';
 import { useRouter } from 'next/navigation';
+import Link from 'next/link';
 import { AdminLayout } from '@/components/admin/AdminLayout';
 import { AdminTable } from '@/components/admin/AdminTable';
 import { AdminButton } from '@/components/admin/AdminButton';
@@ -340,10 +341,15 @@ export default function CompanyProductsPage() {
                 <input type="text" className="premium-input w-full" value={formData.sku} onChange={set('sku')} />
               </div>
               <div>
-                <label className="block text-[10px] font-bold text-slate-500 uppercase mb-1">Línea de Producto</label>
+                <div className="flex justify-between items-center mb-1">
+                  <label className="block text-[10px] font-bold text-slate-500 uppercase">Línea de Producto</label>
+                  <Link href="/admin/company/catalog/lines" className="text-[9px] text-blue-600 font-black uppercase hover:underline">Gestionar</Link>
+                </div>
                 <select className="premium-input w-full" value={formData.lineId} onChange={set('lineId')}>
                   <option value="">Seleccionar...</option>
-                  {lines.map(l => <option key={l.id} value={l.id}>{l.name}</option>)}
+                  {lines.filter(l => l.active || l.id === formData.lineId).map(l => (
+                    <option key={l.id} value={l.id}>{l.name} {!l.active && '(Inactiva)'}</option>
+                  ))}
                 </select>
               </div>
             </div>

@@ -122,6 +122,7 @@ const getSections = (type: SidebarType) => {
     ],
     catalog: [
       { label: 'Productos', href: `${base}/catalog/products`, icon: 'catalog' },
+      { label: 'Líneas', href: `${base}/catalog/lines`, icon: 'variants' },
       { label: 'Variantes', href: `${base}/catalog/variants`, icon: 'variants' },
       { label: 'Assets 3D', href: `${base}/catalog/assets`, icon: 'assets3d' },
       { label: 'Precios', href: `${base}/pricing`, icon: 'pricing' },

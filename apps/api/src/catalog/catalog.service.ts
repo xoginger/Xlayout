@@ -46,8 +46,14 @@ export class CatalogService {
         tenantId, 
         name: data.name, 
         description: data.description,
-        slug: data.name.toLowerCase().replace(/\s+/g, '-') 
+        slug: data.name.toLowerCase().replace(/\s+/g, '-').replace(/[^\w-]+/g, ''),
+        active: true
       },
+      include: {
+        _count: {
+          select: { products: true }
+        }
+      }
     });
   }
 
@@ -55,7 +61,12 @@ export class CatalogService {
     this.validateTenantId(tenantId);
     return this.prisma.client.productLine.findMany({
       where: { tenantId },
-      orderBy: { createdAt: 'desc' },
+      orderBy: { name: 'asc' },
+      include: {
+        _count: {
+          select: { products: true }
+        }
+      }
     });
   }
 
@@ -63,9 +74,41 @@ export class CatalogService {
     this.validateTenantId(tenantId);
     const line = await this.prisma.client.productLine.findUnique({ where: { id } });
     if (!line || line.tenantId !== tenantId) {
-      throw new ForbiddenException('You can only update your own product lines');
+      throw new ForbiddenException('No tienes permiso para editar esta línea');
     }
-    return this.prisma.client.productLine.update({ where: { id }, data });
+    
+    const updateData: any = { ...data };
+    if (data.name) {
+      updateData.slug = data.name.toLowerCase().replace(/\s+/g, '-').replace(/[^\w-]+/g, '');
+    }
+
+    return this.prisma.client.productLine.update({ 
+      where: { id }, 
+      data: updateData,
+      include: {
+        _count: {
+          select: { products: true }
+        }
+      }
+    });
+  }
+
+  async deleteProductLine(tenantId: string, id: string) {
+    this.validateTenantId(tenantId);
+    const line = await this.prisma.client.productLine.findUnique({ 
+      where: { id },
+      include: { _count: { select: { products: true } } }
+    });
+    
+    if (!line || line.tenantId !== tenantId) {
+      throw new ForbiddenException('No tienes permiso para eliminar esta línea');
+    }
+
+    if (line._count.products > 0) {
+      throw new BadRequestException('No se puede eliminar una línea que tiene productos asociados. Reasigna los productos primero.');
+    }
+
+    return this.prisma.client.productLine.delete({ where: { id } });
   }
 
   async createCategory(tenantId: string, name: string, parentId?: string) {

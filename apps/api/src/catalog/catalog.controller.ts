@@ -17,16 +17,14 @@ import { UserTypeGuard } from '../common/guards/user-type.guard';
 import { AllowedUserTypes } from '../common/decorators/user-type.decorator';
 import * as path from 'path';
 
-// Formatos 3D aceptados — incluye IFC, WRL, XSI
+// Formatos 3D aceptados — incluye DWG para pipeline de conversión
 const ACCEPTED_EXTENSIONS = new Set([
   'glb', 'gltf', 'obj', 'dae', 'fbx', '3ds', 'dxf', 'kmz', 'stl', 'ply',
-  'ifc', 'wrl', 'xsi',
+  'ifc', 'wrl', 'xsi', 'dwg',
 ]);
 
 // Tamaño máximo permitido para archivos 3D (50 MB)
 const MAX_FILE_SIZE_BYTES = 50 * 1024 * 1024;
-// DWG: rechazado explícitamente con un mensaje claro
-const DWG_NOTE = 'DWG requiere ODA Platform (licencia comercial). Use la exportación DXF desde su herramienta CAD en su lugar.';
 
 const getFormatFromFile = (filename: string): string =>
   path.extname(filename).toLowerCase().replace('.', '');
@@ -70,6 +68,13 @@ export class CatalogController {
   @Patch('lines/:id/status')
   async updateLineStatus(@Req() req: any, @Param('id') id: string, @Body() body: { active: boolean }) {
     return this.catalogService.updateProductLine(req.tenantId, id, { active: body.active });
+  }
+
+  @UseGuards(UserTypeGuard)
+  @AllowedUserTypes('PLATFORM_USER', 'COMPANY_USER')
+  @Delete('lines/:id')
+  async deleteLine(@Req() req: any, @Param('id') id: string) {
+    return this.catalogService.deleteProductLine(req.tenantId, id);
   }
 
   // ─── Categorías ──────────────────────────────────────────────────────────
@@ -194,10 +199,6 @@ export class CatalogController {
 
     const format = getFormatFromFile(file.originalname);
 
-    // Rechazo explícito de DWG
-    if (format === 'dwg') {
-      throw new BadRequestException(DWG_NOTE);
-    }
 
     if (!ACCEPTED_EXTENSIONS.has(format)) {
       throw new BadRequestException(
@@ -259,9 +260,6 @@ export class CatalogController {
     const format = getFormatFromFile(file.originalname);
 
     // Validar que sea un formato 3D reconocido
-    if (format === 'dwg') {
-      throw new BadRequestException(DWG_NOTE);
-    }
     if (!ACCEPTED_EXTENSIONS.has(format)) {
       throw new BadRequestException(
         `Formato '.${format}' no es un modelo 3D soportado. Aceptados: ${[...ACCEPTED_EXTENSIONS].join(', ')}`
