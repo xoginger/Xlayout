@@ -710,7 +710,7 @@ export const useEditorStore = create<EditorState>((set, get) => ({
 
       let projectId = project.id;
       if (projectId === 'default') {
-        const newProj = await projectService.createProject(project.name);
+        const newProj = await projectService.createProject({ name: project.name });
         projectId = newProj.id;
       }
 
@@ -725,8 +725,9 @@ export const useEditorStore = create<EditorState>((set, get) => ({
           lastSavedAt: new Date().toISOString()
         }
       }));
-    } catch (e) {
+    } catch (e: any) {
       console.error('Failed to save project', e);
+      alert(`Error al guardar el proyecto: ${e.message || 'Error desconocido'}`);
       set((state) => ({ project: { ...state.project, isSaving: false } }));
       throw e;
     }
@@ -738,7 +739,7 @@ export const useEditorStore = create<EditorState>((set, get) => ({
 
     try {
       // 1. Crear nuevo proyecto con el nuevo nombre
-      const newProj = await projectService.createProject(newName, `Copia de ${project.name}`);
+      const newProj = await projectService.createProject({ name: newName, description: `Copia de ${project.name}` });
       const sceneState = { items, walls, openings, dimensions, lines, rectangles, faces, volumes, layers, scenes, blueprint, groups };
 
       // 2. Guardar la versión actual en el nuevo proyecto
@@ -881,7 +882,7 @@ export const useEditorStore = create<EditorState>((set, get) => ({
 
   createNewProject: async (name: string) => {
     try {
-      const newProj = await projectService.createProject(name);
+      const newProj = await projectService.createProject({ name });
       set({
         project: {
           id: newProj.id,

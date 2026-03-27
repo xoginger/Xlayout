@@ -10,9 +10,25 @@ export interface ProjectListing {
   id: string;
   name: string;
   description?: string;
+  projectCode?: string;
+  clientName?: string;
+  clientCompany?: string;
+  contactName?: string;
+  contactEmail?: string;
+  contactPhone?: string;
+  commercialStatus: string;
+  operationalStatus: string;
+  priority: string;
+  estimatedValue?: number;
+  finalValue?: number;
+  probability?: number;
+  dueDate?: string;
+  tags?: any;
+  source?: string;
+  priceType?: string;
   createdAt: string;
   updatedAt: string;
-  _count: {
+  _count?: {
     versions: number;
   };
 }
@@ -26,16 +42,24 @@ export const projectService = {
     return api.get<any>(`/projects/${id}`);
   },
 
-  async createProject(name: string, description?: string) {
-    return api.post<any>('/projects', { name, description });
+  async createProject(data: Partial<ProjectListing>) {
+    return api.post<any>('/projects', data);
   },
 
   async saveVersion(projectId: string, sceneState: any) {
     return api.post<any>(`/projects/${projectId}/versions`, { sceneState });
   },
 
-  async updateProject(id: string, updates: { name?: string; description?: string }) {
+  async updateProject(id: string, updates: Partial<ProjectListing>) {
     return api.patch<any>(`/projects/${id}`, updates);
+  },
+
+  async updateCommercialStatus(id: string, status: string) {
+    return api.patch<any>(`/projects/${id}/commercial-status`, { status });
+  },
+
+  async updateOperationalStatus(id: string, status: string) {
+    return api.patch<any>(`/projects/${id}/operational-status`, { status });
   },
 
   async deleteProject(id: string) {

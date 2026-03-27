@@ -67,17 +67,17 @@ enum AuditActorType {
 
 // Rol del usuario dentro de la empresa distribuidora
 enum DistributorUserRole {
-  DISTRIBUTOR_ADMIN  // Administrador de la empresa distribuidora
-  DESIGNER           // Diseñador — usa el editor y genera propuestas
-  SALES              // Vendedor — genera cotizaciones comerciales
+  DISTRIBUTOR_ADMIN // Administrador de la empresa distribuidora
+  DESIGNER // Diseñador — usa el editor y genera propuestas
+  SALES // Vendedor — genera cotizaciones comerciales
 }
 
 // Alcance del incremento comercial del distribuidor
 enum MarkupScope {
-  GLOBAL       // Aplica a todos los productos de todos los fabricantes
-  BY_TENANT    // Aplica a todos los productos de un fabricante específico
-  BY_LINE      // Aplica a una línea de producto
-  BY_PRODUCT   // Aplica a un producto específico
+  GLOBAL // Aplica a todos los productos de todos los fabricantes
+  BY_TENANT // Aplica a todos los productos de un fabricante específico
+  BY_LINE // Aplica a una línea de producto
+  BY_PRODUCT // Aplica a un producto específico
 }
 
 // ============================================================
@@ -96,7 +96,7 @@ model PlatformUser {
   createdAt    DateTime     @default(now()) @map("created_at")
   updatedAt    DateTime     @updatedAt @map("updated_at")
 
-  auditLogs    AuditLog[]   @relation("PlatformUserAuditor")
+  auditLogs      AuditLog[] @relation("PlatformUserAuditor")
   tenantsCreated Tenant[]   @relation("TenantCreator")
 
   @@map("platform_users")
@@ -118,29 +118,29 @@ model Tenant {
   createdAt    DateTime     @default(now()) @map("created_at")
   updatedAt    DateTime     @updatedAt @map("updated_at")
 
-  createdBy        PlatformUser?    @relation("TenantCreator", fields: [createdById], references: [id])
-  companyUsers     CompanyUser[]
-  productLines     ProductLine[]
+  createdBy         PlatformUser?      @relation("TenantCreator", fields: [createdById], references: [id])
+  companyUsers      CompanyUser[]
+  productLines      ProductLine[]
   productCategories ProductCategory[]
-  products         Product[]
-  productAssets    ProductAsset[]
-  productPrices    ProductPrice[]
+  products          Product[]
+  productAssets     ProductAsset[]
+  productPrices     ProductPrice[]
   productConditions ProductCondition[]
-  productVariants  ProductVariant[]
-  catalogAccesses  CatalogAccess[]
-  activationCodes  ActivationCode[]
-  importJobs       ImportJob[]
-  auditLogs        AuditLog[]       @relation("TenantAudit")
+  productVariants   ProductVariant[]
+  catalogAccesses   CatalogAccess[]
+  activationCodes   ActivationCode[]
+  importJobs        ImportJob[]
+  auditLogs         AuditLog[]         @relation("TenantAudit")
 
   // Relaciones del modelo comercial de distribuidores
   distributorAccesses        ManufacturerDistributorAccess[]
   distributorCatalogAccesses DistributorCatalogAccess[]
 
   // Legacy backward-compat relations (existing schema)
-  legacyBrands     Brand[]              @relation("LegacyBrands")
-  legacyPriceLists CompanyPriceList[]   @relation("LegacyCompanyPriceLists")
-  legacyDiscountRules DiscountRule[]    @relation("LegacyDiscountRules")
-  projects         Project[]
+  legacyBrands        Brand[]            @relation("LegacyBrands")
+  legacyPriceLists    CompanyPriceList[] @relation("LegacyCompanyPriceLists")
+  legacyDiscountRules DiscountRule[]     @relation("LegacyDiscountRules")
+  projects            Project[]
 
   @@map("tenants")
 }
@@ -182,7 +182,7 @@ model EndUser {
   lastName     String     @map("last_name")
   phone        String?
   companyName  String?    @map("company_name")
-  profession   String?    // 'architect' | 'designer' | 'distributor' | 'other'
+  profession   String? // 'architect' | 'designer' | 'distributor' | 'other'
   country      String?
   status       UserStatus @default(ACTIVE)
   preferences  Json?
@@ -190,7 +190,7 @@ model EndUser {
   updatedAt    DateTime   @updatedAt @map("updated_at")
 
   catalogAccesses CatalogAccess[]
-  auditLogs       AuditLog[]       @relation("EndUserAuditor")
+  auditLogs       AuditLog[]      @relation("EndUserAuditor")
 
   @@map("end_users")
 }
@@ -210,8 +210,8 @@ model ProductLine {
   createdAt   DateTime @default(now()) @map("created_at")
   updatedAt   DateTime @updatedAt @map("updated_at")
 
-  tenant   Tenant     @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-  products Product[]
+  tenant            Tenant             @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  products          Product[]
   productConditions ProductCondition[]
 
   @@unique([tenantId, slug])
@@ -226,7 +226,7 @@ model ProductCategory {
   parentId String? @map("parent_id")
   active   Boolean @default(true)
 
-  tenant   Tenant          @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  tenant   Tenant            @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   parent   ProductCategory?  @relation("CategoryTree", fields: [parentId], references: [id])
   children ProductCategory[] @relation("CategoryTree")
   products Product[]
@@ -250,9 +250,9 @@ model Product {
   status      ProductStatus @default(DRAFT)
   metadata    Json?
 
-  tenant     Tenant           @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-  line       ProductLine      @relation(fields: [lineId], references: [id])
-  category   ProductCategory? @relation(fields: [categoryId], references: [id])
+  tenant     Tenant             @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  line       ProductLine        @relation(fields: [lineId], references: [id])
+  category   ProductCategory?   @relation(fields: [categoryId], references: [id])
   assets     ProductAsset[]
   prices     ProductPrice[]
   conditions ProductCondition[]
@@ -263,21 +263,21 @@ model Product {
 }
 
 model ProductAsset {
-  id                String   @id @default(uuid())
-  tenantId          String   @map("tenant_id")
-  productId         String?  @map("product_id")
-  assetType         String   // 'image' | 'model_3d' | 'footprint_svg' | 'thumbnail'
-  fileUrl           String?  @map("file_url")
-  thumbnailUrl      String?  @map("thumbnail_url")
-  footprint2dUrl    String?  @map("footprint_2d_url")
-  model3dUrl        String?  @map("model_3d_url")
+  id               String   @id @default(uuid())
+  tenantId         String   @map("tenant_id")
+  productId        String?  @map("product_id")
+  assetType        String // 'image' | 'model_3d' | 'footprint_svg' | 'thumbnail'
+  fileUrl          String?  @map("file_url")
+  thumbnailUrl     String?  @map("thumbnail_url")
+  footprint2dUrl   String?  @map("footprint_2d_url")
+  model3dUrl       String?  @map("model_3d_url")
   // ── Conversion Pipeline ─────────────────────────────────────────────────
-  originalFileUrl   String?  @map("original_file_url")   // path to uploaded source file
-  originalFormat    String?  @map("original_format")      // 'glb' | 'obj' | 'dae' | 'fbx' | ...
-  conversionStatus  String   @default("pending") @map("conversion_status")  // pending|processing|converted|validated|failed|url_only
-  conversionError   String?  @map("conversion_error")
-  metadata          Json?    // technical: triangles, materials, bbox, fileSize, validationStatus
-  createdAt         DateTime @default(now()) @map("created_at")
+  originalFileUrl  String?  @map("original_file_url") // path to uploaded source file
+  originalFormat   String?  @map("original_format") // 'glb' | 'obj' | 'dae' | 'fbx' | ...
+  conversionStatus String   @default("pending") @map("conversion_status") // pending|processing|converted|validated|failed|url_only
+  conversionError  String?  @map("conversion_error")
+  metadata         Json? // technical: triangles, materials, bbox, fileSize, validationStatus
+  createdAt        DateTime @default(now()) @map("created_at")
 
   tenant  Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   product Product? @relation(fields: [productId], references: [id], onDelete: Cascade)
@@ -286,18 +286,18 @@ model ProductAsset {
 }
 
 model ProductPrice {
-  id          String    @id @default(uuid())
-  tenantId    String    @map("tenant_id")
-  productId   String    @map("product_id")
-  priceType   String    @default("A") @map("price_type") // 'A'|'B'|'C'|'D'|'E'
-  currency    String    @default("MXN")
-  basePrice   Decimal   @map("base_price") @db.Decimal(12, 2)
-  active      Boolean   @default(true)
-  validFrom   DateTime? @map("valid_from")
-  validTo     DateTime? @map("valid_to")
-  metadata    Json?
-  createdAt   DateTime  @default(now()) @map("created_at")
-  updatedAt   DateTime  @updatedAt @map("updated_at")
+  id        String    @id @default(uuid())
+  tenantId  String    @map("tenant_id")
+  productId String    @map("product_id")
+  priceType String    @default("A") @map("price_type") // 'A'|'B'|'C'|'D'|'E'
+  currency  String    @default("MXN")
+  basePrice Decimal   @map("base_price") @db.Decimal(12, 2)
+  active    Boolean   @default(true)
+  validFrom DateTime? @map("valid_from")
+  validTo   DateTime? @map("valid_to")
+  metadata  Json?
+  createdAt DateTime  @default(now()) @map("created_at")
+  updatedAt DateTime  @updatedAt @map("updated_at")
 
   tenant  Tenant  @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   product Product @relation(fields: [productId], references: [id], onDelete: Cascade)
@@ -309,7 +309,7 @@ model ProductPrice {
 model ProductCondition {
   id            String   @id @default(uuid())
   tenantId      String   @map("tenant_id")
-  productId     String?  @map("product_id")  // null = applies to whole line
+  productId     String?  @map("product_id") // null = applies to whole line
   lineId        String?  @map("line_id")
   conditionType String   @map("condition_type") // 'warranty' | 'delivery' | 'commercial' | 'custom'
   description   String
@@ -330,22 +330,22 @@ model ProductCondition {
 
 /// Links a Tenant (company) to an EndUser, controlling what they can see
 model CatalogAccess {
-  id                  String    @id @default(uuid())
-  tenantId            String    @map("tenant_id")
-  endUserId           String    @map("end_user_id")
-  catalogEnabled      Boolean   @default(true)  @map("catalog_enabled")
-  pricesEnabled       Boolean   @default(false) @map("prices_enabled")
-  conditionsEnabled   Boolean   @default(false) @map("conditions_enabled")
-  activatedByUserId   String?   @map("activated_by_user_id")
-  activationCodeId    String?   @map("activation_code_id")
-  active              Boolean   @default(true)
-  activatedAt         DateTime  @default(now()) @map("activated_at")
-  expiresAt           DateTime? @map("expires_at")
+  id                String    @id @default(uuid())
+  tenantId          String    @map("tenant_id")
+  endUserId         String    @map("end_user_id")
+  catalogEnabled    Boolean   @default(true) @map("catalog_enabled")
+  pricesEnabled     Boolean   @default(false) @map("prices_enabled")
+  conditionsEnabled Boolean   @default(false) @map("conditions_enabled")
+  activatedByUserId String?   @map("activated_by_user_id")
+  activationCodeId  String?   @map("activation_code_id")
+  active            Boolean   @default(true)
+  activatedAt       DateTime  @default(now()) @map("activated_at")
+  expiresAt         DateTime? @map("expires_at")
 
-  tenant          Tenant          @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-  endUser         EndUser         @relation(fields: [endUserId], references: [id], onDelete: Cascade)
-  activatedBy     CompanyUser?    @relation("CatalogActivator", fields: [activatedByUserId], references: [id])
-  activationCode  ActivationCode? @relation(fields: [activationCodeId], references: [id])
+  tenant         Tenant          @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  endUser        EndUser         @relation(fields: [endUserId], references: [id], onDelete: Cascade)
+  activatedBy    CompanyUser?    @relation("CatalogActivator", fields: [activatedByUserId], references: [id])
+  activationCode ActivationCode? @relation(fields: [activationCodeId], references: [id])
 
   @@unique([tenantId, endUserId])
   @@map("catalog_accesses")
@@ -355,7 +355,7 @@ model ActivationCode {
   id                String    @id @default(uuid())
   tenantId          String    @map("tenant_id")
   code              String    @unique
-  catalogEnabled    Boolean   @default(true)  @map("catalog_enabled")
+  catalogEnabled    Boolean   @default(true) @map("catalog_enabled")
   pricesEnabled     Boolean   @default(false) @map("prices_enabled")
   conditionsEnabled Boolean   @default(false) @map("conditions_enabled")
   maxUses           Int?      @map("max_uses")
@@ -375,17 +375,17 @@ model ActivationCode {
 // ============================================================
 
 model AuditLog {
-  id          String         @id @default(uuid())
-  actorType   AuditActorType @map("actor_type")
-  actorId     String         @map("actor_id")
-  tenantId    String?        @map("tenant_id")
-  action      String         // 'CREATE_TENANT' | 'ENABLE_CATALOG' | 'ACTIVATE_CODE' etc.
-  entityType  String         @map("entity_type")
-  entityId    String?        @map("entity_id")
-  payload     Json?
-  createdAt   DateTime       @default(now()) @map("created_at")
+  id         String         @id @default(uuid())
+  actorType  AuditActorType @map("actor_type")
+  actorId    String         @map("actor_id")
+  tenantId   String?        @map("tenant_id")
+  action     String // 'CREATE_TENANT' | 'ENABLE_CATALOG' | 'ACTIVATE_CODE' etc.
+  entityType String         @map("entity_type")
+  entityId   String?        @map("entity_id")
+  payload    Json?
+  createdAt  DateTime       @default(now()) @map("created_at")
 
-  tenant      Tenant?      @relation("TenantAudit", fields: [tenantId], references: [id])
+  tenant       Tenant?       @relation("TenantAudit", fields: [tenantId], references: [id])
   platformUser PlatformUser? @relation("PlatformUserAuditor", fields: [actorId], references: [id], map: "audit_platform_user_fk")
   companyUser  CompanyUser?  @relation("CompanyUserAuditor", fields: [actorId], references: [id], map: "audit_company_user_fk")
   endUser      EndUser?      @relation("EndUserAuditor", fields: [actorId], references: [id], map: "audit_end_user_fk")
@@ -396,10 +396,10 @@ model AuditLog {
 model ImportJob {
   id          String          @id @default(uuid())
   tenantId    String          @map("tenant_id")
-  type        String          // 'PRODUCTS' | 'PRICES' | 'CONDITIONS'
+  type        String // 'PRODUCTS' | 'PRICES' | 'CONDITIONS'
   filename    String
   status      ImportJobStatus @default(PENDING)
-  summary     Json?           // { total, succeeded, failed, errors: [...] }
+  summary     Json? // { total, succeeded, failed, errors: [...] }
   createdById String          @map("created_by_id")
   createdAt   DateTime        @default(now()) @map("created_at")
   updatedAt   DateTime        @updatedAt @map("updated_at")
@@ -428,49 +428,49 @@ model DistributorCompany {
   updatedAt    DateTime   @updatedAt @map("updated_at")
 
   // Usuarios internos del distribuidor (diseñadores, administradores, vendedores)
-  users                  DistributorUser[]
+  users                DistributorUser[]
   // Catálogos de fabricantes autorizados
-  manufacturerAccesses   ManufacturerDistributorAccess[]
+  manufacturerAccesses ManufacturerDistributorAccess[]
   // Acceso específico a listas de precio de cada fabricante
-  catalogAccesses        DistributorCatalogAccess[]
+  catalogAccesses      DistributorCatalogAccess[]
   // Reglas de incremento comercial
-  priceMarkups           DistributorPriceMarkup[]
+  priceMarkups         DistributorPriceMarkup[]
 
   @@map("distributor_companies")
 }
 
 // Usuario dentro de una empresa distribuidora — diseñadores, comerciales, admin
 model DistributorUser {
-  id             String              @id @default(uuid())
-  distributorId  String              @map("distributor_id")
-  email          String              @unique
-  passwordHash   String              @map("password_hash")
-  firstName      String              @map("first_name")
-  lastName       String              @map("last_name")
-  role           DistributorUserRole @default(DESIGNER)
-  status         UserStatus          @default(ACTIVE)
-  preferences    Json?
-  createdAt      DateTime            @default(now()) @map("created_at")
-  updatedAt      DateTime            @updatedAt @map("updated_at")
+  id            String              @id @default(uuid())
+  distributorId String              @map("distributor_id")
+  email         String              @unique
+  passwordHash  String              @map("password_hash")
+  firstName     String              @map("first_name")
+  lastName      String              @map("last_name")
+  role          DistributorUserRole @default(DESIGNER)
+  status        UserStatus          @default(ACTIVE)
+  preferences   Json?
+  createdAt     DateTime            @default(now()) @map("created_at")
+  updatedAt     DateTime            @updatedAt @map("updated_at")
 
   // Relación con su empresa distribuidora
-  distributor    DistributorCompany @relation(fields: [distributorId], references: [id], onDelete: Cascade)
+  distributor DistributorCompany @relation(fields: [distributorId], references: [id], onDelete: Cascade)
 
   @@map("distributor_users")
 }
 
 // Autorización de un fabricante hacia un distribuidor — tabla de control de acceso macro
 model ManufacturerDistributorAccess {
-  id             String    @id @default(uuid())
-  tenantId       String    @map("tenant_id")       // Fabricante (Tenant)
-  distributorId  String    @map("distributor_id")  // Distribuidor autorizado
-  active         Boolean   @default(true)
-  grantedAt      DateTime  @default(now()) @map("granted_at")
-  expiresAt      DateTime? @map("expires_at")
-  notes          String?   // Notas internas del fabricante sobre esta autorización
+  id            String    @id @default(uuid())
+  tenantId      String    @map("tenant_id") // Fabricante (Tenant)
+  distributorId String    @map("distributor_id") // Distribuidor autorizado
+  active        Boolean   @default(true)
+  grantedAt     DateTime  @default(now()) @map("granted_at")
+  expiresAt     DateTime? @map("expires_at")
+  notes         String? // Notas internas del fabricante sobre esta autorización
 
-  tenant       Tenant             @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-  distributor  DistributorCompany @relation(fields: [distributorId], references: [id], onDelete: Cascade)
+  tenant      Tenant             @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  distributor DistributorCompany @relation(fields: [distributorId], references: [id], onDelete: Cascade)
 
   // Un distribuidor solo puede tener UN acceso activo por fabricante
   @@unique([tenantId, distributorId])
@@ -479,16 +479,16 @@ model ManufacturerDistributorAccess {
 
 // Qué lista de precios recibe el distribuidor para un fabricante específico
 model DistributorCatalogAccess {
-  id             String   @id @default(uuid())
-  distributorId  String   @map("distributor_id")
-  tenantId       String   @map("tenant_id")        // Fabricante
+  id            String   @id @default(uuid())
+  distributorId String   @map("distributor_id")
+  tenantId      String   @map("tenant_id") // Fabricante
   // Tipo de lista de precios asignada: 'A'|'B'|'C'|'D'|'E'
-  priceListType  String   @default("A") @map("price_list_type")
-  active         Boolean  @default(true)
-  grantedAt      DateTime @default(now()) @map("granted_at")
+  priceListType String   @default("A") @map("price_list_type")
+  active        Boolean  @default(true)
+  grantedAt     DateTime @default(now()) @map("granted_at")
 
-  distributor  DistributorCompany @relation(fields: [distributorId], references: [id], onDelete: Cascade)
-  tenant       Tenant             @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  distributor DistributorCompany @relation(fields: [distributorId], references: [id], onDelete: Cascade)
+  tenant      Tenant             @relation(fields: [tenantId], references: [id], onDelete: Cascade)
 
   // Un distribuidor solo puede tener UN acceso de catálogo por fabricante
   @@unique([distributorId, tenantId])
@@ -498,22 +498,22 @@ model DistributorCatalogAccess {
 // Regla de incremento comercial del distribuidor — flexible por scope
 // Precio final = precioBase * (1 + markupPercent / 100)
 model DistributorPriceMarkup {
-  id             String      @id @default(uuid())
-  distributorId  String      @map("distributor_id")
-  scope          MarkupScope @default(GLOBAL)
+  id            String      @id @default(uuid())
+  distributorId String      @map("distributor_id")
+  scope         MarkupScope @default(GLOBAL)
   // Contexto del scope — null si no aplica para el nivel seleccionado
-  tenantId       String?     @map("tenant_id")        // Si scope = BY_TENANT
-  productLineId  String?     @map("product_line_id")  // Si scope = BY_LINE
-  productId      String?     @map("product_id")       // Si scope = BY_PRODUCT
+  tenantId      String?     @map("tenant_id") // Si scope = BY_TENANT
+  productLineId String?     @map("product_line_id") // Si scope = BY_LINE
+  productId     String?     @map("product_id") // Si scope = BY_PRODUCT
   // Porcentaje de incremento: 15.0000 = 15%
-  markupPercent  Decimal     @map("markup_percent") @db.Decimal(8, 4)
-  active         Boolean     @default(true)
+  markupPercent Decimal     @map("markup_percent") @db.Decimal(8, 4)
+  active        Boolean     @default(true)
   // Mayor prioridad = se aplica primero si hay múltiples reglas que apliquen
-  priority       Int         @default(0)
-  createdAt      DateTime    @default(now()) @map("created_at")
-  updatedAt      DateTime    @updatedAt @map("updated_at")
+  priority      Int         @default(0)
+  createdAt     DateTime    @default(now()) @map("created_at")
+  updatedAt     DateTime    @updatedAt @map("updated_at")
 
-  distributor  DistributorCompany @relation(fields: [distributorId], references: [id], onDelete: Cascade)
+  distributor DistributorCompany @relation(fields: [distributorId], references: [id], onDelete: Cascade)
 
   @@map("distributor_price_markups")
 }
@@ -524,16 +524,16 @@ model ProductVariant {
   id          String   @id @default(uuid())
   productId   String   @map("product_id")
   tenantId    String   @map("tenant_id")
-  name        String                          // "Blanco Mate", "Roble Natural"
-  variantType String   @map("variant_type")  // 'color'|'texture'|'material'|'finish'
+  name        String // "Blanco Mate", "Roble Natural"
+  variantType String   @map("variant_type") // 'color'|'texture'|'material'|'finish'
   sku         String?
   // Datos técnicos de la variante: hex de color, URL de textura, etc.
   metadata    Json?
   active      Boolean  @default(true)
   createdAt   DateTime @default(now()) @map("created_at")
 
-  product  Product @relation(fields: [productId], references: [id], onDelete: Cascade)
-  tenant   Tenant  @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  product Product @relation(fields: [productId], references: [id], onDelete: Cascade)
+  tenant  Tenant  @relation(fields: [tenantId], references: [id], onDelete: Cascade)
 
   @@map("product_variants")
 }
@@ -542,18 +542,18 @@ model ProductVariant {
 // LEGACY / COMPAT — kept for backward compat with existing modules
 // ============================================================
 
- // Company is kept as an alias for legacy code; new code uses Tenant
+// Company is kept as an alias for legacy code; new code uses Tenant
 model Company {
   id        String   @id @default(uuid())
   name      String
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  users         User[]               @relation("CompanyUsers")
-  brands        Brand[]              @relation("CompanyBrands")
+  users              User[]               @relation("CompanyUsers")
+  brands             Brand[]              @relation("CompanyBrands")
   grantedBrandAccess CompanyBrandAccess[] @relation("CompanyBrandAccesses")
-  priceLists    CompanyPriceList[]   @relation("CompanyPriceLists")
-  discountRules DiscountRule[]       @relation("CompanyDiscountRules")
+  priceLists         CompanyPriceList[]   @relation("CompanyPriceLists")
+  discountRules      DiscountRule[]       @relation("CompanyDiscountRules")
 
   @@map("companies")
 }
@@ -571,8 +571,6 @@ model User {
 
   company  Company    @relation("CompanyUsers", fields: [tenantId], references: [id])
   roles    UserRole[]
-  projects Project[]  @relation("ProjectCreator")
-  quotes   Quote[]
 
   @@map("users")
 }
@@ -608,14 +606,14 @@ model CompanyBrandAccess {
 }
 
 model Brand {
-  id          String   @id @default(uuid())
-  name        String
-  description String?
-  logoUrl     String?
-  tenantId    String   @map("tenant_id")
-  companyLegacy   Company?             @relation("CompanyBrands", fields: [tenantId], references: [id], map: "brand_legacy_company_fk")
-  tenant          Tenant               @relation("LegacyBrands", fields: [tenantId], references: [id], map: "brand_tenant_fk")
-  accessRules     CompanyBrandAccess[]
+  id            String               @id @default(uuid())
+  name          String
+  description   String?
+  logoUrl       String?
+  tenantId      String               @map("tenant_id")
+  companyLegacy Company?             @relation("CompanyBrands", fields: [tenantId], references: [id], map: "brand_legacy_company_fk")
+  tenant        Tenant               @relation("LegacyBrands", fields: [tenantId], references: [id], map: "brand_tenant_fk")
+  accessRules   CompanyBrandAccess[]
 
   @@map("brands")
 }
@@ -671,18 +669,32 @@ model DiscountRule {
 }
 
 model Project {
-  id          String   @id @default(uuid())
-  tenantId    String   @map("tenant_id")
-  name        String
-  description String?
-  priceType   String   @default("A") @map("price_type")
-  creatorId   String   @map("creator_id")
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  id                String    @id @default(uuid())
+  tenantId          String    @map("tenant_id")
+  name              String
+  description       String?
+  projectCode       String?   @map("project_code")
+  clientName        String?   @map("client_name")
+  clientCompany     String?   @map("client_company")
+  contactName       String?   @map("contact_name")
+  contactEmail      String?   @map("contact_email")
+  contactPhone      String?   @map("contact_phone")
+  commercialStatus  String    @default("Prospecto") @map("commercial_status")
+  operationalStatus String    @default("Sin iniciar") @map("operational_status")
+  priority          String    @default("Media")
+  estimatedValue    Decimal?  @map("estimated_value") @db.Decimal(12, 2)
+  finalValue        Decimal?  @map("final_value") @db.Decimal(12, 2)
+  probability       Int?
+  dueDate           DateTime? @map("due_date")
+  tags              Json?
+  source            String?
+  priceType         String    @default("A") @map("price_type")
+  creatorId         String    @map("creator_id")
+  createdAt         DateTime  @default(now()) @map("created_at")
+  updatedAt         DateTime  @updatedAt @map("updated_at")
 
-  company   Tenant           @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-  creator   User             @relation("ProjectCreator", fields: [creatorId], references: [id])
-  versions  ProjectVersion[]
+  company  Tenant           @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  versions ProjectVersion[]
 
   @@map("projects")
 }
@@ -694,7 +706,7 @@ model ProjectVersion {
   sceneState Json     @map("scene_state_json")
   createdAt  DateTime @default(now())
 
-  project    Project    @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  project    Project     @relation(fields: [projectId], references: [id], onDelete: Cascade)
   quotes     Quote[]
   rooms      Room[]
   walls      Wall[]
@@ -718,7 +730,6 @@ model Quote {
   createdAt        DateTime @default(now())
 
   projectVersion ProjectVersion @relation(fields: [projectVersionId], references: [id])
-  creator        User?          @relation(fields: [creatorId], references: [id])
 
   @@map("quotes")
 }

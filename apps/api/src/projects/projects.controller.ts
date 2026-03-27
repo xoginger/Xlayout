@@ -9,6 +9,8 @@ import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { TenantGuard } from '../common/guards/tenant.guard';
 import { UserTypeGuard } from '../common/guards/user-type.guard';
 import { AllowedUserTypes } from '../common/decorators/user-type.decorator';
+import { CreateProjectDto } from './dto/create-project.dto';
+import { UpdateProjectDto } from './dto/update-project.dto';
 
 // Proyectos — accesible para PLATFORM, COMPANY y DISTRIBUTOR (no END_USER)
 @UseGuards(JwtAuthGuard, TenantGuard, UserTypeGuard)
@@ -18,7 +20,7 @@ export class ProjectsController {
   constructor(private readonly projectsService: ProjectsService) {}
 
   @Post()
-  async createProject(@Req() req: any, @Body() body: { name: string; description?: string }) {
+  async createProject(@Req() req: any, @Body() body: CreateProjectDto) {
     // sub proviene del payload JWT
     return this.projectsService.createProject(req.tenantId, req.user.sub, body);
   }
@@ -49,8 +51,18 @@ export class ProjectsController {
   }
 
   @Patch(':id')
-  async updateProject(@Req() req: any, @Param('id') id: string, @Body() body: { name?: string; description?: string }) {
+  async updateProject(@Req() req: any, @Param('id') id: string, @Body() body: UpdateProjectDto) {
     return this.projectsService.updateProject(req.tenantId, id, body);
+  }
+
+  @Patch(':id/commercial-status')
+  async updateCommercialStatus(@Req() req: any, @Param('id') id: string, @Body() body: { status: string }) {
+    return this.projectsService.updateCommercialStatus(req.tenantId, id, body.status);
+  }
+
+  @Patch(':id/operational-status')
+  async updateOperationalStatus(@Req() req: any, @Param('id') id: string, @Body() body: { status: string }) {
+    return this.projectsService.updateOperationalStatus(req.tenantId, id, body.status);
   }
 
   @Delete(':id')

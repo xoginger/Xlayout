@@ -26,8 +26,8 @@ export const ProjectManager: React.FC<ProjectManagerProps> = ({ isOpen, onClose 
       const data = await projectService.listProjects();
       setProjects(data);
       setError(null);
-    } catch (e) {
-      setError('Failed to load projects');
+    } catch (e: any) {
+      setError(e.message || 'Error al cargar los proyectos guardados. Por favor, reintenta.');
       console.error(e);
     } finally {
       setLoading(false);
@@ -118,7 +118,9 @@ export const ProjectManager: React.FC<ProjectManagerProps> = ({ isOpen, onClose 
           ) : filteredProjects.length === 0 ? (
             <div className="h-64 flex flex-col items-center justify-center text-zinc-400 gap-4 border-2 border-dashed border-zinc-100 rounded-3xl">
                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" className="w-12 h-12 opacity-20"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6M12 18v-6M9 15h6"/></svg>
-               <span className="text-[10px] font-black tracking-[0.2em] uppercase">No se encontraron proyectos</span>
+               <span className="text-[10px] font-black tracking-[0.2em] uppercase text-center px-4">
+                 {search ? 'No se encontraron proyectos' : 'No hay proyectos guardados todavía. Crea o guarda tu primer proyecto.'}
+               </span>
             </div>
           ) : (
             <div className="grid grid-cols-1 gap-3">
@@ -149,7 +151,7 @@ export const ProjectManager: React.FC<ProjectManagerProps> = ({ isOpen, onClose 
                         </span>
                         <span className="text-[9px] font-bold text-zinc-400 flex items-center gap-1 uppercase tracking-widest">
                           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" className="w-3 h-3"><path d="M4 19.5v-15A2.5 2.5 0 0 1 6.5 2H20v20H6.5a2.5 2 0 0 1-2.5-2.5z"/><path d="M6.5 18H20"/></svg>
-                           {proj._count.versions} Versiones
+                           {proj._count?.versions || 0} Versiones
                         </span>
                       </div>
                     </div>

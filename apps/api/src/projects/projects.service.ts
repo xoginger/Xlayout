@@ -14,7 +14,7 @@ export class ProjectsService {
     private pricingEngine: PricingEngineService
   ) {}
 
-  async createProject(tenantId: string, userId: string, data: { name: string; description?: string }) {
+  async createProject(tenantId: string, userId: string, data: any) {
     return this.prisma.client.project.create({
       data: {
         ...data,
@@ -28,7 +28,6 @@ export class ProjectsService {
     return this.prisma.client.project.findMany({
       where: { tenantId },
       include: {
-        creator: { select: { id: true, firstName: true, lastName: true } },
         _count: { select: { versions: true } }
       }
     });
@@ -139,8 +138,7 @@ export class ProjectsService {
         projectVersion: { projectId }
       },
       include: { 
-        projectVersion: { select: { versionNum: true, createdAt: true } },
-        creator: { select: { id: true, firstName: true, lastName: true } }
+        projectVersion: { select: { versionNum: true, createdAt: true } }
       },
       orderBy: { createdAt: 'desc' }
     });
@@ -178,11 +176,43 @@ export class ProjectsService {
     });
   }
 
-  async updateProject(tenantId: string, id: string, data: { name?: string; description?: string }) {
+  async updateProject(tenantId: string, id: string, data: any) {
+    await this.getProjectById(tenantId, id);
+    
+    // Filtramos campos para asegurar que solo se actualizan los permitidos
+    const updateData: any = {};
+    const allowedFields = [
+      'name', 'description', 'projectCode', 'clientName', 'clientCompany',
+      'contactName', 'contactEmail', 'contactPhone', 'commercialStatus',
+      'operationalStatus', 'priority', 'estimatedValue', 'finalValue',
+      'probability', 'dueDate', 'tags', 'source'
+    ];
+
+    for (const field of allowedFields) {
+      if (data[field] !== undefined) {
+        updateData[field] = data[field];
+      }
+    }
+
+    return this.prisma.client.project.update({
+      where: { id },
+      data: updateData
+    });
+  }
+
+  async updateCommercialStatus(tenantId: string, id: string, status: string) {
     await this.getProjectById(tenantId, id);
     return this.prisma.client.project.update({
       where: { id },
-      data
+      data: { commercialStatus: status }
+    });
+  }
+
+  async updateOperationalStatus(tenantId: string, id: string, status: string) {
+    await this.getProjectById(tenantId, id);
+    return this.prisma.client.project.update({
+      where: { id },
+      data: { operationalStatus: status }
     });
   }
 
