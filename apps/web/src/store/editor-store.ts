@@ -4,6 +4,7 @@
 
 import { create } from 'zustand';
 import { projectService } from '../services/project-service';
+import stringify from 'fast-json-stable-stringify';
 
 export type SceneItemType = 'rack' | 'shelf' | 'desk' | 'cabinet' | 'catalog-item';
 export type OpeningType = 'door' | 'window' | 'opening';
@@ -170,8 +171,10 @@ export interface ProjectInfo {
   name: string;
   priceType?: string; // 'A', 'B', 'C', 'D', 'E'
   lastSavedAt?: string | null;
-  isDirty: boolean;
-  isSaving: boolean;
+  saveStatus: 'idle' | 'unsaved' | 'saving' | 'saved' | 'error';
+  lastSavedHash: string | null;
+  isDirty?: boolean;
+  isSaving?: boolean;
 }
 
 // Grupo de entidades seleccionadas
@@ -223,6 +226,7 @@ interface EditorState {
   history: any[];
   historyIndex: number;
 
+  setSaveStatus: (status: 'idle' | 'unsaved' | 'saving' | 'saved' | 'error') => void;
   setProjectName: (name: string) => void;
   addItem: (item: SceneItem) => void;
   addWall: (wall: Wall) => void;
@@ -272,7 +276,7 @@ interface EditorState {
   redo: () => void;
   saveToHistory: () => void;
   setDirty: (isDirty: boolean) => void;
-  saveProject: () => Promise<void>;
+  saveProject: (mode?: 'autosave' | 'manual') => Promise<void>;
   loadProject: (id: string) => Promise<void>;
   createNewProject: (name: string) => Promise<void>;
   triggerExport: (type: 'image' | 'glb' | 'pdf') => void;
@@ -301,10 +305,29 @@ interface EditorState {
   isSavingQuote: boolean;
   fetchQuotes: () => Promise<void>;
   saveQuote: (data: any) => Promise<any>;
+
+  // Timeline
+  restoreVersion: (versionId: string) => Promise<void>;
+}
+
+export function generateSceneHash(state: Partial<EditorState>) {
+  const sortById = (arr: any[]) => [...(arr || [])].sort((a, b) => a.id.localeCompare(b.id));
+  return stringify({
+    items: sortById(state.items || []),
+    walls: sortById(state.walls || []),
+    openings: sortById(state.openings || []),
+    lines: sortById(state.lines || []),
+    rectangles: sortById(state.rectangles || []),
+    faces: sortById(state.faces || []),
+    volumes: sortById(state.volumes || []),
+    scenes: sortById(state.scenes || []),
+    groups: sortById(state.groups || []),
+    blueprint: state.blueprint || null,
+  });
 }
 
 export const useEditorStore = create<EditorState>((set, get) => ({
-  project: { id: 'default', name: 'New Project', priceType: 'A', isDirty: false, isSaving: false, lastSavedAt: null },
+  project: { id: 'default', name: 'New Project', priceType: 'A', saveStatus: 'idle', lastSavedHash: null, lastSavedAt: null, isDirty: false, isSaving: false },
   items: [],
   walls: [],
   openings: [],
@@ -357,6 +380,7 @@ export const useEditorStore = create<EditorState>((set, get) => ({
   isLoadingQuotes: false,
   isSavingQuote: false,
 
+  setSaveStatus: (status) => set((state) => ({ project: { ...state.project, saveStatus: status } })),
   setProjectName: (name) => set((state) => ({ project: { ...state.project, name, isDirty: true } })),
   setDirty: (isDirty) => set((state) => ({ project: { ...state.project, isDirty } })),
 
@@ -699,14 +723,27 @@ export const useEditorStore = create<EditorState>((set, get) => ({
     }
   },
 
-  saveProject: async () => {
+  saveProject: async (mode: 'autosave' | 'manual' = 'manual') => {
     const { project, items, walls, openings, dimensions, lines, rectangles, faces, volumes, layers, scenes, blueprint, groups } = get();
-    if (project.isSaving) return;
+    if (project.saveStatus === 'saving' || project.isSaving) return;
 
-    set((state) => ({ project: { ...state.project, isSaving: true } }));
+    set((state) => ({ project: { ...state.project, saveStatus: 'saving', isSaving: true } }));
 
     try {
       const sceneState = { items, walls, openings, dimensions, lines, rectangles, faces, volumes, layers, scenes, blueprint, groups };
+      const currentHash = generateSceneHash(sceneState);
+      const summary = {
+        totalItems: items.length,
+        totalWalls: walls.length,
+        totalOpenings: openings.length,
+        totalLines: lines.length
+      };
+
+      // Verificación de Smart Diff Local
+      if (project.id !== 'default' && project.lastSavedHash === currentHash) {
+        set((state) => ({ project: { ...state.project, saveStatus: 'saved', isSaving: false, isDirty: false } }));
+        return;
+      }
 
       let projectId = project.id;
       if (projectId === 'default') {
@@ -714,21 +751,22 @@ export const useEditorStore = create<EditorState>((set, get) => ({
         projectId = newProj.id;
       }
 
-      await projectService.saveVersion(projectId, sceneState);
+      await projectService.saveVersion(projectId, sceneState, { saveMode: mode, sceneHash: currentHash, summary });
 
       set((state) => ({
         project: {
           ...state.project,
           id: projectId,
+          saveStatus: 'saved',
+          lastSavedHash: currentHash,
+          lastSavedAt: new Date().toISOString(),
           isDirty: false,
-          isSaving: false,
-          lastSavedAt: new Date().toISOString()
+          isSaving: false
         }
       }));
     } catch (e: any) {
       console.error('Failed to save project', e);
-      alert(`Error al guardar el proyecto: ${e.message || 'Error desconocido'}`);
-      set((state) => ({ project: { ...state.project, isSaving: false } }));
+      set((state) => ({ project: { ...state.project, saveStatus: 'error', isSaving: false } }));
       throw e;
     }
   },
@@ -741,9 +779,11 @@ export const useEditorStore = create<EditorState>((set, get) => ({
       // 1. Crear nuevo proyecto con el nuevo nombre
       const newProj = await projectService.createProject({ name: newName, description: `Copia de ${project.name}` });
       const sceneState = { items, walls, openings, dimensions, lines, rectangles, faces, volumes, layers, scenes, blueprint, groups };
+      const currentHash = generateSceneHash(sceneState);
+      const summary = { totalItems: items.length, totalWalls: walls.length, totalOpenings: openings.length, totalLines: lines.length };
 
       // 2. Guardar la versión actual en el nuevo proyecto
-      await projectService.saveVersion(newProj.id, sceneState);
+      await projectService.saveVersion(newProj.id, sceneState, { saveMode: 'manual', sceneHash: currentHash, summary });
 
       // 3. Cambiar el contexto del editor al nuevo proyecto
       set({
@@ -751,14 +791,16 @@ export const useEditorStore = create<EditorState>((set, get) => ({
           id: newProj.id,
           name: newProj.name,
           priceType: project.priceType || 'A',
+          saveStatus: 'saved',
+          lastSavedHash: currentHash,
+          lastSavedAt: new Date().toISOString(),
           isDirty: false,
-          isSaving: false,
-          lastSavedAt: new Date().toISOString()
+          isSaving: false
         }
       });
     } catch (e) {
       console.error('Failed to save as', e);
-      set((state) => ({ project: { ...state.project, isSaving: false } }));
+      set((state) => ({ project: { ...state.project, saveStatus: 'error', isSaving: false } }));
       throw e;
     }
   },
@@ -802,9 +844,10 @@ export const useEditorStore = create<EditorState>((set, get) => ({
           id: 'default', // Al importar, se considera un nuevo proyecto local hasta que se guarde en nube
           name: metadata.name || 'Proyecto Importado',
           priceType: metadata.priceType || 'A',
-          isDirty: true,
-          isSaving: false,
-          lastSavedAt: null
+          saveStatus: 'unsaved',
+          lastSavedHash: null,
+          lastSavedAt: null,
+          isDirty: true
         },
         history: [],
         historyIndex: -1
@@ -849,24 +892,29 @@ export const useEditorStore = create<EditorState>((set, get) => ({
             id: projectData.id,
             name: projectData.name,
             priceType: projectData.priceType || 'A',
+            saveStatus: 'saved',
+            lastSavedHash: generateSceneHash(state),
+            lastSavedAt: latestVersion.createdAt || new Date().toISOString(),
             isDirty: false,
-            isSaving: false,
-            lastSavedAt: latestVersion.createdAt
+            isSaving: false
           },
           history: [],
           historyIndex: -1
         });
         get().saveToHistory();
       } else {
-        // Proyecto vacío
+        // Proyecto vacío de bd, sin versiones previas
+        const emptyState = { items: [], walls: [], openings: [], dimensions: [], lines: [], rectangles: [], faces: [], volumes: [], layers: get().layers, scenes: [], groups: [], blueprint: get().blueprint };
         set({
           project: {
             id: projectData.id,
             name: projectData.name,
             priceType: projectData.priceType || 'A',
+            saveStatus: 'saved',
+            lastSavedHash: generateSceneHash(emptyState),
+            lastSavedAt: projectData.updatedAt,
             isDirty: false,
-            isSaving: false,
-            lastSavedAt: projectData.updatedAt
+            isSaving: false
           },
           items: [], walls: [], openings: [], dimensions: [], lines: [], rectangles: [], faces: [], volumes: [], layers: get().layers, scenes: [],
           history: [],
@@ -883,11 +931,14 @@ export const useEditorStore = create<EditorState>((set, get) => ({
   createNewProject: async (name: string) => {
     try {
       const newProj = await projectService.createProject({ name });
+      const emptyState = { items: [], walls: [], openings: [], dimensions: [], lines: [], rectangles: [], faces: [], volumes: [], layers: get().layers, scenes: [], groups: [], blueprint: get().blueprint };
       set({
         project: {
           id: newProj.id,
           name: newProj.name,
           priceType: 'A',
+          saveStatus: 'saved',
+          lastSavedHash: generateSceneHash(emptyState),
           isDirty: false,
           isSaving: false,
           lastSavedAt: newProj.createdAt
@@ -1081,5 +1132,64 @@ export const useEditorStore = create<EditorState>((set, get) => ({
       set({ isSavingQuote: false });
       throw error;
     }
+  },
+
+  restoreVersion: async (versionId: string) => {
+    const { project } = get();
+    if (project.id === 'default') return;
+    set((state) => ({ project: { ...state.project, isSaving: true, saveStatus: 'saving' } }));
+
+    try {
+      // Fetch historical version payload
+      const version = await projectService.getVersion(project.id, versionId);
+      const state = version.sceneState;
+
+      const defaultBlueprint = { url: null, position: [0, -0.01, 0] as [number,number,number], scale: 1, rotation: 0, opacity: 0.5, locked: false, visible: true };
+      const defaultCalibration = { step: 'idle' as const };
+
+      set({
+        items: state.items || [],
+        walls: state.walls || [],
+        openings: state.openings || [],
+        dimensions: state.dimensions || [],
+        lines: state.lines || [],
+        rectangles: state.rectangles || [],
+        faces: state.faces || [],
+        volumes: state.volumes || [],
+        layers: state.layers || get().layers,
+        scenes: state.scenes || [],
+        guides: state.guides || [],
+        groups: state.groups || [],
+        blueprint: state.blueprint || defaultBlueprint,
+        calibrationState: state.calibrationState || defaultCalibration,
+        project: {
+          ...project,
+          isDirty: true,
+          isSaving: false
+        }
+      });
+      // Force history push and mark as unsaved
+      get().saveToHistory();
+      
+      // Trigger a manual save of the restored state
+      await get().saveProject('manual');
+    } catch (error) {
+       console.error('Failed to restore version', error);
+       set((state) => ({ project: { ...state.project, saveStatus: 'error', isSaving: false } }));
+       throw error;
+    }
   }
 }));
+
+// --- Suscripción Global para Autosave ---
+useEditorStore.subscribe((state: EditorState) => {
+  if (state.project.id === 'default' || state.project.saveStatus === 'unsaved' || state.project.saveStatus === 'saving' || state.project.isSaving) return;
+
+  const currentHash = generateSceneHash(state);
+  
+  if (state.project.lastSavedHash && currentHash !== state.project.lastSavedHash) {
+    useEditorStore.setState((s) => ({
+      project: { ...s.project, saveStatus: 'unsaved' }
+    }));
+  }
+});

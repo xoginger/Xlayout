@@ -43,20 +43,42 @@ export class ProjectsService {
     return project;
   }
 
-  async saveLayoutVersion(tenantId: string, projectId: string, sceneState: any) {
+  async saveLayoutVersion(tenantId: string, projectId: string, sceneState: any, meta?: { saveMode?: string, sceneHash?: string, summary?: any }) {
     // Verificación básica de que el proyecto pertenece al tenant
     await this.getProjectById(tenantId, projectId);
 
-    const versionNum = await this.prisma.client.projectVersion.count({
-      where: { projectId }
-    }) + 1;
+    // Obtener la última versión generada
+    const lastVersion = await this.prisma.client.projectVersion.findFirst({
+      where: { projectId },
+      orderBy: { versionNum: 'desc' }
+    });
 
-    // 1. Crear la versión base con el JSON
+    // Smart Diff: Si el payload geométrico es idéntico a la versión anterior, abortamos escritura inútil
+    if (lastVersion && lastVersion.sceneState) {
+      const stringify = require('fast-json-stable-stringify');
+      const oldHash = stringify(lastVersion.sceneState);
+      const newHash = stringify(sceneState);
+
+      if (oldHash === newHash) {
+        // Devolvemos la versión existente con flag `reused` para evitar DB bloat
+        return {
+          reused: true,
+          versionId: lastVersion.id
+        };
+      }
+    }
+
+    const versionNum = lastVersion ? lastVersion.versionNum + 1 : 1;
+
+    // 1. Crear la nueva versión base
     const version = await this.prisma.client.projectVersion.create({
       data: {
         projectId,
         versionNum,
-        sceneState
+        sceneState,
+        saveMode: meta?.saveMode || 'autosave',
+        sceneHash: meta?.sceneHash || null,
+        summary: meta?.summary || null
       }
     });
 
@@ -128,6 +150,31 @@ export class ProjectsService {
        });
     }
 
+    return version;
+  }
+
+  async getProjectVersions(tenantId: string, projectId: string) {
+    await this.getProjectById(tenantId, projectId);
+    return this.prisma.client.projectVersion.findMany({
+      where: { projectId },
+      orderBy: { createdAt: 'desc' },
+      select: {
+        id: true,
+        versionNum: true,
+        createdAt: true,
+        saveMode: true,
+        sceneHash: true,
+        summary: true
+      }
+    });
+  }
+
+  async getProjectVersionById(tenantId: string, projectId: string, versionId: string) {
+    await this.getProjectById(tenantId, projectId);
+    const version = await this.prisma.client.projectVersion.findFirst({
+      where: { id: versionId, projectId }
+    });
+    if (!version) throw new NotFoundException('Versión no encontrada');
     return version;
   }
 

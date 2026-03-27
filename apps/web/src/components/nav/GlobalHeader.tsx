@@ -10,8 +10,10 @@ import { useRouter } from 'next/navigation';
 import { useAuthStore } from '@/store/auth-store';
 import { useEditorStore } from '@/store/editor-store';
 import { Tooltip } from '@/components/ui/Tooltip';
+import { EditorSaveStatus } from '@/components/editor/EditorSaveStatus';
 import { ProjectManager } from '@/components/editor/ProjectManager';
 import { CustomizeToolbarModal } from '@/components/editor/CustomizeToolbarModal';
+import { VersionHistoryDrawer } from '@/components/editor/VersionHistoryDrawer';
 import { extractFirstPageAsImage } from '@/utils/pdf-extractor';
 import { getNavModules } from '@/lib/nav-permissions';
 
@@ -62,6 +64,7 @@ const UndoIcon    = () => <svg viewBox="0 0 24 24" fill="none" stroke="currentCo
 const RedoIcon    = () => <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" className="w-3.5 h-3.5"><path d="m15 4 5 5-5 5"/><path d="M20 9H9.5A5.5 5.5 0 0 0 4 14.5v0A5.5 5.5 0 0 0 9.5 20H13"/></svg>;
 const TrashIcon   = () => <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" className="w-3.5 h-3.5"><path d="M3 6h18M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2M10 11v6M14 11v6"/></svg>;
 const ImportIcon  = () => <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" className="w-3.5 h-3.5"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M7 10l5 5 5-5M12 15V3"/></svg>;
+const ClockIcon   = () => <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" className="w-3.5 h-3.5"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>;
 const FolderIcon  = () => <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" className="w-3.5 h-3.5"><path d="M4 20h16a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.93a2 2 0 0 1-1.66-.9l-.82-1.2A2 2 0 0 0 7.93 3H4a2 2 0 0 0-2 2v13c0 1.1.9 2 2 2Z"/></svg>;
 const PlusIcon    = () => <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" className="w-3 h-3"><path d="M5 12h14M12 5v14"/></svg>;
 const ChevronDown = () => <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" className="w-3 h-3 opacity-50"><path d="m6 9 6 6 6-6"/></svg>;
@@ -85,6 +88,7 @@ export const GlobalHeader: React.FC<{ pathname: string }> = ({ pathname }) => {
   const [isEditingName, setIsEditingName] = useState(false);
   const [isProjectManagerOpen, setIsProjectManagerOpen] = useState(false);
   const [isCustomizeOpen, setIsCustomizeOpen] = useState(false);
+  const [isVersionHistoryOpen, setIsVersionHistoryOpen] = useState(false);
   
   const fileInputRef = useRef<HTMLInputElement>(null);
   const headerRef = useRef<HTMLElement>(null);
@@ -223,12 +227,13 @@ export const GlobalHeader: React.FC<{ pathname: string }> = ({ pathname }) => {
                    }} />
                     <MenuAction label="Abrir Biblioteca" icon={<FolderIcon />} shortcut="Ctrl+O" onClick={() => { setIsProjectManagerOpen(true); setActiveMenu(null); }} />
                     <MenuDivider />
-                    <MenuAction label="Guardar Proyecto" icon={<SaveIcon />} shortcut="Ctrl+S" disabled={!project.isDirty || project.isSaving} onClick={() => { saveProject(); setActiveMenu(null); }} />
+                    <MenuAction label="Guardar Proyecto" icon={<SaveIcon />} shortcut="Ctrl+S" disabled={project.saveStatus === 'saved' || project.saveStatus === 'saving'} onClick={() => { saveProject('manual'); setActiveMenu(null); }} />
                     <MenuAction label="Guardar Como..." icon={<SaveIcon />} onClick={() => { 
                       const name = prompt('NUEVO NOMBRE DEL PROYECTO:', `${project.name} (COPIA)`);
                       if (name) saveAs(name); 
                       setActiveMenu(null); 
                     }} />
+                    <MenuAction label="Historial de Versiones" icon={<ClockIcon />} onClick={() => { setIsVersionHistoryOpen(true); setActiveMenu(null); }} disabled={project.id === 'default'} />
                     <MenuDivider />
                     <MenuAction label="Exportar Proyecto (.xlayout)" icon={<SaveIcon />} onClick={() => { exportProject(); setActiveMenu(null); }} />
                     <MenuAction label="Importar Proyecto / Plano" icon={<ImportIcon />} onClick={() => fileInputRef.current?.click()} />
@@ -297,18 +302,14 @@ export const GlobalHeader: React.FC<{ pathname: string }> = ({ pathname }) => {
       {/* ── CENTRO: Document Context (Breadcrumb) ── */}
       <div className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 flex items-center justify-center gap-2">
          {/* Status Dot */}
-         <Tooltip 
-            content={
-              isEditor ? (project.isSaving ? "Guardando..." : project.isDirty ? "Cambios no guardados (Ctrl+S)" : "Proyecto sincronizado")
-              : "Conexión estable"
-            } 
-            position="bottom"
-          >
-            <div className={`w-2 h-2 rounded-full transition-colors border border-black/10 shadow-sm ${
-              isEditor && project.isSaving ? 'bg-blue-500 animate-ping' :
-              isEditor && project.isDirty  ? 'bg-amber-400 cursor-pointer' : 'bg-emerald-500'
-            }`} onClick={isEditor && project.isDirty ? saveProject : undefined} />
-         </Tooltip>
+         {/* Status Dot / Editor Save Status */}
+         {isEditor ? (
+           <EditorSaveStatus />
+         ) : (
+           <Tooltip content="Conexión estable" position="bottom">
+             <div className="w-2 h-2 rounded-full transition-colors border border-black/10 shadow-sm bg-emerald-500" />
+           </Tooltip>
+         )}
 
          {/* Inline Name Editor (Only Editor) */}
          {isEditor && isEditingName ? (
@@ -349,7 +350,7 @@ export const GlobalHeader: React.FC<{ pathname: string }> = ({ pathname }) => {
              </Tooltip>
 
              <div className="flex items-center bg-zinc-50 border border-zinc-200 rounded px-1 group shadow-sm">
-               <button onClick={() => saveProject()} disabled={!project.isDirty || project.isSaving} className="w-6 h-6 flex items-center justify-center text-zinc-500 hover:text-blue-600 disabled:opacity-20 rounded transition-colors"><SaveIcon /></button>
+               <button onClick={() => saveProject()} disabled={project.saveStatus === 'saved' || project.saveStatus === 'saving'} className="w-6 h-6 flex items-center justify-center text-zinc-500 hover:text-blue-600 disabled:opacity-20 rounded transition-colors"><SaveIcon /></button>
                <div className="h-3 w-px bg-zinc-200 mx-0.5" />
                <button onClick={undo} disabled={historyIndex <= 0} className="w-6 h-6 flex items-center justify-center text-zinc-500 hover:text-blue-600 disabled:opacity-20 rounded transition-colors"><UndoIcon /></button>
                <button onClick={redo} disabled={historyIndex >= history.length - 1} className="w-6 h-6 flex items-center justify-center text-zinc-500 hover:text-blue-600 disabled:opacity-20 rounded transition-colors"><RedoIcon /></button>
@@ -413,6 +414,7 @@ export const GlobalHeader: React.FC<{ pathname: string }> = ({ pathname }) => {
 
       <ProjectManager isOpen={isProjectManagerOpen} onClose={() => setIsProjectManagerOpen(false)} />
       <CustomizeToolbarModal isOpen={isCustomizeOpen} onClose={() => setIsCustomizeOpen(false)} />
+      <VersionHistoryDrawer isOpen={isVersionHistoryOpen} onClose={() => setIsVersionHistoryOpen(false)} />
     </header>
   );
 };

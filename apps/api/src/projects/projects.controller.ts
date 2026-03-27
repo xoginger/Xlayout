@@ -36,8 +36,22 @@ export class ProjectsController {
   }
 
   @Post(':id/versions')
-  async saveVersion(@Req() req: any, @Param('id') projectId: string, @Body() body: { sceneState: any }) {
-    return this.projectsService.saveLayoutVersion(req.tenantId, projectId, body.sceneState);
+  async saveVersion(@Req() req: any, @Param('id') projectId: string, @Body() body: { sceneState: any, saveMode?: string, sceneHash?: string, summary?: any }) {
+    return this.projectsService.saveLayoutVersion(req.tenantId, projectId, body.sceneState, {
+      saveMode: body.saveMode,
+      sceneHash: body.sceneHash,
+      summary: body.summary
+    });
+  }
+
+  @Get(':id/versions')
+  async getVersions(@Req() req: any, @Param('id') projectId: string) {
+    return this.projectsService.getProjectVersions(req.tenantId, projectId);
+  }
+
+  @Get(':id/versions/:versionId')
+  async getVersion(@Req() req: any, @Param('id') projectId: string, @Param('versionId') versionId: string) {
+    return this.projectsService.getProjectVersionById(req.tenantId, projectId, versionId);
   }
 
   @Get(':id/quotes')

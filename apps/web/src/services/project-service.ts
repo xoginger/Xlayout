@@ -46,8 +46,16 @@ export const projectService = {
     return api.post<any>('/projects', data);
   },
 
-  async saveVersion(projectId: string, sceneState: any) {
-    return api.post<any>(`/projects/${projectId}/versions`, { sceneState });
+  async saveVersion(projectId: string, sceneState: any, meta?: { saveMode?: string, sceneHash?: string, summary?: any }) {
+    return api.post<any>(`/projects/${projectId}/versions`, { sceneState, ...meta });
+  },
+
+  async getVersions(projectId: string) {
+    return api.get<any[]>(`/projects/${projectId}/versions`);
+  },
+
+  async getVersion(projectId: string, versionId: string) {
+    return api.get<any>(`/projects/${projectId}/versions/${versionId}`);
   },
 
   async updateProject(id: string, updates: Partial<ProjectListing>) {

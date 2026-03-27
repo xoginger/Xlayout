@@ -706,6 +706,11 @@ model ProjectVersion {
   sceneState Json     @map("scene_state_json")
   createdAt  DateTime @default(now())
 
+  // Campos para control de timeline
+  saveMode   String   @default("autosave") @map("save_mode")
+  sceneHash  String?  @map("scene_hash")
+  summary    Json?    @map("summary")
+
   project    Project     @relation(fields: [projectId], references: [id], onDelete: Cascade)
   quotes     Quote[]
   rooms      Room[]

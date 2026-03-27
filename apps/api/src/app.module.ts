@@ -14,6 +14,7 @@ import { CatalogModule } from './catalog/catalog.module';
 import { PricingModule } from './pricing/pricing.module';
 import { ProjectsModule } from './projects/projects.module';
 import { ImportsModule } from './imports/imports.module';
+import { BlueprintsModule } from './blueprints/blueprints.module';
 // ── Módulos Master SaaS Backend (master-backend-v1) ────────
 import { PlatformUsersModule } from './platform-users/platform-users.module';
 import { TenantsModule } from './tenants/tenants.module';
@@ -46,6 +47,7 @@ import { DistributorUsersModule } from './distributor-users/distributor-users.mo
     PricingModule,
     ProjectsModule,
     ImportsModule,
+    BlueprintsModule,
     // ── Master SaaS Backend v1 ──────────
     PlatformUsersModule,
     TenantsModule,

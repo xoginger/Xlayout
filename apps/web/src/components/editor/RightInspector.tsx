@@ -461,32 +461,63 @@ export const RightInspector: React.FC = () => {
               <div className="group relative h-40 border-2 border-dashed border-zinc-200 rounded-2xl flex flex-col items-center justify-center hover:border-blue-500 hover:bg-blue-50/30 transition-all cursor-pointer overflow-hidden p-4 text-center">
                 <input 
                   type="file" 
-                  accept="image/png, image/jpeg, image/webp, application/pdf" 
+                  accept="image/png, image/jpeg, image/webp, application/pdf, .dwg, .dxf" 
                   className="absolute inset-0 opacity-0 cursor-pointer z-10"
                   onChange={async (e) => {
                     const file = e.target.files?.[0];
                     if (!file) return;
                     try {
+                      // 1. Manejo Especial para formatos de AutoCAD
+                      const ext = file.name.toLowerCase().split('.').pop();
+                      if (ext === 'dwg' || ext === 'dxf') {
+                         useEditorStore.getState().updateBlueprint({ visible: false }); // Ocultar temporalmente para estado visual
+                         // Mostrar un toast visual sería ideal, aquí usamos un alert provisorio o estado
+                         
+                         const formData = new FormData();
+                         formData.append('file', file);
+                         
+                         // Subimos el archivo a la API de Blueprints
+                         const res = await fetch('/api/blueprints/convert', { method: 'POST', body: formData });
+                         if (!res.ok) {
+                            const errorData = await res.json();
+                            throw new Error(errorData.message || 'Error transformando plano CAD');
+                         }
+                         
+                         const data = await res.json();
+                         if (!data.svg) throw new Error('Respuesta inválida del servidor');
+                         
+                         // Convertimos el String SVG a Data URL Blob
+                         const svgBlob = new Blob([data.svg], { type: 'image/svg+xml;charset=utf-8' });
+                         const url = URL.createObjectURL(svgBlob);
+                         
+                         updateBlueprint({ url, visible: true });
+                         return;
+                      }
+
+                      // 2. Manejo PDF original
                       if (file.type === 'application/pdf') {
                         const dataUrl = await extractFirstPageAsImage(file);
                         updateBlueprint({ url: dataUrl, visible: true });
-                      } else if (file.type.startsWith('image/')) {
+                      } 
+                      // 3. Manejo Imágenes original
+                      else if (file.type.startsWith('image/')) {
                         const reader = new FileReader();
                         reader.onload = (rev) => {
                           updateBlueprint({ url: rev.target?.result as string, visible: true });
                         };
                         reader.readAsDataURL(file);
                       }
-                    } catch (err) {
+                    } catch (err: any) {
                       console.error('Error importando:', err);
-                      // Fallback visual en caso de error
-                      alert('Error al leer el archivo. Intenta con una imagen válida o un PDF distinto.');
+                      alert(err.message || 'Error al leer el archivo. Intenta con una imagen válida o un PDF distinto.');
+                    } finally {
+                      e.target.value = ''; // Resetear input
                     }
                   }}
                 />
-                <span className="text-2xl mb-2 group-hover:scale-125 transition-transform">📄</span>
+                <span className="text-2xl mb-2 group-hover:scale-125 transition-transform">📐</span>
                 <span className="text-[9px] font-black text-zinc-500 uppercase tracking-widest group-hover:text-blue-600 transition-colors">Importar Plano</span>
-                <span className="text-[8px] text-zinc-400 mt-1 uppercase font-mono">(PDF, JPG, PNG, WEBP)</span>
+                <span className="text-[8px] text-zinc-400 mt-1 uppercase font-mono">(DWG, DXF, PDF, JPG, PNG)</span>
               </div>
             ) : (
               <div className="space-y-4">

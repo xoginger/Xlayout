@@ -48,7 +48,7 @@ export const BottomStatusBar: React.FC = () => {
         </div>
 
         <div className="flex items-center gap-2 bg-zinc-900 text-white px-3 py-1 rounded-md text-[8px] tracking-[0.3em] font-black uppercase">
-           XLAYOUT v1.2.0-PRO
+           XLAYOUT v1.3.0-PRO
         </div>
 
         <div className="text-[9px] text-zinc-400 opacity-60 font-medium tracking-tight normal-case italic select-none">
