@@ -368,8 +368,9 @@ export const GlobalHeader: React.FC<{ pathname: string }> = ({ pathname }) => {
 
         {/* Export Button (Only in Editor/Projects/Reports) */}
         {(isEditor || isProjects || isDashboard) && (
-          <Tooltip content="Exportar a PDF/Media" position="bottom">
-            <button className="px-4 py-1.5 rounded bg-blue-600 hover:bg-blue-700 text-white text-[9px] font-black uppercase tracking-widest transition-all shadow-sm active:scale-95 flex items-center gap-1.5">
+          <Tooltip content="Exportar proyecto (.xlayout)" position="bottom">
+            <button onClick={isEditor ? exportProject : undefined} className="px-4 py-1.5 rounded bg-blue-600 hover:bg-blue-700 text-white text-[9px] font-black uppercase tracking-widest transition-all shadow-sm active:scale-95 flex items-center gap-1.5">
+              <SaveIcon />
               <span>Exportar</span>
             </button>
           </Tooltip>

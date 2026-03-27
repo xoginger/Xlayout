@@ -174,6 +174,21 @@ export interface ProjectInfo {
   isSaving: boolean;
 }
 
+// Grupo de entidades seleccionadas
+export interface GroupEntity {
+  id: string;
+  name: string;
+  memberIds: string[];
+}
+
+// Datos del portapapeles para copiar/pegar
+export interface ClipboardData {
+  items: SceneItem[];
+  walls: Wall[];
+  lines: LineEntity[];
+  rectangles: RectangleEntity[];
+}
+
 interface EditorState {
   project: ProjectInfo;
   items: SceneItem[];
@@ -187,6 +202,8 @@ interface EditorState {
   layers: Layer[];
   scenes: Scene[];
   guides: Guide[];
+  groups: GroupEntity[];
+  clipboard: ClipboardData | null;
 
   activeLayerId: string;
   selectedId: string | null;
@@ -270,6 +287,13 @@ interface EditorState {
   saveAs: (newName: string) => Promise<void>;
   exportProject: () => void;
   importProject: (jsonData: any) => void;
+
+  // Clipboard y Grupos
+  copySelection: () => void;
+  pasteSelection: () => void;
+  groupSelection: (name?: string) => void;
+  ungroupSelection: (groupId: string) => void;
+  selectGroup: (groupId: string) => void;
   
   // Quotes
   quotes: any[];
@@ -291,6 +315,8 @@ export const useEditorStore = create<EditorState>((set, get) => ({
   volumes: [],
   scenes: [],
   guides: [],
+  groups: [],
+  clipboard: null,
   layers: [
     { id: 'walls', name: 'Muros', visible: true, locked: false },
     { id: 'openings', name: 'Huecos', visible: true, locked: false },
@@ -674,13 +700,13 @@ export const useEditorStore = create<EditorState>((set, get) => ({
   },
 
   saveProject: async () => {
-    const { project, items, walls, openings, dimensions, lines, rectangles, faces, volumes, layers, scenes, blueprint } = get();
+    const { project, items, walls, openings, dimensions, lines, rectangles, faces, volumes, layers, scenes, blueprint, groups } = get();
     if (project.isSaving) return;
 
     set((state) => ({ project: { ...state.project, isSaving: true } }));
 
     try {
-      const sceneState = { items, walls, openings, dimensions, lines, rectangles, faces, volumes, layers, scenes, blueprint };
+      const sceneState = { items, walls, openings, dimensions, lines, rectangles, faces, volumes, layers, scenes, blueprint, groups };
 
       let projectId = project.id;
       if (projectId === 'default') {
@@ -707,13 +733,13 @@ export const useEditorStore = create<EditorState>((set, get) => ({
   },
 
   saveAs: async (newName: string) => {
-    const { items, walls, openings, dimensions, lines, rectangles, faces, volumes, layers, scenes, blueprint, project } = get();
+    const { items, walls, openings, dimensions, lines, rectangles, faces, volumes, layers, scenes, blueprint, groups, project } = get();
     set((state) => ({ project: { ...state.project, isSaving: true } }));
 
     try {
       // 1. Crear nuevo proyecto con el nuevo nombre
       const newProj = await projectService.createProject(newName, `Copia de ${project.name}`);
-      const sceneState = { items, walls, openings, dimensions, lines, rectangles, faces, volumes, layers, scenes, blueprint };
+      const sceneState = { items, walls, openings, dimensions, lines, rectangles, faces, volumes, layers, scenes, blueprint, groups };
 
       // 2. Guardar la versión actual en el nuevo proyecto
       await projectService.saveVersion(newProj.id, sceneState);
@@ -737,7 +763,7 @@ export const useEditorStore = create<EditorState>((set, get) => ({
   },
 
   exportProject: () => {
-    const { project, items, walls, openings, dimensions, lines, rectangles, faces, volumes, layers, scenes, blueprint } = get();
+    const { project, items, walls, openings, dimensions, lines, rectangles, faces, volumes, layers, scenes, blueprint, groups } = get();
     const data = {
       version: "2.0",
       metadata: {
@@ -745,7 +771,7 @@ export const useEditorStore = create<EditorState>((set, get) => ({
         exportedAt: new Date().toISOString(),
         priceType: project.priceType
       },
-      sceneState: { items, walls, openings, dimensions, lines, rectangles, faces, volumes, layers, scenes, blueprint }
+      sceneState: { items, walls, openings, dimensions, lines, rectangles, faces, volumes, layers, scenes, blueprint, groups }
     };
 
     const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
@@ -800,9 +826,24 @@ export const useEditorStore = create<EditorState>((set, get) => ({
 
       if (latestVersion && latestVersion.sceneState) {
         const state = latestVersion.sceneState;
+        // Defaults seguros para campos que pueden faltar en versiones antiguas
+        const defaultBlueprint = { url: null, position: [0, -0.01, 0] as [number,number,number], scale: 1, rotation: 0, opacity: 0.5, locked: false, visible: true };
+        const defaultCalibration = { step: 'idle' as const };
         set({
-          ...state,
-          blueprint: state.blueprint || { url: null, position: [0, -0.01, 0], scale: 1, rotation: 0, opacity: 0.5, locked: false, visible: true },
+          items: state.items || [],
+          walls: state.walls || [],
+          openings: state.openings || [],
+          dimensions: state.dimensions || [],
+          lines: state.lines || [],
+          rectangles: state.rectangles || [],
+          faces: state.faces || [],
+          volumes: state.volumes || [],
+          layers: state.layers || get().layers,
+          scenes: state.scenes || [],
+          guides: state.guides || [],
+          groups: state.groups || [],
+          blueprint: state.blueprint || defaultBlueprint,
+          calibrationState: state.calibrationState || defaultCalibration,
           project: {
             id: projectData.id,
             name: projectData.name,
@@ -864,6 +905,121 @@ export const useEditorStore = create<EditorState>((set, get) => ({
   triggerExport: (type) => set({ exportRequest: type }),
   clearExportRequest: () => set({ exportRequest: null }),
 
+  // ─── Clipboard: Copiar / Pegar selección ────────────────────────────────
+  copySelection: () => {
+    const { selectedIds, items, walls, lines, rectangles } = get();
+    if (selectedIds.length === 0) return;
+
+    // Snapshot solo de las entidades seleccionadas
+    const clipboard: ClipboardData = {
+      items: items.filter(i => selectedIds.includes(i.id)),
+      walls: walls.filter(w => selectedIds.includes(w.id)),
+      lines: lines.filter(l => selectedIds.includes(l.id)),
+      rectangles: rectangles.filter(r => selectedIds.includes(r.id)),
+    };
+    set({ clipboard });
+  },
+
+  pasteSelection: () => {
+    const { clipboard } = get();
+    if (!clipboard) return;
+
+    get().saveToHistory();
+    const newId = () => Math.random().toString(36).substr(2, 9);
+    const OFFSET: [number, number, number] = [0.5, 0, 0.5];
+    const newSelectedIds: string[] = [];
+
+    // Clonar items con nuevos IDs y offset
+    const newItems = clipboard.items.map(item => {
+      const id = newId();
+      newSelectedIds.push(id);
+      return {
+        ...item,
+        id,
+        position: [item.position[0] + OFFSET[0], item.position[1], item.position[2] + OFFSET[2]] as [number, number, number],
+      };
+    });
+
+    // Clonar walls con nuevos IDs y offset
+    const newWalls = clipboard.walls.map(wall => {
+      const id = newId();
+      newSelectedIds.push(id);
+      return {
+        ...wall,
+        id,
+        start: [wall.start[0] + OFFSET[0], wall.start[1], wall.start[2] + OFFSET[2]] as [number, number, number],
+        end: [wall.end[0] + OFFSET[0], wall.end[1], wall.end[2] + OFFSET[2]] as [number, number, number],
+      };
+    });
+
+    // Clonar líneas con nuevos IDs y offset
+    const newLines = clipboard.lines.map(line => {
+      const id = newId();
+      newSelectedIds.push(id);
+      return {
+        ...line,
+        id,
+        start: [line.start[0] + OFFSET[0], line.start[1], line.start[2] + OFFSET[2]] as [number, number, number],
+        end: [line.end[0] + OFFSET[0], line.end[1], line.end[2] + OFFSET[2]] as [number, number, number],
+      };
+    });
+
+    // Clonar rectángulos con nuevos IDs y offset
+    const newRects = clipboard.rectangles.map(rect => {
+      const id = newId();
+      newSelectedIds.push(id);
+      return {
+        ...rect,
+        id,
+        start: [rect.start[0] + OFFSET[0], rect.start[1], rect.start[2] + OFFSET[2]] as [number, number, number],
+        end: [rect.end[0] + OFFSET[0], rect.end[1], rect.end[2] + OFFSET[2]] as [number, number, number],
+      };
+    });
+
+    set((state) => ({
+      items: [...state.items, ...newItems],
+      walls: [...state.walls, ...newWalls],
+      lines: [...state.lines, ...newLines],
+      rectangles: [...state.rectangles, ...newRects],
+      selectedIds: newSelectedIds,
+      selectedType: newSelectedIds.length > 1 ? 'group' : (newItems.length > 0 ? 'item' : null),
+      project: { ...state.project, isDirty: true },
+    }));
+  },
+
+  // ─── Agrupación de selección ────────────────────────────────────────────
+  groupSelection: (name?: string) => {
+    const { selectedIds, groups } = get();
+    if (selectedIds.length < 2) return;
+
+    get().saveToHistory();
+    const groupId = Math.random().toString(36).substr(2, 9);
+    const groupName = name || `Grupo ${groups.length + 1}`;
+
+    set((state) => ({
+      groups: [...state.groups, { id: groupId, name: groupName, memberIds: [...selectedIds] }],
+      project: { ...state.project, isDirty: true },
+    }));
+  },
+
+  ungroupSelection: (groupId: string) => {
+    get().saveToHistory();
+    set((state) => ({
+      groups: state.groups.filter(g => g.id !== groupId),
+      project: { ...state.project, isDirty: true },
+    }));
+  },
+
+  selectGroup: (groupId: string) => {
+    const group = get().groups.find(g => g.id === groupId);
+    if (!group) return;
+    set({
+      selectedIds: [...group.memberIds],
+      selectedType: 'group',
+    });
+  },
+
+  // ─── Guías ─────────────────────────────────────────────────────────────
   addGuide: (guide) => set((state) => ({ guides: [...state.guides, guide] })),
   removeGuide: (id) => set((state) => ({ guides: state.guides.filter(g => g.id !== id) })),
   clearGuides: () => set({ guides: [] }),

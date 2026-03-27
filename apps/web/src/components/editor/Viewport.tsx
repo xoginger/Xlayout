@@ -4,7 +4,7 @@
 
 "use client";
 
-import React, { Suspense, useState, useRef, useMemo, useEffect } from 'react';
+import React, { Suspense, useState, useRef, useMemo, useEffect, useCallback, memo } from 'react';
 import { Canvas, useThree } from '@react-three/fiber';
 import {
   OrbitControls,
@@ -218,8 +218,16 @@ const GltfModel: React.FC<{ url: string; item: SceneItem }> = ({ url, item }) =>
   return <primitive object={clonedScene} />;
 };
 
-const SceneItemObject: React.FC<{ item: SceneItem }> = ({ item }) => {
-  const { select, selectedIds, activeTool, updateItem, viewMode, gridSize, snapEnabled, items } = useEditorStore();
+const SceneItemObject: React.FC<{ item: SceneItem }> = memo(({ item }) => {
+  // Selectores finos: solo suscribir a lo necesario para evitar rerenders masivos
+  const select = useEditorStore((s) => s.select);
+  const selectedIds = useEditorStore((s) => s.selectedIds);
+  const activeTool = useEditorStore((s) => s.activeTool);
+  const updateItem = useEditorStore((s) => s.updateItem);
+  const viewMode = useEditorStore((s) => s.viewMode);
+  const gridSize = useEditorStore((s) => s.gridSize);
+  const snapEnabled = useEditorStore((s) => s.snapEnabled);
+  const items = useEditorStore((s) => s.items);
   const isSelected = selectedIds.includes(item.id);
   const [activeSnap, setActiveSnap] = useState<SnapResult | null>(null);
 
@@ -378,9 +386,8 @@ const SceneItemObject: React.FC<{ item: SceneItem }> = ({ item }) => {
       )}
     </>
   );
-};
-
-
+});
+SceneItemObject.displayName = 'SceneItemObject';
 
 const DimensionLineObject: React.FC<{ dim: DimensionLine }> = ({ dim }) => {
   const select = useEditorStore((state) => state.select);
@@ -683,6 +690,64 @@ const Grid3DHelper: React.FC<{ gridSize: number }> = ({ gridSize }) => {
         <meshStandardMaterial color="#f8fafc" transparent opacity={0.5} depthWrite={false} />
       </mesh>
     </>
+  );
+};
+
+// ─── Caja delimitadora visual de selección ────────────────────────────────────
+const SelectionBoundingBox: React.FC = () => {
+  const selectedIds = useEditorStore((s) => s.selectedIds);
+  const items = useEditorStore((s) => s.items);
+  const walls = useEditorStore((s) => s.walls);
+
+  const box = useMemo(() => {
+    if (selectedIds.length === 0) return null;
+    const min = [Infinity, Infinity, Infinity];
+    const max = [-Infinity, -Infinity, -Infinity];
+
+    selectedIds.forEach(id => {
+      const item = items.find(i => i.id === id);
+      if (item) {
+        const hw = item.width / 2, hd = item.depth / 2;
+        for (let dx of [-hw, hw]) {
+          for (let dz of [-hd, hd]) {
+            const x = item.position[0] + dx;
+            const z = item.position[2] + dz;
+            min[0] = Math.min(min[0], x);
+            min[2] = Math.min(min[2], z);
+            max[0] = Math.max(max[0], x);
+            max[2] = Math.max(max[2], z);
+          }
+        }
+        min[1] = Math.min(min[1], item.position[1]);
+        max[1] = Math.max(max[1], item.position[1] + item.height);
+      }
+      const wall = walls.find(w => w.id === id);
+      if (wall) {
+        for (const p of [wall.start, wall.end]) {
+          for (let i = 0; i < 3; i++) { min[i] = Math.min(min[i], p[i]); max[i] = Math.max(max[i], p[i]); }
+        }
+        max[1] = Math.max(max[1], wall.height);
+      }
+    });
+
+    if (min[0] === Infinity) return null;
+    return { min, max };
+  }, [selectedIds, items, walls]);
+
+  if (!box || selectedIds.length < 2) return null;
+
+  const cx = (box.min[0] + box.max[0]) / 2;
+  const cy = (box.min[1] + box.max[1]) / 2;
+  const cz = (box.min[2] + box.max[2]) / 2;
+  const sx = box.max[0] - box.min[0] + 0.1;
+  const sy = box.max[1] - box.min[1] + 0.1;
+  const sz = box.max[2] - box.min[2] + 0.1;
+
+  return (
+    <mesh position={[cx, cy, cz]}>
+      <boxGeometry args={[sx, sy, sz]} />
+      <meshBasicMaterial color="#3b82f6" wireframe transparent opacity={0.3} />
+    </mesh>
   );
 };
 
@@ -1205,7 +1270,7 @@ export const Viewport: React.FC = () => {
 
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
-      // 1. Shift for Axis Lock
+      // 1. Shift para bloqueo de eje
       if (e.key === 'Shift') {
         setIsShiftPressed(true);
         if (activeInference.type === 'axis' && activeInference.axis) {
@@ -1213,10 +1278,28 @@ export const Viewport: React.FC = () => {
         }
       }
       
-      // 2. Control for Copy Mode (used elsewhere but handled here)
+      // 2. Control para modo copia
       if (e.key === 'Control') setIsCtrlPressed(true);
 
-      // 3. Numerical Capture for VCB
+      // ── Clipboard: Ctrl+C / Ctrl+V ──
+      if ((e.ctrlKey || e.metaKey) && e.key === 'c') {
+        e.preventDefault();
+        useEditorStore.getState().copySelection();
+        return;
+      }
+      if ((e.ctrlKey || e.metaKey) && e.key === 'v') {
+        e.preventDefault();
+        useEditorStore.getState().pasteSelection();
+        return;
+      }
+      // ── Agrupación: Ctrl+G ──
+      if ((e.ctrlKey || e.metaKey) && e.key === 'g') {
+        e.preventDefault();
+        useEditorStore.getState().groupSelection();
+        return;
+      }
+
+      // 3. Captura numérica para VCB
       if (/^[0-9.]$/.test(e.key)) {
         setVcbInput(prev => prev + e.key);
         return;
@@ -1315,7 +1398,7 @@ export const Viewport: React.FC = () => {
             enableRotate={viewMode === '3D' && !extrudingFaceId} 
             screenSpacePanning={true}
             mouseButtons={{
-              LEFT: activeTool === 'select' ? THREE.MOUSE.ROTATE : undefined, 
+              LEFT: undefined, 
               MIDDLE: THREE.MOUSE.ROTATE,
               RIGHT: THREE.MOUSE.PAN
             }}
@@ -1365,6 +1448,7 @@ export const Viewport: React.FC = () => {
             {layerVisible('faces') && faces.map(f => <FaceWithExtrude key={f.id} face={f} />)}
             {layerVisible('volumes') && volumes.map(v => <VolumeObject key={v.id} volume={v} />)}
             
+            <SelectionBoundingBox />
             <MultiSelectionGizmo />
             
             {/* Previsualización en tiempo real */}
