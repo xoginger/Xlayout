@@ -118,6 +118,7 @@ interface CatalogState {
   createAsset: (data: Partial<ProductAsset>) => Promise<ProductAsset>;
   uploadAsset: (file: File, productId: string) => Promise<ProductAsset>;
   retryConversion: (assetId: string) => Promise<void>;
+  forceScale: (assetId: string, unit: string) => Promise<void>;
   deleteAsset: (id: string) => Promise<void>;
   linkAsset: (productId: string, assetId: string) => Promise<void>;
   unlinkAsset: (productId: string, assetId: string) => Promise<void>;
@@ -302,6 +303,15 @@ export const useAdminCatalogStore = create<CatalogState>((set) => ({
     set((state) => ({
       assets: state.assets.map(a =>
         a.id === assetId ? { ...a, conversionStatus: 'uploaded', conversionError: undefined } : a
+      ),
+    }));
+  },
+
+  forceScale: async (assetId, unit) => {
+    await api.post(`/catalog/assets/${assetId}/force-scale`, { targetUnit: unit });
+    set((state) => ({
+      assets: state.assets.map(a =>
+        a.id === assetId ? { ...a, conversionStatus: 'processing', conversionError: undefined } : a
       ),
     }));
   },

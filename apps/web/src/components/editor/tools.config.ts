@@ -15,12 +15,12 @@ export interface EditorToolConfig {
 }
 
 export const EDITOR_TOOLS_META: EditorToolConfig[] = [
-  // SELECCIÓN
-  { id: 'select', label: 'Seleccionar', shortcut: 'V', description: 'Selecciona objetos, caras y aristas.', group: 'select', defaultOrder: 10 },
+  // SELECCIÓN Y NAVEGACIÓN
+  { id: 'select', label: 'Seleccionar', shortcut: 'Space', description: 'Selecciona objetos, caras y aristas.', group: 'select', defaultOrder: 10 },
   { id: 'multi-select', label: 'Selección múltiple', shortcut: 'Shift + Click', description: 'Selecciona múltiples objetos para transformarlos en grupo.', group: 'select', defaultOrder: 11 },
   
-  // NAVEGACIÓN
-  { id: 'pan', label: 'Navegar', shortcut: 'H', description: 'Desplazamiento libre por el lienzo.', group: 'select', defaultOrder: 15 },
+  { id: 'orbit', label: 'Orbitar', shortcut: 'O', description: 'Gira la cámara alrededor del modelo 3D.', group: 'select', defaultOrder: 14 },
+  { id: 'pan', label: 'Panorámica', shortcut: 'H', description: 'Desplazamiento libre por el lienzo.', group: 'select', defaultOrder: 15 },
 
   // CREACIÓN 2D
   { id: 'line', label: 'Línea', shortcut: 'L', description: 'Dibuja aristas y líneas profesionales.', group: 'creation2d', defaultOrder: 20 },
@@ -33,7 +33,7 @@ export const EDITOR_TOOLS_META: EditorToolConfig[] = [
   { id: 'move', label: 'Mover', shortcut: 'M', description: 'Traslada objetos (Ctrl para copiar).', group: 'modification3d', defaultOrder: 31 },
   { id: 'rotate', label: 'Rotar', shortcut: 'Q', description: 'Rota sobre un punto de pivote.', group: 'modification3d', defaultOrder: 32 },
   { id: 'scale', label: 'Escala', shortcut: 'S', description: 'Redimensiona con manejadores profesionales.', group: 'modification3d', defaultOrder: 33 },
-  { id: 'offset', label: 'Equidistancia', shortcut: 'O', description: 'Crea copias paralelas de aristas/caras.', group: 'modification3d', defaultOrder: 34 },
+  { id: 'offset', label: 'Equidistancia', shortcut: 'F', description: 'Crea copias paralelas de aristas/caras.', group: 'modification3d', defaultOrder: 34 },
   
   // CONSTRUCCIÓN Y HERRAMIENTAS
   { id: 'tape', label: 'Flexómetro', shortcut: 'T', description: 'Mide distancias y crea guías.', group: 'construction', defaultOrder: 40 },

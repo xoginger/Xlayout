@@ -17,10 +17,10 @@ import { UserTypeGuard } from '../common/guards/user-type.guard';
 import { AllowedUserTypes } from '../common/decorators/user-type.decorator';
 import * as path from 'path';
 
-// Formatos 3D aceptados — incluye DWG para pipeline de conversión
+// Formatos 3D aceptados (DWG y DXF desactivados por inestabilidad de motores CAD)
 const ACCEPTED_EXTENSIONS = new Set([
-  'glb', 'gltf', 'obj', 'dae', 'fbx', '3ds', 'dxf', 'kmz', 'stl', 'ply',
-  'ifc', 'wrl', 'xsi', 'dwg',
+  'glb', 'gltf', 'obj', 'dae', 'fbx', '3ds', 'kmz', 'stl', 'ply',
+  'ifc', 'wrl', 'xsi',
 ]);
 
 // Tamaño máximo permitido para archivos 3D (50 MB)
@@ -199,10 +199,15 @@ export class CatalogController {
 
     const format = getFormatFromFile(file.originalname);
 
+    if (format === 'dwg' || format === 'dxf') {
+      throw new BadRequestException(
+        'DWG/DXF no está soportado actualmente en el flujo automático de modelos 3D de XLayout. Exporta el modelo a OBJ o GLB antes de subirlo.'
+      );
+    }
 
     if (!ACCEPTED_EXTENSIONS.has(format)) {
       throw new BadRequestException(
-        `Format '.${format}' is not supported. Accepted: ${[...ACCEPTED_EXTENSIONS].join(', ')}`
+        `Formato '.${format}' no soportado. Aceptados: ${[...ACCEPTED_EXTENSIONS].join(', ')}`
       );
     }
 
@@ -259,6 +264,12 @@ export class CatalogController {
 
     const format = getFormatFromFile(file.originalname);
 
+    if (format === 'dwg' || format === 'dxf') {
+      throw new BadRequestException(
+        'DWG/DXF no está soportado actualmente en el flujo automático de modelos 3D de XLayout. Exporta el modelo a OBJ o GLB antes de subirlo.'
+      );
+    }
+
     // Validar que sea un formato 3D reconocido
     if (!ACCEPTED_EXTENSIONS.has(format)) {
       throw new BadRequestException(
@@ -275,6 +286,16 @@ export class CatalogController {
   @Post('assets/:id/retry-conversion')
   async retryConversion(@Req() req: any, @Param('id') id: string) {
     return this.catalogService.retryAssetConversion(req.tenantId, id, this.conversionService);
+  }
+
+  @UseGuards(UserTypeGuard)
+  @AllowedUserTypes('PLATFORM_USER', 'COMPANY_USER')
+  @Post('assets/:id/force-scale')
+  async forceScale(@Req() req: any, @Param('id') id: string, @Body('targetUnit') targetUnit: string) {
+    if (!['mm', 'cm', 'in', 'm'].includes(targetUnit)) {
+      throw new BadRequestException('targetUnit debe ser mm, cm, in o m');
+    }
+    return this.catalogService.forceAssetScale(req.tenantId, id, targetUnit, this.conversionService);
   }
 
   // ─── Condiciones ──────────────────────────────────────────────────────────

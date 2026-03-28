@@ -105,6 +105,28 @@ export class ConversionProcessor extends WorkerHost {
         throw new Error(`La conversión no produjo un archivo GLB válido (formato: ${originalFormat}).`);
       }
 
+      // ── Paso 1.5: Normalizar Escala y Unidad ────────────────────────────
+      let normalizationInfo: Record<string, any> = { normalized: false, error: 'Not attempted' };
+      try {
+        const normalizeArgs = ['/app/scripts/gltf_normalize.js', rawGlbPath, rawGlbPath];
+        if (job.data.forceUnit) {
+          normalizeArgs.push(job.data.forceUnit);
+        }
+        
+        const { stdout } = await execFileAsync('node', normalizeArgs, {
+          timeout: 60_000,
+        });
+        normalizationInfo = JSON.parse(stdout);
+        if (normalizationInfo.normalized || job.data.forceUnit) {
+          this.logger.log(`📏 Escala normalizada: detectado ${normalizationInfo.detectedUnit}, escala x${normalizationInfo.scaleApplied} (maxDim original: ${normalizationInfo.originalMaxDim.toFixed(2)})`);
+        } else {
+          this.logger.log(`📏 Escala mantenida: detectado ${normalizationInfo.detectedUnit} (maxDim: ${normalizationInfo.originalMaxDim.toFixed(2)})`);
+        }
+      } catch (normErr: any) {
+        this.logger.warn(`⚠️ Fallo al normalizar escala: ${normErr.message}`);
+        normalizationInfo = { normalized: false, error: normErr.message };
+      }
+
       // ── Paso 2: Optimizar (Draco compression) ───────────────────────────
       const { outputPath: optimizedPath, dracoApplied } = await this.optimizeGlb(rawGlbPath, optimizedOutputPath);
 
@@ -145,6 +167,8 @@ export class ConversionProcessor extends WorkerHost {
         dracoEnabled: dracoApplied,
         originalFormat,
         convertedAt: new Date().toISOString(),
+        // Escala / Normalización
+        normalization: normalizationInfo,
         // Orientación
         orientation: orientationInfo,
       };
@@ -224,44 +248,147 @@ export class ConversionProcessor extends WorkerHost {
     return outputPath;
   }
   
-  // ── DWG: dwg2dxf → assimp → GLB ───────────────────────────────────────────
+  // ── DWG: dwg2dxf → [assimp | python3 ezdxf → STL → assimp] → GLB ───────────
+  // Pipeline con fallback: si assimp no puede procesar el DXF (e.g. 3DSOLID sin
+  // 3DFACE), se usa ezdxf para teselar las entidades ACIS y generar un STL
+  // intermedio que assimp sí puede exportar a GLB.
   private async convertDwg(inputPath: string, outputPath: string): Promise<string> {
     const tmpDxfPath = outputPath.replace('.glb', '_dwg.dxf');
-    this.logger.log(`🏗️  Convirtiendo DWG a DXF intermedio: ${path.basename(inputPath)}`);
+    const tmpStlPath = outputPath.replace('.glb', '_dwg.stl');
+    this.logger.log(`🏗️  Iniciando pipeline DWG: ${path.basename(inputPath)}`);
 
     try {
-      // 1. DWG → DXF intermedio
-      // -m: metric units, -o: output file
-      await execFileAsync('dwg2dxf', ['-m', '-o', tmpDxfPath, inputPath], {
-        timeout: 120_000,
-      });
-
-      if (!fs.existsSync(tmpDxfPath) || fs.statSync(tmpDxfPath).size === 0) {
-        throw new Error('La herramienta dwg2dxf no produjo un archivo DXF válido. El DWG podría estar corrupto o ser una versión no soportada.');
+      // ── Paso 1: DWG → DXF usando LibreDWG ────────────────────────────────
+      // Se omite -m (--minimal) porque elimina entidades 3D.
+      // Se usa -y para sobreescribir archivos anteriores.
+      // dwg2dxf puede devolver exit code != 0 pero generar DXF igualmente.
+      try {
+        await execFileAsync(
+          'dwg2dxf',
+          ['-y', '-o', tmpDxfPath, inputPath],
+          { timeout: 120_000 },
+        );
+      } catch (dwgErr: any) {
+        // Algunas versiones de DWG retornan exit != 0 pero generan el archivo
+        this.logger.warn(`dwg2dxf terminó con código de error pero puede haber generado DXF: ${(dwgErr.message || '').substring(0, 150)}`);
       }
 
-      // 2. DXF → GLB (via assimp)
-      const glbPath = await this.convertWithAssimp(tmpDxfPath, outputPath);
+      // Verificar si el DXF fue generado
+      let dxfResult: string;
+      if (fs.existsSync(tmpDxfPath) && fs.statSync(tmpDxfPath).size > 0) {
+        dxfResult = tmpDxfPath;
+      } else {
+        // dwg2dxf a veces ignora -o y genera el DXF junto al DWG de entrada
+        const dwgDir = path.dirname(inputPath);
+        const dwgBase = path.basename(inputPath, path.extname(inputPath));
+        const fallbackDxf = path.join(dwgDir, `${dwgBase}.dxf`);
+        if (fs.existsSync(fallbackDxf) && fs.statSync(fallbackDxf).size > 0) {
+          this.logger.log(`📁 DXF encontrado en ubicación alternativa: ${path.basename(fallbackDxf)}`);
+          fs.copyFileSync(fallbackDxf, tmpDxfPath);
+          try { fs.unlinkSync(fallbackDxf); } catch {}
+          dxfResult = tmpDxfPath;
+        } else {
+          throw new Error(
+            'dwg2dxf no generó un archivo DXF. Verifica que el archivo DWG no esté corrupto, ' +
+            'sea una versión compatible (R12–R2013) y no esté protegido con contraseña.'
+          );
+        }
+      }
 
-      // 3. Validación de geometría 3D
-      // Extraemos metadata básica para ver si hay triángulos
+      const dxfSize = (fs.statSync(dxfResult).size / 1024).toFixed(1);
+      this.logger.log(`✅ DXF intermedio: ${dxfSize} KB — ${path.basename(dxfResult)}`);
+
+      // ── Paso 2a: Intentar DXF → GLB directamente con assimp ──────────────
+      let glbPath: string;
+      try {
+        glbPath = await this.convertWithAssimp(dxfResult, outputPath);
+        // Verificar que produjo geometría real (assimp puede generar GLB vacío)
+        const quickMeta = await this.extractMetadata(glbPath);
+        if (quickMeta.triangles === 0) {
+          throw new Error('assimp generó GLB sin triángulos — probable DXF con solo 3DSOLID');
+        }
+        this.logger.log(`✅ Assimp procesó DXF directamente`);
+      } catch (assimpErr: any) {
+        // ── Paso 2b: Fallback — ezdxf para extraer 3DFACE/MESH/POLYFACE ────
+        // assimp no soporta 3DSOLID en DXF, solo 3DFACE y POLYLINE mesh.
+        // ezdxf puede teselar 3DSOLID con caras planas (poliedros).
+        this.logger.warn(`Assimp no pudo procesar DXF: ${(assimpErr.message || '').substring(0, 120)}`);
+        this.logger.log(`🔄 Fallback: ezdxf → STL → assimp`);
+
+        try {
+          await execFileAsync(
+            'python3',
+            ['/app/scripts/dwg_tessellate.py', dxfResult, tmpStlPath],
+            { timeout: 120_000 },
+          );
+        } catch (pyErr: any) {
+          const pyStderr = pyErr.stderr || pyErr.message || '';
+          // Error descriptivo: el DWG tiene 3DSOLID con superficies curvas ACIS
+          if (pyStderr.includes('ERROR_SIN_GEOMETRIA') || pyStderr.includes('superficies curvas')) {
+            throw new Error(
+              'El archivo DWG contiene sólidos 3D (3DSOLID) con superficies curvas en formato ACIS ' +
+              'que no se pueden convertir automáticamente en el servidor. ' +
+              'Para subir este modelo, expórtalo primero como OBJ, STL o FBX ' +
+              'directamente desde AutoCAD, BricsCAD, Fusion360 o la herramienta CAD de origen.'
+            );
+          }
+          this.logger.warn(`ezdxf no pudo teselar: ${pyStderr.substring(0, 150)}`);
+        }
+
+        // Verificar que se generó el STL
+        if (!fs.existsSync(tmpStlPath) || fs.statSync(tmpStlPath).size === 0) {
+          throw new Error(
+            'El archivo DWG no se pudo convertir automáticamente. ' +
+            'Esto ocurre cuando el DWG contiene sólidos ACIS con superficies curvas ' +
+            'que requieren un motor CAD propietario para teselar. ' +
+            'Solución: exportar el modelo como OBJ, STL o FBX ' +
+            'directamente desde AutoCAD, BricsCAD o Fusion360.'
+          );
+        }
+
+        const stlSize = (fs.statSync(tmpStlPath).size / 1024).toFixed(1);
+        this.logger.log(`✅ STL intermedio generado: ${stlSize} KB`);
+
+        // Convertir STL → GLB con assimp
+        glbPath = await this.convertWithAssimp(tmpStlPath, outputPath);
+        this.logger.log(`✅ Pipeline DWG completado con fallback ezdxf`);
+      }
+
+      // ── Paso 3: Validar geometría 3D real ────────────────────────────────
       const meta = await this.extractMetadata(glbPath);
       if (meta.triangles === 0) {
-        throw new Error('El archivo DWG no contiene geometría 3D válida (solo 2D o vacío).');
+        throw new Error(
+          'El archivo DWG no contiene geometría 3D válida (triángulos detectados = 0). ' +
+          'El archivo puede ser un plano 2D, estar vacío, o contener solo líneas/texto sin sólidos. ' +
+          'Exportar como OBJ o FBX directamente desde la herramienta CAD si el modelo contiene geometría 3D.'
+        );
       }
 
+      this.logger.log(`✅ Pipeline DWG completado: ${meta.triangles} triángulos | bbox=${!!meta.boundingBox}`);
       return glbPath;
 
     } catch (err: any) {
       const msg = err.message || '';
-      if (msg.includes('triangles === 0') || msg.includes('geometría 3D')) {
-        throw err; // Relanzar error de validación de negocio
+      // Re-lanzar errores de validación de negocio directamente sin envolver
+      if (
+        msg.includes('triángulos detectados = 0') ||
+        msg.includes('geometría 3D') ||
+        msg.includes('dwg2dxf no generó') ||
+        msg.includes('no produjo geometría') ||
+        msg.includes('superficies curvas') ||
+        msg.includes('Teselación Python')
+      ) {
+        throw err;
       }
-      throw new Error(`Error en pipeline DWG: ${msg}`);
+      throw new Error(`Pipeline DWG → GLB falló: ${msg}`);
     } finally {
+      // Limpiar archivos temporales sin importar el resultado
       this.cleanupTempFile(tmpDxfPath);
+      this.cleanupTempFile(tmpStlPath);
     }
   }
+
+
 
   // ── Convertir con assimp (FBX, DAE, OBJ, 3DS, DXF, STL, IFC, WRL, XSI) ──
   private async convertWithAssimp(inputPath: string, outputPath: string): Promise<string> {

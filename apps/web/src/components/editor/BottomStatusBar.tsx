@@ -4,9 +4,34 @@
 
 import React from 'react';
 import { useEditorStore } from '@/store/editor-store';
+import { useVersionInfo } from '@/hooks/useVersionInfo';
 
 export const BottomStatusBar: React.FC = () => {
   const { activeTool, selectedIds, selectedType, gridSize, snapEnabled } = useEditorStore();
+
+  // Versión real del build — obtenida del backend en tiempo de ejecución
+  const versionInfo = useVersionInfo();
+
+  /**
+   * Formatea una fecha ISO a DD/MM/YYYY en locale español.
+   * Retorna guiones mientras carga o si el valor no es una fecha válida.
+   */
+  const formatDate = (iso: string): string => {
+    try {
+      return new Date(iso).toLocaleDateString('es-ES', {
+        day: '2-digit',
+        month: '2-digit',
+        year: 'numeric',
+      });
+    } catch {
+      return '—';
+    }
+  };
+
+  // Texto del badge: espera hasta conocer la versión real
+  const badgeText = versionInfo
+    ? `XLayout · ${versionInfo.commit} · ${formatDate(versionInfo.buildDate)}`
+    : 'XLayout · cargando…';
 
   return (
     <footer className="h-8 w-full flex items-center justify-between border-t border-zinc-200 bg-white px-6 shrink-0 z-50 shadow-[0_-4px_20px_-5px_rgba(0,0,0,0.05)]">
@@ -47,8 +72,12 @@ export const BottomStatusBar: React.FC = () => {
            </div>
         </div>
 
-        <div className="flex items-center gap-2 bg-zinc-900 text-white px-3 py-1 rounded-md text-[8px] tracking-[0.3em] font-black uppercase">
-           XLAYOUT v1.3.0-PRO
+        {/* Badge de versión real — muestra commit + fecha del build activo en servidor */}
+        <div
+          className="flex items-center gap-2 bg-zinc-900 text-white px-3 py-1 rounded-md text-[8px] tracking-[0.15em] font-black uppercase font-mono"
+          title={versionInfo ? `Versión: ${versionInfo.version} | Commit: ${versionInfo.commit} | Build: ${versionInfo.buildDate}` : 'Cargando versión…'}
+        >
+          {badgeText}
         </div>
 
         <div className="text-[9px] text-zinc-400 opacity-60 font-medium tracking-tight normal-case italic select-none">

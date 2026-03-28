@@ -4,9 +4,11 @@
  */
 
 import { Module } from '@nestjs/common';
-import { PlatformInfoController } from './platform-info.controller';
+import { PlatformInfoController, PlatformInfoVersionController } from './platform-info.controller';
 
 @Module({
-  controllers: [PlatformInfoController],
+  // Ambos controladores: el público (versión) y el protegido (métricas, salud, config)
+  controllers: [PlatformInfoVersionController, PlatformInfoController],
 })
 export class PlatformInfoModule {}
+

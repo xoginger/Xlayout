@@ -13,6 +13,7 @@ export interface ConversionJobData {
   originalFilePath: string;
   originalFormat: string;
   tenantId: string;
+  forceUnit?: string;
 }
 
 @Injectable()

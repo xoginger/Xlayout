@@ -1,4 +1,9 @@
 # Creado y diseñado por XO
+# Variables requeridas antes de ejecutar docker compose (inyectadas desde el host):
+#   export GIT_COMMIT=$(git rev-parse --short HEAD)
+#   export BUILD_DATE=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
+#   export APP_VERSION=1.0.0
+# Estas garantizan que cada build lleve el commit y fecha exactos del repositorio.
 
 services:
   postgres:
@@ -41,6 +46,13 @@ services:
     build:
       context: ./apps/api
       dockerfile: Dockerfile
+      # Los build args se resuelven desde variables de entorno del host en el momento del build.
+      # Ejecutar antes: export GIT_COMMIT=$(git rev-parse --short HEAD)
+      #                 export BUILD_DATE=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
+      args:
+        APP_VERSION: ${APP_VERSION:-1.0.0}
+        APP_COMMIT: ${GIT_COMMIT:-unknown}
+        APP_BUILD_DATE: ${BUILD_DATE:-unknown}
     container_name: xlayout_api
     environment:
       - DATABASE_URL=postgresql://xlayout_user:xlayout_password@postgres:5432/xlayout_db?schema=public
@@ -73,6 +85,11 @@ services:
     build:
       context: ./apps/api
       dockerfile: Dockerfile
+      # El worker usa la misma imagen que la API — comparte las mismas variables de build
+      args:
+        APP_VERSION: ${APP_VERSION:-1.0.0}
+        APP_COMMIT: ${GIT_COMMIT:-unknown}
+        APP_BUILD_DATE: ${BUILD_DATE:-unknown}
     container_name: xlayout_worker
     command: npm run start:worker
     environment:
@@ -138,3 +155,4 @@ networks:
 volumes:
   xlayout_pgdata:
   xlayout_storage:
+

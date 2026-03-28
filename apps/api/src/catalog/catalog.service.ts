@@ -368,6 +368,45 @@ export class CatalogService {
     return { message: 'Conversion job re-queued', assetId: id };
   }
 
+  // Permite al usuario/admin sobrescribir heurística de escala
+  async forceAssetScale(tenantId: string, id: string, targetUnit: string, conversionService: any) {
+    this.validateTenantId(tenantId);
+    const asset = await this.prisma.client.productAsset.findUnique({ where: { id } });
+    if (!asset || asset.tenantId !== tenantId) {
+      throw new ForbiddenException('Access denied');
+    }
+    if (!asset.originalFileUrl) {
+      throw new BadRequestException('No existe el archivo original para re-procesar (pipeline v1 legacy). Por favor re-suba el modelo 3D.');
+    }
+
+    // Actualizar metadata con unidad forzada
+    const existingMeta = (asset.metadata as Record<string, any>) || {};
+    existingMeta.forcedUnit = targetUnit;
+
+    await this.prisma.client.productAsset.update({
+      where: { id },
+      data: { 
+        conversionStatus: 'processing', 
+        conversionError: null,
+        metadata: existingMeta
+      },
+    });
+
+    // Reconstruir ruta absoluta
+    const storageDir = process.env.UPLOAD_DIR || '/app/storage';
+    const relativePath = asset.originalFileUrl.replace('/storage/', '');
+    const absolutePath = `${storageDir}/${relativePath}`;
+
+    await conversionService.retryConversion({
+      assetId: id,
+      originalFilePath: absolutePath,
+      originalFormat: asset.originalFormat || 'glb',
+      tenantId,
+      forceUnit: targetUnit
+    });
+
+    return { message: `Escala forzada a ${targetUnit}. Re-procesando asset.`, assetId: id, currentMetadata: existingMeta };
+  }
 
   async getConditions(tenantId: string) {
     this.validateTenantId(tenantId);

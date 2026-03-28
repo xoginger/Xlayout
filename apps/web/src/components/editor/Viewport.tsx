@@ -1270,7 +1270,32 @@ export const Viewport: React.FC = () => {
 
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
-      // 1. Shift para bloqueo de eje
+      // 0. Prevenir atajos al escribir en campos de texto
+      if (document.activeElement?.tagName === 'INPUT' || document.activeElement?.tagName === 'TEXTAREA') return;
+
+      // 1. Selector rápido de herramientas (Estilo Sketchup)
+      if (!e.ctrlKey && !e.metaKey) {
+        const key = e.key.toUpperCase();
+        if (e.code === 'Space') { e.preventDefault(); setActiveTool('select'); }
+        else if (key === 'O') setActiveTool('orbit');
+        else if (key === 'H') setActiveTool('pan');
+        else if (key === 'L') setActiveTool('line');
+        else if (key === 'R') setActiveTool('rectangle');
+        else if (key === 'C') setActiveTool('circle');
+        else if (key === 'W') setActiveTool('wall');
+        else if (key === 'P') setActiveTool('extrude');
+        else if (key === 'M') setActiveTool('move');
+        else if (key === 'Q') setActiveTool('rotate');
+        else if (key === 'S') setActiveTool('scale');
+        else if (key === 'F') setActiveTool('offset');
+        else if (key === 'T') setActiveTool('tape');
+        else if (key === 'D') setActiveTool('dimension');
+        else if (key === 'B') setActiveTool('paint');
+        else if (key === 'E') setActiveTool('eraser');
+        else if (key === 'K') setActiveTool('scale-blueprint');
+      }
+
+      // 2. Shift para bloqueo de eje
       if (e.key === 'Shift') {
         setIsShiftPressed(true);
         if (activeInference.type === 'axis' && activeInference.axis) {
@@ -1278,7 +1303,7 @@ export const Viewport: React.FC = () => {
         }
       }
       
-      // 2. Control para modo copia
+      // 3. Control para modo copia
       if (e.key === 'Control') setIsCtrlPressed(true);
 
       // ── Clipboard: Ctrl+C / Ctrl+V ──
@@ -1356,21 +1381,65 @@ export const Viewport: React.FC = () => {
 
   const layerVisible = (id: string) => layers.find(l => l.id === id)?.visible !== false;
 
-  const getCursorClass = (tool: string) => {
+  const getCursorStyle = (tool: string): React.CSSProperties => {
+    const createCursor = (svgContent: string, hotspotX = 12, hotspotY = 12, fallback = 'crosshair') => {
+      const svg = `
+        <svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 32 32">
+          <defs>
+            <filter id="shadow" x="-20%" y="-20%" width="140%" height="140%">
+              <feDropShadow dx="0" dy="1" stdDeviation="1" flood-color="black" flood-opacity="0.3"/>
+            </filter>
+          </defs>
+          <g filter="url(#shadow)">
+            <path d="M12 2v6m0 8v6m-10-10h6m8 0h6" stroke="black" stroke-width="3" stroke-linecap="round"/>
+            <path d="M12 2v6m0 8v6m-10-10h6m8 0h6" stroke="white" stroke-width="1.5" stroke-linecap="round"/>
+            <g transform="translate(16, 16) scale(0.6)">
+              ${svgContent}
+            </g>
+          </g>
+        </svg>
+      `.replace(/\s+/g, ' ').trim();
+      return { cursor: `url('data:image/svg+xml;utf8,${encodeURIComponent(svg)}') ${hotspotX} ${hotspotY}, ${fallback}` };
+    };
+
     switch (tool) {
-      case 'move': case 'pan': return 'cursor-grab active:cursor-grabbing';
-      case 'rotate': return 'cursor-alias';
-      case 'scale': return 'cursor-nwse-resize';
-      case 'select': return 'cursor-default';
-      case 'zoom': return 'cursor-zoom-in';
-      case 'eraser': case 'delete': return 'cursor-not-allowed';
-      default: return 'cursor-crosshair';
+      case 'wall':
+        return createCursor('<path d="M2 4h20v16H2z" fill="white" stroke="black" stroke-width="2"/><path d="M2 12h20" stroke="black" stroke-width="2"/>');
+      case 'line':
+        return createCursor('<path d="M2 22l16-16 4 4-16 16z" fill="white" stroke="black" stroke-width="2"/><path d="M18 6l-4-4" stroke="black" stroke-width="2"/>');
+      case 'rectangle':
+        return createCursor('<rect x="3" y="3" width="18" height="14" fill="white" stroke="black" stroke-width="2" rx="1"/>');
+      case 'circle':
+        return createCursor('<circle cx="12" cy="12" r="9" fill="white" stroke="black" stroke-width="2"/>');
+      case 'tape':
+        return createCursor('<rect x="2" y="6" width="20" height="12" rx="3" fill="white" stroke="black" stroke-width="2"/><circle cx="8" cy="12" r="2" fill="black"/><path d="M16 6v12" stroke="black" stroke-width="2"/>');
+      case 'dimension':
+        return createCursor('<path d="M2 24v-6M22 24v-6M2 20h20" stroke="white" stroke-width="4" stroke-linecap="round"/><path d="M2 24v-6M22 24v-6M2 20h20" stroke="black" stroke-width="1.5" stroke-linecap="round"/>');
+      case 'extrude':
+        return createCursor('<path d="M12 2v20M6 8l6-6 6 6" stroke="white" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/><path d="M12 2v20M6 8l6-6 6 6" stroke="black" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>');
+      case 'place-opening':
+        return createCursor('<path d="M6 22V6a2 2 0 012-2h8a2 2 0 012 2v16M14 14v2" fill="white" stroke="black" stroke-width="2" stroke-linecap="round"/>', 12, 12, 'copy');
+      case 'orbit':
+        return { cursor: `url('data:image/svg+xml;utf8,${encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="black" stroke-width="2"><circle cx="12" cy="12" r="10" fill="white" stroke-width="0"/><path d="M21 12a9 9 0 01-9 9m9-9a9 9 0 00-9-9m9 9H3m9 9a9 9 0 01-9-9m9 9c1.657 0 3-4.03 3-9s-1.343-9-3-9m0 18c-1.657 0-3-4.03-3-9s1.343-9 3-9m-9 9a9 9 0 019-9" stroke="black"/><path d="M21 12a9 9 0 01-9 9m9-9a9 9 0 00-9-9m9 9H3m9 9a9 9 0 01-9-9m9 9c1.657 0 3-4.03 3-9s-1.343-9-3-9m0 18c-1.657 0-3-4.03-3-9s1.343-9 3-9m-9 9a9 9 0 019-9" stroke="white" stroke-width="1"/></svg>')}') 12 12, all-scroll` };
+      case 'move': case 'pan':
+        return { cursor: 'grab' }; // CSS nativo
+      case 'rotate':
+        return { cursor: 'alias' };
+      case 'scale':
+        return { cursor: 'nwse-resize' };
+      case 'select':
+        return { cursor: 'default' };
+      case 'eraser': case 'delete':
+        return { cursor: 'not-allowed' };
+      default:
+        return { cursor: 'crosshair' };
     }
   };
 
   return (
     <main 
-      className={`flex-1 relative bg-zinc-50 overflow-hidden outline-none ${getCursorClass(activeTool)}`}
+      className="flex-1 relative bg-zinc-50 overflow-hidden outline-none"
+      style={getCursorStyle(activeTool)}
       tabIndex={0}
       onKeyDown={(e) => {
         if (e.key === 'Escape') setDrawingStart(null);
@@ -1397,8 +1466,10 @@ export const Viewport: React.FC = () => {
             makeDefault 
             enableRotate={viewMode === '3D' && !extrudingFaceId} 
             screenSpacePanning={true}
+            enableDamping={true}
+            dampingFactor={0.05}
             mouseButtons={{
-              LEFT: undefined, 
+              LEFT: activeTool === 'orbit' ? THREE.MOUSE.ROTATE : (activeTool === 'pan' ? THREE.MOUSE.PAN : undefined),
               MIDDLE: THREE.MOUSE.ROTATE,
               RIGHT: THREE.MOUSE.PAN
             }}

@@ -11,7 +11,7 @@ export type OpeningType = 'door' | 'window' | 'opening';
 export type OpeningDirection = 'left' | 'right' | 'inward' | 'outward';
 export type ViewMode = '2D' | '3D';
 export type ToolType =
-  | 'select' | 'multi-select' | 'pan' | 'zoom' | 'move' | 'rotate' | 'scale'
+  | 'select' | 'multi-select' | 'pan' | 'orbit' | 'zoom' | 'move' | 'rotate' | 'scale'
   | 'line' | 'rectangle' | 'circle' | 'wall'
   | 'extrude' | 'offset'
   | 'tape' | 'paint' | 'eraser' | 'dimension'

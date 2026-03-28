@@ -9,6 +9,25 @@ import { UserTypeGuard } from '../common/guards/user-type.guard';
 import { AllowedUserTypes } from '../common/decorators/user-type.decorator';
 import { PrismaService } from '../prisma/prisma.service';
 
+// Controlador separado sin guard para el endpoint público de versión
+@Controller('platform/info')
+export class PlatformInfoVersionController {
+  /**
+   * GET /api/platform/info/version
+   * Endpoint público: devuelve la versión real del build activo.
+   * Los valores se inyectan como variables de entorno durante el docker build.
+   * No requiere autenticación — es inofensivo y necesario para el indicador del editor.
+   */
+  @Get('version')
+  getVersion() {
+    return {
+      version: process.env.APP_VERSION || '1.0.0',
+      commit: process.env.APP_COMMIT || 'desconocido',
+      buildDate: process.env.APP_BUILD_DATE || new Date().toISOString(),
+    };
+  }
+}
+
 // Solo PLATFORM_USER puede acceder a información sensible de la plataforma
 @Controller('platform/info')
 @UseGuards(JwtAuthGuard, UserTypeGuard)

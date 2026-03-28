@@ -82,6 +82,11 @@ const PropertyBadges: React.FC<{ asset: any }> = ({ asset }) => {
       cls: meta.orientation?.centered ? 'bg-sky-100 text-sky-700' : 'bg-amber-100 text-amber-700',
       show: !!meta.orientation,
     },
+    {
+      label: meta.normalization?.normalized ? `📏 ×${meta.normalization.scaleApplied}` : '📏 1:1',
+      cls: meta.normalization?.normalized ? 'bg-indigo-100 text-indigo-700' : 'bg-slate-100 text-slate-400',
+      show: !!meta.normalization,
+    },
   ];
 
   return (
@@ -95,9 +100,9 @@ const PropertyBadges: React.FC<{ asset: any }> = ({ asset }) => {
   );
 };
 
-// ─── Zona de upload con drag & drop ───────────────────────────────────────────
-const ACCEPTED_FORMATS = '.glb,.gltf,.obj,.dae,.fbx,.3ds,.dxf,.kmz,.stl,.ply,.ifc,.wrl,.xsi';
-const FORMAT_INFO = 'GLB, GLTF, OBJ, DAE, FBX, 3DS, DXF, KMZ, STL, PLY, IFC, WRL, XSI';
+// Formatos 3D aceptados (Se retiró DWG/DXF temporalmente del flujo visible por inestabilidad de sólidos ACIS)
+const ACCEPTED_FORMATS = '.glb,.gltf,.obj,.dae,.fbx,.3ds,.kmz,.stl,.ply,.ifc,.wrl,.xsi';
+const FORMAT_INFO = 'GLB, GLTF, OBJ, DAE, FBX, 3DS, KMZ, STL, PLY, IFC, WRL, XSI';
 
 const UploadZone: React.FC<{
   productId: string;
@@ -109,6 +114,17 @@ const UploadZone: React.FC<{
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
 
   const handleFile = (file: File) => {
+    // Validar extensión en frontend
+    const ext = file.name.substring(file.name.lastIndexOf('.')).toLowerCase();
+    if (!ACCEPTED_FORMATS.split(',').includes(ext)) {
+      if (ext === '.dwg' || ext === '.dxf') {
+        alert("DWG / DXF no está soportado actualmente en el flujo automático de modelos 3D de XLayout. Exporta el modelo a OBJ o GLB antes de subirlo.");
+      } else {
+        alert(`Formato de archivo no soportado: ${ext}. Usa formatos como OBJ o GLB.`);
+      }
+      return;
+    }
+
     if (file.size > 50 * 1024 * 1024) {
       alert(`El archivo excede el límite de 50MB (${(file.size / 1024 / 1024).toFixed(1)}MB)`);
       return;
@@ -138,6 +154,9 @@ const UploadZone: React.FC<{
           {selectedFile ? selectedFile.name : 'Arrastrar aquí o clic para seleccionar'}
         </p>
         <p className="text-xs text-slate-400 mt-1">{FORMAT_INFO} · Máximo 50MB</p>
+        <p className="text-[11px] font-medium text-blue-600 mt-2 px-4 py-1.5 bg-blue-50 rounded inline-block">
+          💡 Para mejores resultados en XLayout, usa OBJ o GLB como formatos principales.
+        </p>
       </div>
       <input ref={inputRef} type="file" accept={ACCEPTED_FORMATS} className="hidden"
         onChange={(e) => e.target.files?.[0] && handleFile(e.target.files[0])} />
@@ -211,6 +230,16 @@ const MetadataRow: React.FC<{ asset: ProductAsset & { product?: any } }> = ({ as
               {meta.dracoEnabled ? '✓ Aplicado' : '✗ No aplicado'}
             </strong>
           </div>
+
+          {/* ── Normalización de Escala ── */}
+          {meta.normalization?.normalized && (
+            <div className="flex justify-between">
+              <span className="text-slate-500">Escala Corregida</span>
+              <strong className="text-indigo-600">
+                {meta.normalization.detectedUnit} → m (×{meta.normalization.scaleApplied})
+              </strong>
+            </div>
+          )}
 
           {/* ── BBox con dimensiones ── */}
           {meta.boundingBox?.width !== undefined && (
@@ -298,7 +327,7 @@ export default function CompanyAssetsPage() {
   const {
     assets, products,
     fetchAssets, fetchProducts,
-    uploadAsset, retryConversion,
+    uploadAsset, retryConversion, forceScale,
     isLoading,
   } = useAdminCatalogStore();
 
@@ -350,6 +379,20 @@ export default function CompanyAssetsPage() {
       alert('Error al reintentar: ' + (err?.message || 'Error'));
     } finally {
       setRetryingId(null);
+    }
+  };
+
+  const [scalingAssetId, setScalingAssetId] = useState<string | null>(null);
+  const [targetUnit, setTargetUnit] = useState<string>('m');
+
+  const handleForceScale = async () => {
+    if (!scalingAssetId) return;
+    try {
+      await forceScale(scalingAssetId, targetUnit);
+      setScalingAssetId(null);
+      load();
+    } catch (err: any) {
+      alert('Error al forzar escala: ' + (err?.message || 'Error'));
     }
   };
 
@@ -425,6 +468,38 @@ export default function CompanyAssetsPage() {
               Reintentar
             </AdminButton>
           )}
+          {scalingAssetId === a.id ? (
+            <div className="flex flex-col gap-1 border border-blue-200 bg-blue-50 p-1 rounded">
+              <span className="text-[10px] font-bold text-blue-800">Forzar Unidad Orig.</span>
+              <select 
+                title="Unidad forzada"
+                className="text-xs p-1 rounded border border-slate-300"
+                value={targetUnit}
+                onChange={e => setTargetUnit(e.target.value)}
+              >
+                <option value="m">Metros (m)</option>
+                <option value="cm">Centímetros (cm)</option>
+                <option value="mm">Milímetros (mm)</option>
+                <option value="in">Pulgadas (in)</option>
+              </select>
+              <div className="flex gap-1 mt-1">
+                <AdminButton variant="primary" size="sm" onClick={handleForceScale}>
+                  Aplicar
+                </AdminButton>
+                <AdminButton variant="outline" size="sm" onClick={() => setScalingAssetId(null)}>
+                  X
+                </AdminButton>
+              </div>
+            </div>
+          ) : (
+            a.originalFileUrl && !['processing'].includes(a.conversionStatus) && (
+              <AdminButton
+                variant="outline" size="sm" onClick={() => { setScalingAssetId(a.id); setTargetUnit('m'); }}
+              >
+                Editar Escala
+              </AdminButton>
+            )
+          )}
         </div>
       )
     },
@@ -469,10 +544,10 @@ export default function CompanyAssetsPage() {
               uploading={uploadingId === targetProductId}
             />
           )}
-          <div className="mt-3 p-3 bg-amber-50 border border-amber-200 rounded text-xs text-amber-800">
+          <div className="mt-3 p-3 bg-blue-50 border border-blue-200 rounded text-xs text-blue-800">
             <strong>Formatos aceptados:</strong> {FORMAT_INFO}<br />
-            <strong>DWG:</strong> No soportado — exportar como DXF desde AutoCAD.<br />
-            <strong>Pipeline:</strong> Conversión → Draco compression → Validación orientación/piso → Metadata
+            <strong>Recomendación:</strong> Para obtener máxima compatibilidad y evitar problemas de escala, exportar los modelos preferiblemente como <strong>.glb</strong>, <strong>.obj</strong> o <strong>.fbx</strong> desde la herramienta CAD.<br />
+            <strong>Pipeline automático:</strong> Conversión → Draco compression → Normalización de Escala → Validación de orientación y piso.
           </div>
         </div>
       )}

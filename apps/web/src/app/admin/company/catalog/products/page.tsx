@@ -76,9 +76,10 @@ const CompactUploadZone: React.FC<{
     >
       <input 
         ref={inputRef} type="file" className="hidden" 
-        accept=".glb,.gltf,.obj,.fbx"
+        accept=".glb,.gltf,.obj,.dae,.fbx,.3ds,.dxf,.kmz,.stl,.ply,.ifc,.wrl,.xsi,.dwg"
         onChange={(e) => onFileSelect(e.target.files?.[0] || null)} 
       />
+
       {selectedFile ? (
         <div className="flex flex-col items-center">
           <span className="text-xl">📄</span>
@@ -94,7 +95,7 @@ const CompactUploadZone: React.FC<{
         <>
           <span className="text-xl">📤</span>
           <p className="text-[10px] font-bold text-slate-500 mt-1 uppercase">Subir nuevo modelo</p>
-          <p className="text-[9px] text-slate-400">GLB, OBJ, FBX (Máx 50MB)</p>
+          <p className="text-[9px] text-slate-400">GLB, OBJ, FBX, DWG y más (Máx 50MB)</p>
         </>
       )}
     </div>
