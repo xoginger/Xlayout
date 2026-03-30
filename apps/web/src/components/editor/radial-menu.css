@@ -1,0 +1,189 @@
+/* Creado y diseñado por XO */
+
+/* ─── Menú Radial Contextual (Design System Unificado) ─── */
+
+.radial-menu {
+  position: fixed;
+  z-index: var(--xo-z-radial, 9999);
+  pointer-events: none;
+}
+
+.radial-menu--open {
+  pointer-events: auto;
+}
+
+/* Fondo backdrop sutil */
+.radial-menu__backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: calc(var(--xo-z-radial, 9999) - 1);
+}
+
+/* Contenedor central del anillo */
+.radial-menu__ring {
+  position: relative;
+  width: 240px;
+  height: 240px;
+  transform: translate(-50%, -50%);
+}
+
+/* Punto central decorativo */
+.radial-menu__center {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  width: 28px;
+  height: 28px;
+  border-radius: var(--xo-radius-full, 999px);
+  background: var(--xo-primary-muted, rgba(59, 130, 246, 0.15));
+  border: 2px solid rgba(59, 130, 246, 0.35);
+  z-index: 2;
+  animation: radialCenterPulse 1.5s ease-in-out infinite;
+}
+
+.radial-menu__center-dot {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  width: 8px;
+  height: 8px;
+  border-radius: var(--xo-radius-full, 999px);
+  background: var(--xo-primary, #3b82f6);
+}
+
+/* ─── Item Individual del Menú ─── */
+.radial-menu__item {
+  position: absolute;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  width: 56px;
+  height: 56px;
+  border-radius: var(--xo-radius-lg, 14px);
+  background: var(--xo-surface, rgba(24, 24, 27, 0.92));
+  backdrop-filter: var(--xo-blur, blur(16px) saturate(1.8));
+  -webkit-backdrop-filter: var(--xo-blur, blur(16px) saturate(1.8));
+  border: 1px solid var(--xo-border, rgba(255, 255, 255, 0.08));
+  box-shadow: var(--xo-shadow-md, 0 4px 16px rgba(0, 0, 0, 0.35));
+  cursor: pointer;
+  user-select: none;
+  transition: all 0.15s var(--xo-ease, cubic-bezier(0.16, 1, 0.3, 1));
+  color: var(--xo-text-muted, #a1a1aa);
+
+  /* Animación de entrada */
+  opacity: 0;
+  transform: translate(-50%, -50%) scale(0.5);
+  animation: radialItemIn 0.25s var(--xo-ease, cubic-bezier(0.16, 1, 0.3, 1)) forwards;
+}
+
+.radial-menu__item:hover {
+  background: var(--xo-primary-muted, rgba(59, 130, 246, 0.2));
+  border-color: rgba(59, 130, 246, 0.3);
+  color: var(--xo-text, #fafafa);
+  transform: translate(-50%, -50%) scale(1.12);
+  box-shadow:
+    0 6px 24px rgba(59, 130, 246, 0.2),
+    0 0 0 1px rgba(59, 130, 246, 0.2);
+}
+
+.radial-menu__item:active {
+  transform: translate(-50%, -50%) scale(0.95);
+}
+
+.radial-menu__item--danger:hover {
+  background: var(--xo-danger-muted, rgba(239, 68, 68, 0.2));
+  border-color: rgba(239, 68, 68, 0.3);
+  box-shadow:
+    0 6px 24px rgba(239, 68, 68, 0.15),
+    0 0 0 1px rgba(239, 68, 68, 0.2);
+  color: #fca5a5;
+}
+
+.radial-menu__item-icon {
+  width: 20px;
+  height: 20px;
+  flex-shrink: 0;
+}
+
+.radial-menu__item-label {
+  font-size: 7px;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  margin-top: 2px;
+  white-space: nowrap;
+  max-width: 60px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* ─── Tooltip ─── */
+.radial-menu__tooltip {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  padding: 6px 12px;
+  border-radius: var(--xo-radius-sm, 6px);
+  background: var(--xo-surface, rgba(24, 24, 27, 0.95));
+  backdrop-filter: var(--xo-blur-light, blur(8px));
+  color: var(--xo-text, #fafafa);
+  font-size: var(--xo-text-sm, 10px);
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  white-space: nowrap;
+  pointer-events: none;
+  z-index: 10;
+  opacity: 0;
+  transition: opacity 0.15s;
+}
+
+.radial-menu__ring:hover .radial-menu__tooltip {
+  opacity: 0;
+}
+
+.radial-menu__item:hover ~ .radial-menu__tooltip,
+.radial-menu__item:hover + .radial-menu__tooltip {
+  opacity: 0;
+}
+
+/* ─── Animaciones ─── */
+@keyframes radialItemIn {
+  from {
+    opacity: 0;
+    transform: translate(-50%, -50%) scale(0.4);
+  }
+  to {
+    opacity: 1;
+    transform: translate(-50%, -50%) scale(1);
+  }
+}
+
+@keyframes radialCenterPulse {
+  0%, 100% { opacity: 0.6; transform: translate(-50%, -50%) scale(1); }
+  50% { opacity: 1; transform: translate(-50%, -50%) scale(1.15); }
+}
+
+/* ─── Cierre ─── */
+.radial-menu--closing .radial-menu__item {
+  animation: radialItemOut 0.12s var(--xo-ease, cubic-bezier(0.16, 1, 0.3, 1)) forwards;
+}
+
+.radial-menu--closing .radial-menu__center {
+  animation: radialItemOut 0.1s ease-out forwards;
+}
+
+@keyframes radialItemOut {
+  from {
+    opacity: 1;
+    transform: translate(-50%, -50%) scale(1);
+  }
+  to {
+    opacity: 0;
+    transform: translate(-50%, -50%) scale(0.6);
+  }
+}

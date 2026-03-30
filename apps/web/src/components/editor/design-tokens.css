@@ -1,0 +1,129 @@
+/* Creado y diseñado por XO */
+
+/* ═══════════════════════════════════════════════════════════════════
+ * XLayout Design System — Tokens CSS Centrales (Fase 4.5)
+ *
+ * FUENTE ÚNICA DE VERDAD para toda la estética del editor.
+ * Todos los componentes deben referenciar estas variables.
+ * ═══════════════════════════════════════════════════════════════════ */
+
+:root {
+  /* ─── Paleta: Superficies ─── */
+  --xo-bg:              #0e0e10;
+  --xo-bg-canvas:       #18181b;
+  --xo-surface:         rgba(24, 24, 27, 0.92);
+  --xo-surface-hover:   rgba(39, 39, 42, 0.95);
+  --xo-surface-active:  rgba(49, 49, 54, 0.98);
+  --xo-surface-elevated: rgba(30, 30, 34, 0.96);
+
+  /* ─── Paleta: Bordes ─── */
+  --xo-border:          rgba(255, 255, 255, 0.06);
+  --xo-border-hover:    rgba(255, 255, 255, 0.12);
+  --xo-border-active:   rgba(255, 255, 255, 0.18);
+  --xo-border-subtle:   rgba(255, 255, 255, 0.03);
+
+  /* ─── Paleta: Colores Primarios ─── */
+  --xo-primary:         #3b82f6;
+  --xo-primary-hover:   #2563eb;
+  --xo-primary-muted:   rgba(59, 130, 246, 0.15);
+  --xo-primary-glow:    rgba(59, 130, 246, 0.25);
+
+  /* ─── Paleta: Acento (Intent Engine) ─── */
+  --xo-accent:          #8b5cf6;
+  --xo-accent-muted:    rgba(139, 92, 246, 0.15);
+
+  /* ─── Paleta: Semánticos ─── */
+  --xo-success:         #22c55e;
+  --xo-success-muted:   rgba(34, 197, 94, 0.15);
+  --xo-danger:          #ef4444;
+  --xo-danger-muted:    rgba(239, 68, 68, 0.15);
+  --xo-danger-hover:    rgba(239, 68, 68, 0.25);
+  --xo-warning:         #f59e0b;
+
+  /* ─── Paleta: Texto ─── */
+  --xo-text:            #fafafa;
+  --xo-text-secondary:  #d4d4d8;
+  --xo-text-muted:      #a1a1aa;
+  --xo-text-dim:        #71717a;
+  --xo-text-ghost:      #52525b;
+
+  /* ─── Tipografía ─── */
+  --xo-font:            'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  --xo-font-mono:       'GeistMono', 'JetBrains Mono', ui-monospace, monospace;
+
+  --xo-text-2xs:        8px;
+  --xo-text-xs:         9px;
+  --xo-text-sm:         10px;
+  --xo-text-base:       11px;
+  --xo-text-lg:         13px;
+  --xo-text-xl:         16px;
+
+  --xo-weight-medium:   500;
+  --xo-weight-bold:     700;
+  --xo-weight-black:    900;
+
+  --xo-tracking-tight:  -0.01em;
+  --xo-tracking-normal: 0.02em;
+  --xo-tracking-wide:   0.08em;
+  --xo-tracking-ultra:  0.15em;
+
+  /* ─── Espaciado (escala 4px) ─── */
+  --xo-space-1:         4px;
+  --xo-space-2:         8px;
+  --xo-space-3:         12px;
+  --xo-space-4:         16px;
+  --xo-space-5:         20px;
+  --xo-space-6:         24px;
+  --xo-space-8:         32px;
+
+  /* ─── Radios ─── */
+  --xo-radius-xs:       4px;
+  --xo-radius-sm:       6px;
+  --xo-radius-md:       10px;
+  --xo-radius-lg:       14px;
+  --xo-radius-xl:       18px;
+  --xo-radius-full:     999px;
+
+  /* ─── Sombras ─── */
+  --xo-shadow-sm:       0 2px 8px rgba(0, 0, 0, 0.25);
+  --xo-shadow-md:       0 4px 16px rgba(0, 0, 0, 0.35);
+  --xo-shadow-lg:       0 8px 32px rgba(0, 0, 0, 0.45);
+  --xo-shadow-xl:       0 12px 48px rgba(0, 0, 0, 0.55);
+  --xo-shadow-glow:     0 0 20px rgba(59, 130, 246, 0.15);
+
+  /* ─── Efectos ─── */
+  --xo-blur:            blur(16px) saturate(1.8);
+  --xo-blur-light:      blur(8px) saturate(1.4);
+
+  /* ─── Transiciones ─── */
+  --xo-ease:            cubic-bezier(0.16, 1, 0.3, 1);
+  --xo-duration-fast:   0.12s;
+  --xo-duration-normal: 0.2s;
+  --xo-duration-smooth: 0.3s;
+
+  /* ─── Z-index ─── */
+  --xo-z-canvas:        1;
+  --xo-z-panels:        40;
+  --xo-z-toolbar:       45;
+  --xo-z-status:        50;
+  --xo-z-overlay:       60;
+  --xo-z-inspector:     70;
+  --xo-z-radial:        9999;
+
+  /* ─── Dimensiones ─── */
+  --xo-toolbar-width:   48px;
+  --xo-statusbar-height: 28px;
+  --xo-panel-width:     280px;
+}
+
+/* ─── Animaciones de Overlay ─── */
+@keyframes catalogOverlayIn {
+  from {
+    opacity: 0;
+    transform: translate(-50%, -50%) scale(0.95);
+  }
+  to {
+    opacity: 1;
+    transform: translate(-50%, -50%) scale(1);
+  }
+}

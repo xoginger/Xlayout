@@ -19,15 +19,15 @@ import { getNavModules } from '@/lib/nav-permissions';
 
 // ─── Sistema de Menús Desplegables ───
 
-const MenuBtn: React.FC<{ label: React.ReactNode; active?: boolean; onClick?: () => void; isBrand?: boolean }> = ({ label, active, onClick, isBrand }) => (
+const MenuBtn: React.FC<{ label: React.ReactNode; active?: boolean; onClick?: () => void; isBrand?: boolean; dark?: boolean }> = ({ label, active, onClick, isBrand, dark }) => (
   <button
     onClick={onClick}
     className={`px-3 py-1 rounded transition-all text-[11px] font-black uppercase tracking-widest border border-transparent select-none flex items-center gap-1.5 ${
       isBrand 
-        ? 'hover:bg-zinc-100 text-zinc-900 bg-transparent'
+        ? (dark ? 'hover:bg-white/10 text-zinc-300 bg-transparent' : 'hover:bg-zinc-100 text-zinc-900 bg-transparent')
         : active 
-          ? 'bg-zinc-900 text-white shadow-sm' 
-          : 'text-zinc-600 hover:bg-zinc-100 hover:text-zinc-900'
+          ? (dark ? 'bg-white/15 text-white shadow-sm' : 'bg-zinc-900 text-white shadow-sm') 
+          : (dark ? 'text-zinc-400 hover:bg-white/10 hover:text-zinc-200' : 'text-zinc-600 hover:bg-zinc-100 hover:text-zinc-900')
     }`}
   >
     {label}
@@ -40,23 +40,26 @@ const MenuAction: React.FC<{
   shortcut?: string;
   onClick: () => void;
   disabled?: boolean;
-}> = ({ label, icon, shortcut, onClick, disabled }) => (
+  dark?: boolean;
+}> = ({ label, icon, shortcut, onClick, disabled, dark }) => (
   <button
     onClick={onClick}
     disabled={disabled}
     className={`w-full flex items-center justify-between px-3 py-2 rounded-md text-[10px] font-black uppercase tracking-widest transition-all ${
-      disabled ? 'opacity-30 cursor-not-allowed text-zinc-400' : 'hover:bg-blue-600 hover:text-white text-zinc-800'
+      disabled 
+        ? (dark ? 'opacity-30 cursor-not-allowed text-zinc-500' : 'opacity-30 cursor-not-allowed text-zinc-400') 
+        : (dark ? 'hover:bg-blue-600 hover:text-white text-zinc-300' : 'hover:bg-blue-600 hover:text-white text-zinc-800')
     } group`}
   >
     <div className="flex items-center gap-2.5">
       {icon && <span className="opacity-70 group-hover:text-white transition-colors">{icon}</span>}
       {label}
     </div>
-    {shortcut && <span className="text-[9px] font-mono text-zinc-400 group-hover:text-blue-200">{shortcut}</span>}
+    {shortcut && <span className={`text-[9px] font-mono group-hover:text-blue-200 ${dark ? 'text-zinc-500' : 'text-zinc-400'}`}>{shortcut}</span>}
   </button>
 );
 
-const MenuDivider = () => <div className="h-px bg-zinc-100 my-1 mx-1 border-t border-zinc-200/50" />;
+const MenuDivider: React.FC<{ dark?: boolean }> = ({ dark }) => <div className={`h-px my-1 mx-1 ${dark ? 'bg-white/10' : 'bg-zinc-100 border-t border-zinc-200/50'}`} />;
 
 // ─── Iconos ───
 const SaveIcon    = () => <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" className="w-3.5 h-3.5"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/></svg>;
@@ -176,7 +179,18 @@ export const GlobalHeader: React.FC<{ pathname: string }> = ({ pathname }) => {
   };
 
   return (
-    <header ref={headerRef} className="flex h-12 w-full shrink-0 items-center justify-between border-b border-zinc-200 bg-white px-3 z-[100] shadow-sm relative">
+    <header ref={headerRef} className={`flex h-12 w-full shrink-0 items-center justify-between px-3 z-[100] relative ${
+      isEditor 
+        ? 'border-b shadow-none' 
+        : 'border-b border-zinc-200 bg-white shadow-sm'
+    }`}
+    style={isEditor ? {
+      background: 'var(--xo-surface)',
+      borderColor: 'var(--xo-border)',
+      backdropFilter: 'var(--xo-blur-light)',
+      WebkitBackdropFilter: 'var(--xo-blur-light)',
+    } : undefined}
+    >
       <input type="file" ref={fileInputRef} className="hidden" accept=".xlayout,.json,image/png,image/jpeg,image/webp,application/pdf" onChange={handleImportFile} />
 
       {/* ── IZQUIERDA: Logo Global Launcher & Dynamic Menus ── */}
@@ -193,6 +207,7 @@ export const GlobalHeader: React.FC<{ pathname: string }> = ({ pathname }) => {
               </span>
             } 
             isBrand
+            dark={isEditor}
             onClick={() => toggleMenu('launcher')}
           />
           {activeMenu === 'launcher' && (
@@ -210,46 +225,46 @@ export const GlobalHeader: React.FC<{ pathname: string }> = ({ pathname }) => {
           )}
         </div>
 
-        <div className="h-4 w-px bg-zinc-200 mx-1" />
+        <div className={`h-4 w-px mx-1 ${isEditor ? 'bg-white/10' : 'bg-zinc-200'}`} />
 
         {/* ── Dynamic Menus ── */}
         {isEditor && (
           <>
             {/* Archivo Menu */}
             <div className="relative">
-              <MenuBtn label="Archivo" active={activeMenu === 'file'} onClick={() => toggleMenu('file')} />
+              <MenuBtn label="Archivo" active={activeMenu === 'file'} dark={isEditor} onClick={() => toggleMenu('file')} />
               {activeMenu === 'file' && (
-                 <div className="absolute top-full left-0 mt-1.5 w-56 bg-white border border-zinc-200 rounded-lg shadow-xl p-1.5 z-50">
-                   <MenuAction label="Nuevo Proyecto" icon={<PlusIcon />} onClick={() => { 
+                 <div className={`absolute top-full left-0 mt-1.5 w-56 rounded-lg shadow-xl p-1.5 z-50 ${isEditor ? 'bg-zinc-900 border border-zinc-800' : 'bg-white border border-zinc-200'}`}>
+                   <MenuAction dark={isEditor} label="Nuevo Proyecto" icon={<PlusIcon />} onClick={() => { 
                      const name = prompt('NOMBRE DEL PROYECTO:', 'NUEVO DISEÑO');
                      if (name) createNewProject(name); 
                      setActiveMenu(null); 
                    }} />
-                    <MenuAction label="Abrir Biblioteca" icon={<FolderIcon />} shortcut="Ctrl+O" onClick={() => { setIsProjectManagerOpen(true); setActiveMenu(null); }} />
-                    <MenuDivider />
-                    <MenuAction label="Guardar Proyecto" icon={<SaveIcon />} shortcut="Ctrl+S" disabled={project.saveStatus === 'saved' || project.saveStatus === 'saving'} onClick={() => { saveProject('manual'); setActiveMenu(null); }} />
-                    <MenuAction label="Guardar Como..." icon={<SaveIcon />} onClick={() => { 
+                    <MenuAction dark={isEditor} label="Abrir Biblioteca" icon={<FolderIcon />} shortcut="Ctrl+O" onClick={() => { setIsProjectManagerOpen(true); setActiveMenu(null); }} />
+                    <MenuDivider dark={isEditor} />
+                    <MenuAction dark={isEditor} label="Guardar Proyecto" icon={<SaveIcon />} shortcut="Ctrl+S" disabled={project.saveStatus === 'saved' || project.saveStatus === 'saving'} onClick={() => { saveProject('manual'); setActiveMenu(null); }} />
+                    <MenuAction dark={isEditor} label="Guardar Como..." icon={<SaveIcon />} onClick={() => { 
                       const name = prompt('NUEVO NOMBRE DEL PROYECTO:', `${project.name} (COPIA)`);
                       if (name) saveAs(name); 
                       setActiveMenu(null); 
                     }} />
-                    <MenuAction label="Historial de Versiones" icon={<ClockIcon />} onClick={() => { setIsVersionHistoryOpen(true); setActiveMenu(null); }} disabled={project.id === 'default'} />
-                    <MenuDivider />
-                    <MenuAction label="Exportar Proyecto (.xlayout)" icon={<SaveIcon />} onClick={() => { exportProject(); setActiveMenu(null); }} />
-                    <MenuAction label="Importar Proyecto / Plano" icon={<ImportIcon />} onClick={() => fileInputRef.current?.click()} />
+                    <MenuAction dark={isEditor} label="Historial de Versiones" icon={<ClockIcon />} onClick={() => { setIsVersionHistoryOpen(true); setActiveMenu(null); }} disabled={project.id === 'default'} />
+                    <MenuDivider dark={isEditor} />
+                    <MenuAction dark={isEditor} label="Exportar Proyecto (.xlayout)" icon={<SaveIcon />} onClick={() => { exportProject(); setActiveMenu(null); }} />
+                    <MenuAction dark={isEditor} label="Importar Proyecto / Plano" icon={<ImportIcon />} onClick={() => fileInputRef.current?.click()} />
                   </div>
               )}
             </div>
 
             {/* Editar Menu */}
             <div className="relative">
-              <MenuBtn label="Editar" active={activeMenu === 'edit'} onClick={() => toggleMenu('edit')} />
+              <MenuBtn label="Editar" active={activeMenu === 'edit'} dark={isEditor} onClick={() => toggleMenu('edit')} />
               {activeMenu === 'edit' && (
-                 <div className="absolute top-full left-0 mt-1.5 w-56 bg-white border border-zinc-200 rounded-lg shadow-xl p-1.5 z-50">
-                   <MenuAction label="Deshacer" icon={<UndoIcon />} shortcut="Ctrl+Z" onClick={() => { undo(); setActiveMenu(null); }} disabled={historyIndex <= 0} />
-                   <MenuAction label="Rehacer" icon={<RedoIcon />} shortcut="Ctrl+Y" onClick={() => { redo(); setActiveMenu(null); }} disabled={historyIndex >= history.length - 1} />
-                   <MenuDivider />
-                   <MenuAction label="Eliminar Item" icon={<TrashIcon />} shortcut="Del" onClick={() => {
+                 <div className={`absolute top-full left-0 mt-1.5 w-56 rounded-lg shadow-xl p-1.5 z-50 ${isEditor ? 'bg-zinc-900 border border-zinc-800' : 'bg-white border border-zinc-200'}`}>
+                   <MenuAction dark={isEditor} label="Deshacer" icon={<UndoIcon />} shortcut="Ctrl+Z" onClick={() => { undo(); setActiveMenu(null); }} disabled={historyIndex <= 0} />
+                   <MenuAction dark={isEditor} label="Rehacer" icon={<RedoIcon />} shortcut="Ctrl+Y" onClick={() => { redo(); setActiveMenu(null); }} disabled={historyIndex >= history.length - 1} />
+                   <MenuDivider dark={isEditor} />
+                   <MenuAction dark={isEditor} label="Eliminar Item" icon={<TrashIcon />} shortcut="Del" onClick={() => {
                      const id = useEditorStore.getState().selectedId;
                      if (id) useEditorStore.getState().removeItem(id);
                      setActiveMenu(null);
@@ -260,12 +275,12 @@ export const GlobalHeader: React.FC<{ pathname: string }> = ({ pathname }) => {
 
             {/* Herramientas Menu */}
             <div className="relative">
-              <MenuBtn label="Herramientas" active={activeMenu === 'tools'} onClick={() => toggleMenu('tools')} />
+              <MenuBtn label="Herramientas" active={activeMenu === 'tools'} dark={isEditor} onClick={() => toggleMenu('tools')} />
               {activeMenu === 'tools' && (
-                 <div className="absolute top-full left-0 mt-1.5 w-56 bg-white border border-zinc-200 rounded-lg shadow-xl p-1.5 z-50">
-                   <MenuAction label={viewMode === '2D' ? 'Cambiar a 3D' : 'Cambiar a 2D'} icon={<MonitorIcon />} shortcut="Tab" onClick={() => { setViewMode(viewMode === '2D' ? '3D' : '2D'); setActiveMenu(null); }} />
-                   <MenuDivider />
-                   <MenuAction label="Personalizar Herramientas" icon={<MonitorIcon />} onClick={() => { setIsCustomizeOpen(true); setActiveMenu(null); }} />
+                 <div className={`absolute top-full left-0 mt-1.5 w-56 rounded-lg shadow-xl p-1.5 z-50 ${isEditor ? 'bg-zinc-900 border border-zinc-800' : 'bg-white border border-zinc-200'}`}>
+                   <MenuAction dark={isEditor} label={viewMode === '2D' ? 'Cambiar a 3D' : 'Cambiar a 2D'} icon={<MonitorIcon />} shortcut="Tab" onClick={() => { setViewMode(viewMode === '2D' ? '3D' : '2D'); setActiveMenu(null); }} />
+                   <MenuDivider dark={isEditor} />
+                   <MenuAction dark={isEditor} label="Personalizar Herramientas" icon={<MonitorIcon />} onClick={() => { setIsCustomizeOpen(true); setActiveMenu(null); }} />
                  </div>
               )}
             </div>
@@ -325,7 +340,7 @@ export const GlobalHeader: React.FC<{ pathname: string }> = ({ pathname }) => {
           ) : (
             <Tooltip content={isEditor ? "Renombrar Documento" : "Contexto Activo"} position="bottom">
               <span 
-                className={`text-[11px] font-black text-zinc-800 tracking-widest uppercase select-none py-1 border-b border-transparent ${isEditor ? 'hover:text-blue-600 transition-colors cursor-text hover:border-blue-200' : ''}`}
+                className={`text-[11px] font-black tracking-widest uppercase select-none py-1 border-b border-transparent ${isEditor ? 'text-zinc-300 hover:text-blue-400 transition-colors cursor-text hover:border-blue-400/30' : 'text-zinc-800 hover:text-blue-600 transition-colors cursor-text hover:border-blue-200'}`}
                 onClick={() => isEditor && setIsEditingName(true)}
               >
                 {currentContextName()}
@@ -343,17 +358,17 @@ export const GlobalHeader: React.FC<{ pathname: string }> = ({ pathname }) => {
              <Tooltip content="Switch View (Tab)" position="bottom">
                 <button 
                   onClick={() => setViewMode(viewMode === '2D' ? '3D' : '2D')}
-                  className="px-2 py-1 text-[9px] font-black tracking-widest uppercase rounded hover:bg-zinc-100 text-zinc-600 border border-zinc-200 select-none shadow-sm mr-2"
+                  className={`px-2 py-1 text-[9px] font-black tracking-widest uppercase rounded select-none shadow-sm mr-2 ${isEditor ? 'hover:bg-white/10 text-zinc-300 border border-white/10' : 'hover:bg-zinc-100 text-zinc-600 border border-zinc-200'}`}
                 >
                   {viewMode}
                 </button>
              </Tooltip>
 
-             <div className="flex items-center bg-zinc-50 border border-zinc-200 rounded px-1 group shadow-sm">
-               <button onClick={() => saveProject()} disabled={project.saveStatus === 'saved' || project.saveStatus === 'saving'} className="w-6 h-6 flex items-center justify-center text-zinc-500 hover:text-blue-600 disabled:opacity-20 rounded transition-colors"><SaveIcon /></button>
-               <div className="h-3 w-px bg-zinc-200 mx-0.5" />
-               <button onClick={undo} disabled={historyIndex <= 0} className="w-6 h-6 flex items-center justify-center text-zinc-500 hover:text-blue-600 disabled:opacity-20 rounded transition-colors"><UndoIcon /></button>
-               <button onClick={redo} disabled={historyIndex >= history.length - 1} className="w-6 h-6 flex items-center justify-center text-zinc-500 hover:text-blue-600 disabled:opacity-20 rounded transition-colors"><RedoIcon /></button>
+             <div className={`flex items-center rounded px-1 group shadow-sm ${isEditor ? 'bg-white/5 border border-white/10' : 'bg-zinc-50 border border-zinc-200'}`}>
+               <button onClick={() => saveProject()} disabled={project.saveStatus === 'saved' || project.saveStatus === 'saving'} className={`w-6 h-6 flex items-center justify-center hover:text-blue-400 disabled:opacity-20 rounded transition-colors ${isEditor ? 'text-zinc-400' : 'text-zinc-500 hover:text-blue-600'}`}><SaveIcon /></button>
+               <div className={`h-3 w-px mx-0.5 ${isEditor ? 'bg-white/10' : 'bg-zinc-200'}`} />
+               <button onClick={undo} disabled={historyIndex <= 0} className={`w-6 h-6 flex items-center justify-center hover:text-blue-400 disabled:opacity-20 rounded transition-colors ${isEditor ? 'text-zinc-400' : 'text-zinc-500 hover:text-blue-600'}`}><UndoIcon /></button>
+               <button onClick={redo} disabled={historyIndex >= history.length - 1} className={`w-6 h-6 flex items-center justify-center hover:text-blue-400 disabled:opacity-20 rounded transition-colors ${isEditor ? 'text-zinc-400' : 'text-zinc-500 hover:text-blue-600'}`}><RedoIcon /></button>
              </div>
           </div>
         )}
@@ -377,7 +392,7 @@ export const GlobalHeader: React.FC<{ pathname: string }> = ({ pathname }) => {
           </Tooltip>
         )}
 
-        <div className="h-5 w-px bg-zinc-200" />
+        <div className={`h-5 w-px ${isEditor ? 'bg-white/10' : 'bg-zinc-200'}`} />
 
         {/* Global Avatar Dropdown */}
         <div className="relative">

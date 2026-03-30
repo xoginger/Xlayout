@@ -18,7 +18,14 @@ sudo chmod -R 775 /opt/xlayout/storage
 # 3. Pull / Build Containers
 echo "[3/4] Building and launching Docker containers..."
 cd /opt/xlayout || exit 1
-sudo docker-compose up -d --build
+
+# Inyectar automáticamente la versión de build desde el repositorio
+export GIT_COMMIT=$(git rev-parse --short HEAD 2>/dev/null || echo "dev")
+export BUILD_DATE=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
+export APP_VERSION="1.0.0"
+echo "  Build: commit=$GIT_COMMIT date=$BUILD_DATE"
+
+sudo -E docker-compose up -d --build
 
 # 4. Wait & Run Migrations / Seed
 echo "[4/4] Executing Database Migrations and Seeding..."

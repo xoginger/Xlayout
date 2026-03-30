@@ -8,6 +8,7 @@ import { useAuthStore } from '@/store/auth-store';
 import { EDITOR_TOOLS_META, EditorToolConfig } from './tools.config';
 import { Tooltip } from '@/components/ui/Tooltip';
 
+/* ─── Iconos SVG unificados ─── */
 const Icons: Record<ToolType | string, React.ReactNode> = {
   select: <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="m3 3 7.07 16.97 2.51-7.39 7.39-2.51L3 3z"/><path d="m13 13 6 6"/></svg>,
   line: <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M5 19 19 5"/></svg>,
@@ -29,6 +30,24 @@ const Icons: Record<ToolType | string, React.ReactNode> = {
   'scale-blueprint': <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M21 3 3 21"/><path d="M21 8V3h-5"/><path d="M3 16v5h5"/></svg>,
 };
 
+/* ─── Icono del catálogo ─── */
+const CatalogIcon = () => (
+  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="w-5 h-5">
+    <rect x="3" y="3" width="7" height="7" rx="1" />
+    <rect x="14" y="3" width="7" height="7" rx="1" />
+    <rect x="3" y="14" width="7" height="7" rx="1" />
+    <rect x="14" y="14" width="7" height="7" rx="1" />
+  </svg>
+);
+
+/* ─── Icono del inspector ─── */
+const InspectorIcon = () => (
+  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className="w-5 h-5">
+    <path d="M4 6h16M4 12h16M4 18h7"/>
+  </svg>
+);
+
+/* ─── Botón individual de herramienta ─── */
 const ToolButton: React.FC<{
   tool: EditorToolConfig;
 }> = ({ tool }) => {
@@ -42,10 +61,13 @@ const ToolButton: React.FC<{
     <Tooltip content={tooltipContent} position="right">
       <button 
         onClick={() => setActiveTool(tool.id)}
-        className={`w-10 h-10 flex items-center justify-center rounded-lg transition-all group relative
-          ${active ? 'bg-blue-600 text-white shadow-md ring-1 ring-blue-500/50' : 'hover:bg-zinc-100 text-zinc-600'}`}
+        className={`w-9 h-9 flex items-center justify-center rounded-[var(--xo-radius-md)] transition-all group relative
+          ${active 
+            ? 'bg-[var(--xo-primary)] text-white shadow-[var(--xo-shadow-glow)]' 
+            : 'text-[var(--xo-text-muted)] hover:bg-[var(--xo-surface-hover)] hover:text-[var(--xo-text)]'
+          }`}
       >
-        <div className="w-5 h-5 flex items-center justify-center">
+        <div className="w-[18px] h-[18px] flex items-center justify-center">
           {Icons[tool.id]}
         </div>
       </button>
@@ -53,52 +75,104 @@ const ToolButton: React.FC<{
   );
 };
 
+/* ─── Toolbar Principal ─── */
 export const LeftToolbar: React.FC = () => {
-  const { selectedIds, removeItem } = useEditorStore();
+  const { selectedIds, removeItem, catalogPanelState, setCatalogPanelState } = useEditorStore();
   const { user } = useAuthStore();
 
+  /* Ordenación de herramientas por preferencias del usuario */
   const toolbarTools = useMemo(() => {
-    // Obtener configuración o usar valores por defecto
     const customOrder = user?.preferences?.toolbarOrder as string[] | undefined;
     
-    // Lógica de ordenación
     if (customOrder && Array.isArray(customOrder) && customOrder.length > 0) {
-      // Crear un mapa para búsqueda rápida
       const orderMap = new Map(customOrder.map((id, index) => [id, index]));
-      
-      // Ordenar primero las herramientas en customOrder, luego añadir las nuevas por defaultOrder
       const ordered = [...EDITOR_TOOLS_META].sort((a, b) => {
         const aIndex = orderMap.has(a.id) ? orderMap.get(a.id)! : 9999 + a.defaultOrder;
         const bIndex = orderMap.has(b.id) ? orderMap.get(b.id)! : 9999 + b.defaultOrder;
         return aIndex - bIndex;
       });
-      
       return ordered.filter(t => t.group !== 'system');
     }
 
-    // Fallback por defecto
     return [...EDITOR_TOOLS_META]
       .filter(t => t.group !== 'system')
       .sort((a, b) => a.defaultOrder - b.defaultOrder);
   }, [user?.preferences?.toolbarOrder]);
 
+  /* Agrupar herramientas por grupo */
+  const groups = useMemo(() => {
+    const map = new Map<string, EditorToolConfig[]>();
+    toolbarTools.forEach(t => {
+      const list = map.get(t.group) || [];
+      list.push(t);
+      map.set(t.group, list);
+    });
+    return Array.from(map.entries());
+  }, [toolbarTools]);
+
+  const isCatalogOpen = catalogPanelState === 'open';
+
   return (
-    <aside className="w-14 flex flex-col items-center py-4 border-r border-zinc-200 bg-white gap-2 shrink-0 z-40 shadow-sm relative overflow-y-auto no-scrollbar">
-      {toolbarTools.map((tool) => (
-        <ToolButton key={tool.id} tool={tool} />
+    <aside
+      className="w-12 flex flex-col items-center py-3 shrink-0 relative overflow-y-auto no-scrollbar"
+      style={{
+        background: 'var(--xo-surface)',
+        backdropFilter: 'var(--xo-blur)',
+        WebkitBackdropFilter: 'var(--xo-blur)',
+        borderRight: '1px solid var(--xo-border)',
+      }}
+    >
+      {/* Herramientas agrupadas con separadores */}
+      {groups.map(([groupName, tools], gi) => (
+        <React.Fragment key={groupName}>
+          {gi > 0 && (
+            <div className="w-6 h-px my-1.5" style={{ background: 'var(--xo-border)' }} />
+          )}
+          {tools.map((tool) => (
+            <div key={tool.id} className="mb-0.5">
+              <ToolButton tool={tool} />
+            </div>
+          ))}
+        </React.Fragment>
       ))}
 
-      {/* BORRADO (FIN DE LISTA) */}
-      <Tooltip 
-        content="Eliminar Selección — Del"
-        position="right"
-      >
+      {/* Separador antes de acciones finales */}
+      <div className="flex-1" />
+      <div className="w-6 h-px my-1.5" style={{ background: 'var(--xo-border)' }} />
+
+      {/* Toggle Catálogo */}
+      <Tooltip content={isCatalogOpen ? 'Ocultar Catálogo — Tab' : 'Catálogo — Tab'} position="right">
+        <button
+          onClick={() => setCatalogPanelState(isCatalogOpen ? 'hidden' : 'open')}
+          className={`w-9 h-9 flex items-center justify-center rounded-[var(--xo-radius-md)] transition-all mb-1
+            ${isCatalogOpen 
+              ? 'bg-[var(--xo-primary)] text-white shadow-[var(--xo-shadow-glow)]' 
+              : 'text-[var(--xo-text-muted)] hover:bg-[var(--xo-surface-hover)] hover:text-[var(--xo-text)]'
+            }`}
+        >
+          <CatalogIcon />
+        </button>
+      </Tooltip>
+
+      {/* Eliminar selección */}
+      <Tooltip content="Eliminar — Del" position="right">
         <button 
           disabled={selectedIds.length === 0}
           onClick={() => removeItem()}
-          className="w-10 h-10 mt-auto flex items-center justify-center rounded-lg transition-all text-zinc-400 hover:bg-red-50 hover:text-red-600 disabled:opacity-30 disabled:grayscale ring-red-500/20 hover:ring-1"
+          className="w-9 h-9 flex items-center justify-center rounded-[var(--xo-radius-md)] transition-all disabled:opacity-20"
+          style={{ color: 'var(--xo-text-dim)' }}
+          onMouseEnter={(e) => {
+            if (selectedIds.length > 0) {
+              e.currentTarget.style.background = 'var(--xo-danger-muted)';
+              e.currentTarget.style.color = '#fca5a5';
+            }
+          }}
+          onMouseLeave={(e) => {
+            e.currentTarget.style.background = 'transparent';
+            e.currentTarget.style.color = 'var(--xo-text-dim)';
+          }}
         >
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="w-5 h-5"><path d="M3 6h18"/><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"/><path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"/><line x1="10" x2="10" y1="11" y2="17"/><line x1="14" x2="14" y1="11" y2="17"/></svg>
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="w-[18px] h-[18px]"><path d="M3 6h18"/><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"/><path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"/><line x1="10" x2="10" y1="11" y2="17"/><line x1="14" x2="14" y1="11" y2="17"/></svg>
         </button>
       </Tooltip>
     </aside>

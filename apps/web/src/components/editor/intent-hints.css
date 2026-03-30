@@ -1,0 +1,70 @@
+/* Creado y diseñado por XO */
+
+/* ═══════════════════════════════════════════════════════════════════
+ * IntentHints — Estilos del overlay de pistas visuales
+ * ═══════════════════════════════════════════════════════════════════ */
+
+/* ─── Contenedor del hint ─── */
+.intent-hints {
+  position: absolute;
+  bottom: 0.75rem;
+  left: 50%;
+  transform: translateX(-50%) translateY(8px);
+  z-index: 55;
+  pointer-events: none;
+  opacity: 0;
+  transition:
+    opacity 0.3s cubic-bezier(0.16, 1, 0.3, 1),
+    transform 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.intent-hints--visible {
+  opacity: 1;
+  transform: translateX(-50%) translateY(0);
+}
+
+/* ─── Píldora del hint ─── */
+.intent-hints__pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0.35rem 0.85rem;
+  background: rgba(0, 0, 0, 0.72);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 999px;
+  font-size: 0.72rem;
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+  font-weight: 500;
+  letter-spacing: 0.02em;
+  color: rgba(255, 255, 255, 0.8);
+  white-space: nowrap;
+  box-shadow:
+    0 2px 12px rgba(0, 0, 0, 0.25),
+    inset 0 1px 0 rgba(255, 255, 255, 0.05);
+}
+
+/* ─── Icono del hint ─── */
+.intent-hints__icon {
+  font-size: 0.68rem;
+  opacity: 0.7;
+  flex-shrink: 0;
+}
+
+/* ─── Texto del hint ─── */
+.intent-hints__text {
+  color: rgba(255, 255, 255, 0.85);
+}
+
+/* ─── Separador de atajos ─── */
+.intent-hints__text kbd {
+  display: inline-block;
+  padding: 0.1rem 0.3rem;
+  margin: 0 0.15rem;
+  background: rgba(255, 255, 255, 0.1);
+  border-radius: 3px;
+  font-size: 0.65rem;
+  font-family: inherit;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+}

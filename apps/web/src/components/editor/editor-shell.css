@@ -1,0 +1,122 @@
+/* Creado y diseñado por XO */
+
+/* Importar tokens del design system */
+@import './design-tokens.css';
+
+/* ─── Grid Principal del Editor (Canvas-First) ─── */
+.editor-shell {
+  display: grid;
+  grid-template-columns: var(--xo-toolbar-width) 1fr;
+  grid-template-rows: 1fr var(--xo-statusbar-height);
+  grid-template-areas:
+    "toolbar  canvas"
+    "status   status";
+  width: 100%;
+  height: 100%;
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+  position: relative;
+  background: var(--xo-bg);
+  font-family: var(--xo-font);
+}
+
+/* ─── Zona: Toolbar (izquierda, dark) ─── */
+.editor-shell__toolbar {
+  grid-area: toolbar;
+  z-index: var(--xo-z-toolbar);
+  min-height: 0;
+  overflow: hidden;
+}
+
+/* ─── Zona: Canvas (centro, expandible, ~90%) ─── */
+.editor-shell__canvas {
+  grid-area: canvas;
+  z-index: var(--xo-z-canvas);
+  position: relative;
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+  background: var(--xo-bg-canvas);
+}
+
+/* ─── Zona: Status Bar (pie completo, transparente dark) ─── */
+.editor-shell__status {
+  grid-area: status;
+  z-index: var(--xo-z-status);
+}
+
+/* ─── Capa: Overlay (encima del canvas, no bloquea eventos) ─── */
+.editor-shell__overlay {
+  position: absolute;
+  inset: 0;
+  z-index: var(--xo-z-overlay);
+  pointer-events: none;
+}
+
+/* Los hijos directos del overlay SÍ reciben eventos */
+.editor-shell__overlay > * {
+  pointer-events: auto;
+}
+
+/* ─── Capa: Paneles laterales (flotantes sobre el canvas) ─── */
+.editor-shell__panels {
+  position: absolute;
+  inset: 0;
+  z-index: var(--xo-z-panels);
+  pointer-events: none;
+  display: flex;
+  justify-content: space-between;
+}
+
+/* Solo los paneles reales reciben eventos */
+.editor-shell__panels > :first-child,
+.editor-shell__panels > :last-child {
+  pointer-events: auto;
+}
+
+/* ─── Animaciones de paneles ─── */
+.panel-enter {
+  animation: panelSlideIn var(--xo-duration-smooth) var(--xo-ease) forwards;
+}
+
+.panel-exit {
+  animation: panelSlideOut var(--xo-duration-normal) var(--xo-ease) forwards;
+}
+
+@keyframes panelSlideIn {
+  from {
+    opacity: 0;
+    transform: translateX(-12px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+@keyframes panelSlideOut {
+  from {
+    opacity: 1;
+    transform: translateX(0);
+  }
+  to {
+    opacity: 0;
+    transform: translateX(-12px);
+  }
+}
+
+/* ─── Scrollbar personalizado para tema dark ─── */
+.editor-shell .custom-scrollbar::-webkit-scrollbar {
+  width: 4px;
+}
+.editor-shell .custom-scrollbar::-webkit-scrollbar-track {
+  background: transparent;
+}
+.editor-shell .custom-scrollbar::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.08);
+  border-radius: var(--xo-radius-full);
+}
+.editor-shell .custom-scrollbar::-webkit-scrollbar-thumb:hover {
+  background: rgba(255, 255, 255, 0.15);
+}

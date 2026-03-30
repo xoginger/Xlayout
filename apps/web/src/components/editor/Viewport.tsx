@@ -45,7 +45,25 @@ import {
 } from '@/utils/cad-math';
 import { findNearestWall } from '@/editor/utils/wall-snap';
 import { findModularSnap, SnapResult } from '@/utils/snap-engine';
+import { detectAlignmentGuides, type AlignmentGuide } from '@/utils/alignment-guides';
+import { AlignmentGuides } from '@/components/editor/AlignmentGuides';
 import { exportEngine } from '@/utils/export-engine';
+import { useRadialMenu } from '@/hooks/useRadialMenu';
+import { useIntentStore } from '@/intent/intent-store';
+import {
+  calculateDimensionGeometry,
+  calculateAlignedDistance,
+  detectAlignment,
+  formatDimensionValue,
+  calculateAutoOffset,
+  type DimensionGeometry
+} from '@/utils/dimension-math';
+import {
+  collectSnapCandidates,
+  findDimensionSnap,
+  snapToGridForDimension,
+  type DimensionSnapResult
+} from '@/utils/dimension-snap';
 import * as THREE from 'three';
 
 const RectangleObject: React.FC<{ rect: RectangleEntity }> = ({ rect }) => {
@@ -230,6 +248,8 @@ const SceneItemObject: React.FC<{ item: SceneItem }> = memo(({ item }) => {
   const items = useEditorStore((s) => s.items);
   const isSelected = selectedIds.includes(item.id);
   const [activeSnap, setActiveSnap] = useState<SnapResult | null>(null);
+  const [activeAlignGuides, setActiveAlignGuides] = useState<AlignmentGuide[]>([]);
+  const [isAlignActive, setIsAlignActive] = useState(false);
 
   // groupRef es el THREE.Group real para este objeto.
   // TransformControls usa object={groupRef} para acoplarse directamente a él,
@@ -238,6 +258,25 @@ const SceneItemObject: React.FC<{ item: SceneItem }> = memo(({ item }) => {
   const transformRef = useRef<any>(null);
   // ref isDragging: sin escrituras al store durante el arrastre — corrección de bucle de crash.
   const isDragging = useRef(false);
+  // Ref para throttle de actualización en tiempo real durante arrastre (~30fps)
+  const liveUpdateRAF = useRef<number | null>(null);
+
+  /** Actualización en tiempo real durante arrastre — refleja X/Z en el inspector contextual */
+  const handleTransformChange = useCallback(() => {
+    if (!isDragging.current || !groupRef.current) return;
+    // Throttle: solo un RAF activo a la vez
+    if (liveUpdateRAF.current !== null) return;
+    liveUpdateRAF.current = requestAnimationFrame(() => {
+      liveUpdateRAF.current = null;
+      const g = groupRef.current;
+      if (!g) return;
+      // Escritura ligera al store — actualiza solo posición y rotación para que el inspector reaccione
+      updateItem(item.id, {
+        position: [g.position.x, g.position.y, g.position.z],
+        rotation: [g.rotation.x, g.rotation.y, g.rotation.z],
+      });
+    });
+  }, [item.id, updateItem]);
 
   const commitTransform = () => {
     const group = groupRef.current;
@@ -271,6 +310,26 @@ const SceneItemObject: React.FC<{ item: SceneItem }> = memo(({ item }) => {
 
     // Corrección de ajuste: empujar la posición final ajustada de vuelta al objeto de Three.js
     // para que el gizmo esté alineado tras el commit (antes de la reconciliación de React)
+
+    // 3. Guías de alineación: detectar alineamiento con otros objetos
+    const otherItems = items.filter(it => it.id !== item.id);
+    const alignResult = detectAlignmentGuides(
+      { ...item, position: [finalX, safeY, finalZ] },
+      otherItems
+    );
+
+    if (alignResult.snappedPosition) {
+      finalX = alignResult.snappedPosition[0];
+      finalZ = alignResult.snappedPosition[2];
+    }
+
+    // Actualizar guías visuales (se limpian tras un breve delay)
+    setActiveAlignGuides(alignResult.guides);
+    setIsAlignActive(alignResult.guides.length > 0);
+    if (alignResult.guides.length > 0) {
+      setTimeout(() => { setActiveAlignGuides([]); setIsAlignActive(false); }, 1500);
+    }
+
     group.position.set(finalX, safeY, finalZ);
 
     // Escritura única al store — ocurre solo al terminar el arrastre
@@ -370,52 +429,163 @@ const SceneItemObject: React.FC<{ item: SceneItem }> = memo(({ item }) => {
           ref={transformRef}
           object={groupRef}
           mode={mode as any}
-          // Sin onChange — sin escrituras al store durante el arrastre. Corrección de bucle de crash preservada.
+          onChange={handleTransformChange}
           onMouseDown={() => {
             isDragging.current = true;
+            setActiveAlignGuides([]);
+            setIsAlignActive(false);
             useEditorStore.getState().saveToHistory();
+            /* Señal para el Intent Engine (Fase 4) */
+            useIntentStore.getState().setGizmoActive(true);
           }}
           onMouseUp={() => {
             isDragging.current = false;
+            // Cancelar cualquier RAF pendiente antes de commit final
+            if (liveUpdateRAF.current !== null) {
+              cancelAnimationFrame(liveUpdateRAF.current);
+              liveUpdateRAF.current = null;
+            }
             commitTransform();
+            /* Señal para el Intent Engine (Fase 4) */
+            useIntentStore.getState().setGizmoActive(false);
           }}
           translationSnap={snapEnabled && mode === 'translate' ? gridSize : null}
           rotationSnap={snapEnabled && mode === 'rotate' ? Math.PI / 12 : null}
           size={0.75}
         />
       )}
+
+      {/* Guías de alineación visual */}
+      <AlignmentGuides guides={activeAlignGuides} active={isAlignActive} />
     </>
   );
 });
 SceneItemObject.displayName = 'SceneItemObject';
 
-const DimensionLineObject: React.FC<{ dim: DimensionLine }> = ({ dim }) => {
+// ─── Componente Profesional de Cota (CAD-grade) ─────────────────────────────
+const DimensionLineObject: React.FC<{ dim: DimensionLine; isPreview?: boolean }> = memo(({ dim, isPreview = false }) => {
   const select = useEditorStore((state) => state.select);
   const selectedIds = useEditorStore((state) => state.selectedIds);
-  const isSelected = selectedIds.includes(dim.id);
-  const distance = calculateDistance(dim.start, dim.end);
+  const isSelected = !isPreview && selectedIds.includes(dim.id);
 
-  const center = [
-    (dim.start[0] + dim.end[0]) / 2,
-    (dim.start[1] + dim.end[1]) / 2 + 0.1,
-    (dim.start[2] + dim.end[2]) / 2
-  ];
+  // Calcular geometría completa de la cota
+  const geometry = useMemo(() => {
+    return calculateDimensionGeometry(dim.start, dim.end, dim.offset || 0.3, dim.alignment || 'aligned');
+  }, [dim.start, dim.end, dim.offset, dim.alignment]);
+
+  // Calcular distancia alineada para mostrar
+  const displayValue = useMemo(() => {
+    const dist = dim.value || calculateAlignedDistance(dim.start, dim.end, dim.alignment || 'aligned');
+    return formatDimensionValue(dist, dim.unit || 'm');
+  }, [dim.start, dim.end, dim.value, dim.unit, dim.alignment]);
+
+  // Colores profesionales
+  const lineColor = isPreview ? '#60a5fa' : (isSelected ? '#2563eb' : '#3b82f6');
+  const extColor = isPreview ? '#93c5fd' : (isSelected ? '#3b82f6' : '#60a5fa');
+  const arrowColor = isPreview ? '#60a5fa' : (isSelected ? '#1d4ed8' : '#2563eb');
+  const opacity = isPreview ? 0.6 : 1.0;
+
+  // Geometría de las flechas (triángulos sólidos)
+  const arrowGeoA = useMemo(() => {
+    const geo = new THREE.BufferGeometry();
+    const verts = new Float32Array([
+      ...geometry.arrowA[0], ...geometry.arrowA[1], ...geometry.arrowA[2]
+    ]);
+    geo.setAttribute('position', new THREE.BufferAttribute(verts, 3));
+    geo.computeVertexNormals();
+    return geo;
+  }, [geometry.arrowA]);
+
+  const arrowGeoB = useMemo(() => {
+    const geo = new THREE.BufferGeometry();
+    const verts = new Float32Array([
+      ...geometry.arrowB[0], ...geometry.arrowB[1], ...geometry.arrowB[2]
+    ]);
+    geo.setAttribute('position', new THREE.BufferAttribute(verts, 3));
+    geo.computeVertexNormals();
+    return geo;
+  }, [geometry.arrowB]);
 
   return (
-    <group onClick={(e) => { e.stopPropagation(); select(dim.id, 'dimension', e.shiftKey); }}>
+    <group
+      onClick={isPreview ? undefined : (e) => { e.stopPropagation(); select(dim.id, 'dimension', e.shiftKey); }}
+    >
+      {/* Línea base principal (con offset) */}
       <Line
-        points={[dim.start, dim.end]}
-        color={isSelected ? '#3b82f6' : '#60a5fa'}
-        lineWidth={2}
+        points={[geometry.baseStart, geometry.baseEnd]}
+        color={lineColor}
+        lineWidth={isSelected ? 2.5 : 2}
+        transparent
+        opacity={opacity}
       />
-      <Html position={center as any} center scale={0.5}>
-        <div className="bg-zinc-900 border border-zinc-800 px-1 rounded text-[8px] font-mono text-blue-400 whitespace-nowrap shadow-lg ring-1 ring-blue-500/20">
-          {distance.toFixed(2)}m
+
+      {/* Líneas de extensión A y B */}
+      <Line
+        points={[geometry.extStartA, geometry.extEndA]}
+        color={extColor}
+        lineWidth={1}
+        transparent
+        opacity={opacity * 0.8}
+      />
+      <Line
+        points={[geometry.extStartB, geometry.extEndB]}
+        color={extColor}
+        lineWidth={1}
+        transparent
+        opacity={opacity * 0.8}
+      />
+
+      {/* Puntas de flecha (triángulos rellenos) */}
+      <mesh geometry={arrowGeoA} renderOrder={999}>
+        <meshBasicMaterial color={arrowColor} side={THREE.DoubleSide} transparent opacity={opacity} depthTest={false} />
+      </mesh>
+      <mesh geometry={arrowGeoB} renderOrder={999}>
+        <meshBasicMaterial color={arrowColor} side={THREE.DoubleSide} transparent opacity={opacity} depthTest={false} />
+      </mesh>
+
+      {/* Marcadores en los puntos medidos (círculos pequeños) */}
+      {!isPreview && (
+        <>
+          <mesh position={dim.start} renderOrder={1000}>
+            <sphereGeometry args={[0.025, 8, 8]} />
+            <meshBasicMaterial color={lineColor} depthTest={false} transparent opacity={opacity} />
+          </mesh>
+          <mesh position={dim.end} renderOrder={1000}>
+            <sphereGeometry args={[0.025, 8, 8]} />
+            <meshBasicMaterial color={lineColor} depthTest={false} transparent opacity={opacity} />
+          </mesh>
+        </>
+      )}
+
+      {/* Etiqueta de medida */}
+      <Html position={geometry.textPosition} center scale={0.5} style={{ pointerEvents: isPreview ? 'none' : 'auto' }}>
+        <div
+          className={`px-2 py-1 rounded-md text-[9px] font-mono font-black whitespace-nowrap shadow-xl transition-all ${
+            isSelected
+              ? 'bg-blue-600 text-white border border-blue-500 ring-2 ring-blue-400/30'
+              : isPreview
+                ? 'bg-zinc-800/80 text-blue-300 border border-zinc-700/50'
+                : 'bg-zinc-900 text-blue-400 border border-zinc-800 ring-1 ring-blue-500/20 hover:ring-blue-400/40'
+          }`}
+        >
+          {displayValue}
         </div>
       </Html>
+
+      {/* Highlight de selección (marco expandido sobre la línea base) */}
+      {isSelected && (
+        <Line
+          points={[geometry.baseStart, geometry.baseEnd]}
+          color="#93c5fd"
+          lineWidth={6}
+          transparent
+          opacity={0.15}
+        />
+      )}
     </group>
   );
-};
+});
+DimensionLineObject.displayName = 'DimensionLineObject';
 
 const WallObject: React.FC<{ wall: Wall }> = ({ wall }) => {
   const select = useEditorStore((state) => state.select);
@@ -896,7 +1066,13 @@ export const Viewport: React.FC = () => {
   const [isCtrlPressed, setIsCtrlPressed] = useState(false);
   const [transformStart, setTransformStart] = useState<[number, number, number] | null>(null);
   const [isCopyMode, setIsCopyMode] = useState(false);
+  const [dimensionSnap, setDimensionSnap] = useState<DimensionSnapResult | null>(null);
   
+  // Candidatos de snap pre-calculados para la herramienta de acotado
+  const dimensionSnapCandidates = useMemo(() => {
+    if (activeTool !== 'dimension') return [];
+    return collectSnapCandidates(walls, items, lines, rectangles);
+  }, [activeTool, walls, items, lines, rectangles]);
   const allSegments = useMemo(() => {
     // Recolectar todos los segmentos geométricos para el ajuste (snap)
     const segs: { start: [number, number, number], end: [number, number, number] }[] = [];
@@ -1102,10 +1278,25 @@ export const Viewport: React.FC = () => {
         setDrawingStart(null);
       }
     } else if (activeTool === 'dimension') {
+      // Usar el punto de snap especializado si está disponible
+      const dimPoint = dimensionSnap ? dimensionSnap.point : point;
       if (!drawingStart) {
-        setDrawingStart(point);
+        setDrawingStart(dimPoint);
       } else {
-        addDimension({ id: Math.random().toString(36).substr(2, 9), start: drawingStart, end: point });
+        // Calcular alineación automática y distancia precisa
+        const alignment = detectAlignment(drawingStart, dimPoint);
+        const value = calculateAlignedDistance(drawingStart, dimPoint, alignment);
+        const offset = calculateAutoOffset();
+
+        addDimension({
+          id: Math.random().toString(36).substr(2, 9),
+          start: drawingStart,
+          end: dimPoint,
+          value,
+          unit: 'mm',
+          offset,
+          alignment
+        });
         setDrawingStart(null);
       }
     } else if (activeTool === 'circle') {
@@ -1201,6 +1392,18 @@ export const Viewport: React.FC = () => {
     if (activeTool === 'place-opening') {
       const wallSnap = findNearestWall(walls, point, 2.0);
       setHighlightedWallId(wallSnap ? wallSnap.wall.id : null);
+    }
+
+    // Snapping especializado para la herramienta de acotado
+    if (activeTool === 'dimension') {
+      const dimSnap = findDimensionSnap(point, dimensionSnapCandidates, 0.3);
+      setDimensionSnap(dimSnap);
+      if (dimSnap) {
+        // Sobreescribir mousePos con el punto de snap de acotado
+        setMousePos(dimSnap.point);
+      }
+    } else {
+      setDimensionSnap(null);
     }
   };
 
@@ -1436,6 +1639,35 @@ export const Viewport: React.FC = () => {
     }
   };
 
+  /* ── Menú Radial: abrir con clic derecho (solo si NO hubo arrastre) ── */
+  const radialMenu = useRadialMenu();
+  const rightDownRef = useRef<{ x: number; y: number } | null>(null);
+
+  /* Registrar posición donde se presionó el botón derecho */
+  const handleMouseDown = useCallback((e: React.MouseEvent) => {
+    if (e.button === 2) {
+      rightDownRef.current = { x: e.clientX, y: e.clientY };
+    }
+  }, []);
+
+  /* Solo abrir menú si el cursor no se movió (< 5px) — si se movió, fue pan de cámara */
+  const handleContextMenu = useCallback((e: React.MouseEvent) => {
+    e.preventDefault();
+    const down = rightDownRef.current;
+    if (!down) return;
+    const dx = e.clientX - down.x;
+    const dy = e.clientY - down.y;
+    const dist = Math.sqrt(dx * dx + dy * dy);
+    rightDownRef.current = null;
+    // Si el cursor se movió más de 5px, fue un gesto de paneo — no abrir menú
+    if (dist > 5) return;
+    const ctx: 'empty' | 'single' | 'multi' =
+      selectedIds.length > 1 ? 'multi' :
+      selectedIds.length === 1 ? 'single' :
+      'empty';
+    radialMenu.open(e.clientX, e.clientY, ctx);
+  }, [selectedIds, radialMenu]);
+
   return (
     <main 
       className="flex-1 relative bg-zinc-50 overflow-hidden outline-none"
@@ -1444,6 +1676,8 @@ export const Viewport: React.FC = () => {
       onKeyDown={(e) => {
         if (e.key === 'Escape') setDrawingStart(null);
       }}
+      onContextMenu={handleContextMenu}
+      onMouseDown={handleMouseDown}
     >
       <Canvas
         shadows
@@ -1467,12 +1701,29 @@ export const Viewport: React.FC = () => {
             enableRotate={viewMode === '3D' && !extrudingFaceId} 
             screenSpacePanning={true}
             enableDamping={true}
-            dampingFactor={0.05}
+            dampingFactor={0.08}
+            /* Velocidades optimizadas para mouse y trackpad */
+            zoomSpeed={1.2}
+            rotateSpeed={0.8}
+            panSpeed={1.0}
+            /* Límites de zoom razonables para no perder la escena */
+            minDistance={0.5}
+            maxDistance={200}
+            minZoom={5}
+            maxZoom={500}
             mouseButtons={{
               LEFT: activeTool === 'orbit' ? THREE.MOUSE.ROTATE : (activeTool === 'pan' ? THREE.MOUSE.PAN : undefined),
               MIDDLE: THREE.MOUSE.ROTATE,
               RIGHT: THREE.MOUSE.PAN
             }}
+            /* Gestos táctiles: 1 dedo = rotar, 2 dedos = pan/zoom — estándar CAD */
+            touches={{
+              ONE: THREE.TOUCH.ROTATE,
+              TWO: THREE.TOUCH.DOLLY_PAN
+            }}
+            /* Señales para el Intent Engine (Fase 4) */
+            onStart={() => useIntentStore.getState().setNavigating(true)}
+            onEnd={() => useIntentStore.getState().setNavigating(false)}
           />
 
           <ambientLight intensity={0.6} />
@@ -1521,6 +1772,35 @@ export const Viewport: React.FC = () => {
             
             <SelectionBoundingBox />
             <MultiSelectionGizmo />
+
+            {/* Indicador de Snap para herramienta de Acotado */}
+            {activeTool === 'dimension' && dimensionSnap && (
+              <group position={dimensionSnap.point}>
+                {/* Punto magnético con halo pulsante */}
+                <mesh renderOrder={1001}>
+                  <sphereGeometry args={[0.04, 12, 12]} />
+                  <meshBasicMaterial color={dimensionSnap.color} depthTest={false} transparent opacity={0.9} />
+                </mesh>
+                {/* Halo exterior */}
+                <mesh renderOrder={1000}>
+                  <ringGeometry args={[0.05, 0.07, 16]} />
+                  <meshBasicMaterial color={dimensionSnap.color} depthTest={false} transparent opacity={0.4} side={THREE.DoubleSide} />
+                </mesh>
+                {/* Etiqueta del tipo de snap */}
+                <Html distanceFactor={10} position={[0, 0.12, 0]} style={{ pointerEvents: 'none' }}>
+                  <div
+                    className="px-1.5 py-0.5 rounded text-[7px] font-black uppercase tracking-wider whitespace-nowrap shadow-xl border"
+                    style={{
+                      backgroundColor: dimensionSnap.color + '22',
+                      color: dimensionSnap.color,
+                      borderColor: dimensionSnap.color + '44',
+                    }}
+                  >
+                    {dimensionSnap.label}
+                  </div>
+                </Html>
+              </group>
+            )}
             
             {/* Previsualización en tiempo real */}
             {drawingStart && (
@@ -1572,6 +1852,22 @@ export const Viewport: React.FC = () => {
                     <planeGeometry args={[Math.abs(mousePos[0] - drawingStart[0]), Math.abs(mousePos[2] - drawingStart[2])]} />
                     <meshBasicMaterial color="#3b82f6" transparent opacity={0.15} />
                   </mesh>
+                )}
+
+                {/* Previsualización profesional de cota en vivo */}
+                {activeTool === 'dimension' && (
+                  <DimensionLineObject
+                    dim={{
+                      id: '__preview__',
+                      start: drawingStart,
+                      end: mousePos,
+                      value: calculateAlignedDistance(drawingStart, mousePos, detectAlignment(drawingStart, mousePos)),
+                      unit: 'mm',
+                      offset: calculateAutoOffset(),
+                      alignment: detectAlignment(drawingStart, mousePos),
+                    }}
+                    isPreview={true}
+                  />
                 )}
               </group>
             )}

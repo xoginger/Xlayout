@@ -4,33 +4,44 @@
 
 "use client";
 
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect } from 'react';
 import { LeftToolbar } from '@/components/editor/LeftToolbar';
-import { CatalogPanel } from '@/components/editor/CatalogPanel';
-import { Viewport } from '@/components/editor/Viewport';
-import { RightInspector } from '@/components/editor/RightInspector';
 import { BottomStatusBar } from '@/components/editor/BottomStatusBar';
+import { CanvasLayer } from '@/components/editor/layers/CanvasLayer';
+import { OverlayLayer } from '@/components/editor/layers/OverlayLayer';
+import { SidePanelsLayer } from '@/components/editor/layers/SidePanelsLayer';
 import { useEditorStore } from '@/store/editor-store';
-import { CalibrationHUD } from '@/components/editor/CalibrationHUD';
 import { useAutosave } from '@/hooks/useAutosave';
+import { useIntentEngine } from '@/hooks/useIntentEngine';
+import { CommandPalette } from '@/components/editor/CommandPalette';
+import { CatalogPanel } from '@/components/editor/CatalogPanel';
+import './editor-shell.css';
 
-// ─── Toast de notificación de guardado (LEGACY) ─────────────────────────────────────────
-// Se desactiva el Toast porque el badge superior ahora se encarga.
-const SaveToast: React.FC<{ visible: boolean; message: string; type: 'success' | 'error' }> = () => null;
-
+/**
+ * EditorShell — Shell principal del editor XLayout.
+ *
+ * Arquitectura por capas:
+ * 1. ToolSystemLayer  → Barra de herramientas (LeftToolbar)
+ * 2. CanvasLayer      → Viewport 3D/2D
+ * 3. SidePanelsLayer  → Catálogo + Inspector (flotantes sobre canvas)
+ * 4. OverlayLayer     → HUDs, modales del canvas, acciones contextuales
+ * 5. StatusLayer      → Barra de estado inferior
+ *
+ * Cada capa es independiente y encapsula una responsabilidad.
+ * Los componentes internos NO se modifican — se usan tal cual.
+ */
 export const EditorShell: React.FC = () => {
-  const catalogPanelState    = useEditorStore((s) => s.catalogPanelState);
-  const setCatalogPanelState = useEditorStore((s) => s.setCatalogPanelState);
-  const saveToHistory        = useEditorStore((s) => s.saveToHistory);
-  const history              = useEditorStore((s) => s.history);
-  const project              = useEditorStore((s) => s.project);
+  const saveToHistory   = useEditorStore((s) => s.saveToHistory);
+  const history         = useEditorStore((s) => s.history);
+  const project         = useEditorStore((s) => s.project);
 
   // ── Activación del Autosave Profesional (Debounce 3000ms) ──
   useAutosave(3000);
 
-  const [toast, setToast] = useState<{ visible: boolean; message: string; type: 'success' | 'error' }>({ visible: false, message: '', type: 'success' });
+  // ── Motor de Intención (Fase 4) — evalúa contexto cada 100ms ──
+  useIntentEngine();
 
-  // Guardar estado inicial en el historial
+  // ── Guardar estado inicial en el historial ──
   React.useEffect(() => {
     if (history.length === 0) saveToHistory();
   }, [history.length, saveToHistory]);
@@ -47,36 +58,40 @@ export const EditorShell: React.FC = () => {
     return () => window.removeEventListener('beforeunload', handler);
   }, [project.saveStatus]);
 
-  // ── Toast de confirmación tras guardado exitoso ──
-  useEffect(() => {
-    if (project.lastSavedAt && project.saveStatus === 'saved') {
-      setToast({ visible: true, message: 'Proyecto guardado', type: 'success' });
-      const t = setTimeout(() => setToast(prev => ({ ...prev, visible: false })), 2500);
-      return () => clearTimeout(t);
-    }
-  }, [project.lastSavedAt, project.saveStatus]);
-
   return (
-    <div className="flex flex-col flex-1 min-w-0 min-h-0 w-full h-full">
-      <SaveToast {...toast} />
-
-      {/* ── Área principal: herramientas, catálogo, canvas, inspector ── */}
-      <div className="flex flex-1 min-h-0 overflow-hidden relative">
+    <div className="editor-shell">
+      {/* ── Capa 1: Sistema de Herramientas (barra lateral izquierda) ── */}
+      <div className="editor-shell__toolbar">
         <LeftToolbar />
-
-        {/* ── Catalog Panel (Flotante UI) ── */}
-        <CatalogPanel />
-
-        {/* ── Viewport 3D Canvas ── */}
-        <div className="flex flex-1 flex-col relative bg-zinc-100 min-w-0">
-          <Viewport />
-          <CalibrationHUD />
-        </div>
-        
-        <RightInspector />
       </div>
 
-      <BottomStatusBar />
+      {/* ── Capa 2: Canvas + Paneles + Overlays ── */}
+      {/*
+        El canvas y sus capas flotantes comparten la misma celda del grid.
+        SidePanelsLayer y OverlayLayer se posicionan absolute dentro de
+        este contenedor relativo, flotando sobre el Viewport sin bloquearlo.
+      */}
+      <div className="editor-shell__canvas">
+        {/* Canvas real (Viewport 3D/2D) — ocupa todo el espacio */}
+        <CanvasLayer />
+
+        {/* Paneles laterales flotantes (Catálogo + Inspector) */}
+        <SidePanelsLayer />
+
+        {/* Overlays del canvas (HUDs, modales, acciones contextuales) */}
+        <OverlayLayer />
+      </div>
+
+      {/* ── Capa 5: Barra de Estado ── */}
+      <div className="editor-shell__status">
+        <BottomStatusBar />
+      </div>
+
+      {/* ── Capa 6: Paleta de Comandos Global (Ctrl+K) ── */}
+      <CommandPalette />
+
+      {/* ── Capa 7: Catálogo Overlay Global (Tab) ── */}
+      <CatalogPanel />
     </div>
   );
 };

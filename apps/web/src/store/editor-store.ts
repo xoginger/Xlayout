@@ -10,6 +10,8 @@ export type SceneItemType = 'rack' | 'shelf' | 'desk' | 'cabinet' | 'catalog-ite
 export type OpeningType = 'door' | 'window' | 'opening';
 export type OpeningDirection = 'left' | 'right' | 'inward' | 'outward';
 export type ViewMode = '2D' | '3D';
+export type DimensionUnit = 'mm' | 'cm' | 'm';
+export type DimensionAlignment = 'horizontal' | 'vertical' | 'aligned' | 'free';
 export type ToolType =
   | 'select' | 'multi-select' | 'pan' | 'orbit' | 'zoom' | 'move' | 'rotate' | 'scale'
   | 'line' | 'rectangle' | 'circle' | 'wall'
@@ -70,7 +72,11 @@ export interface DimensionLine {
   id: string;
   start: [number, number, number];
   end: [number, number, number];
-  label?: string;
+  value: number;              // distancia calculada en metros (fuente de verdad geométrica)
+  unit: DimensionUnit;        // unidad de visualización: 'mm' | 'cm' | 'm'
+  offset: number;             // offset perpendicular en metros (para evitar solapamiento)
+  alignment: DimensionAlignment; // alineación: horizontal, vertical, aligned, free
+  label?: string;             // etiqueta manual opcional
 }
 
 export interface LineEntity {
@@ -217,7 +223,8 @@ interface EditorState {
   gridSize: number;
   snapEnabled: boolean;
   showGrid: boolean;
-  catalogPanelState: 'open' | 'collapsed' | 'hidden';
+  catalogPanelState: 'open' | 'hidden';
+  advancedMode: boolean;
   pendingOpeningType: OpeningType | null;
   exportRequest: 'image' | 'glb' | 'pdf' | null;
   blueprint: BlueprintState;
@@ -246,6 +253,7 @@ interface EditorState {
   insertStructuralAsset: (type: OpeningType, wallId: string, offset?: number) => void;
   setPendingOpeningType: (type: OpeningType | null) => void;
   addDimension: (dim: DimensionLine) => void;
+  updateDimension: (id: string, updates: Partial<DimensionLine>) => void;
   addLine: (line: LineEntity) => void;
   addRectangle: (rect: RectangleEntity) => void;
   updateLine: (id: string, updates: Partial<LineEntity>) => void;
@@ -270,8 +278,9 @@ interface EditorState {
   setGridSize: (size: number) => void;
   toggleSnap: () => void;
   toggleGrid: () => void;
-  setCatalogPanelState: (state: 'open' | 'collapsed' | 'hidden') => void;
+  setCatalogPanelState: (state: 'open' | 'hidden') => void;
   toggleCatalogPanel: () => void;
+  toggleAdvancedMode: () => void;
   undo: () => void;
   redo: () => void;
   saveToHistory: () => void;
@@ -316,6 +325,7 @@ export function generateSceneHash(state: Partial<EditorState>) {
     items: sortById(state.items || []),
     walls: sortById(state.walls || []),
     openings: sortById(state.openings || []),
+    dimensions: sortById(state.dimensions || []),
     lines: sortById(state.lines || []),
     rectangles: sortById(state.rectangles || []),
     faces: sortById(state.faces || []),
@@ -359,7 +369,8 @@ export const useEditorStore = create<EditorState>((set, get) => ({
   gridSize: 0.5,
   snapEnabled: true,
   showGrid: true,
-  catalogPanelState: 'open' as const,
+  catalogPanelState: 'hidden' as const,
+  advancedMode: false,
   pendingOpeningType: null,
   exportRequest: null,
   blueprint: {
@@ -522,6 +533,12 @@ export const useEditorStore = create<EditorState>((set, get) => ({
   addDimension: (dim) => {
     get().saveToHistory();
     set((state) => ({ dimensions: [...state.dimensions, dim], selectedIds: [dim.id], selectedType: 'dimension' }));
+  },
+
+  updateDimension: (id, updates) => {
+    set((state) => ({
+      dimensions: state.dimensions.map((d) => d.id === id ? { ...d, ...updates } : d)
+    }));
   },
 
   addLine: (line) => {
@@ -694,10 +711,9 @@ export const useEditorStore = create<EditorState>((set, get) => ({
   toggleGrid: () => set((state) => ({ showGrid: !state.showGrid })),
   setCatalogPanelState: (panelState) => set({ catalogPanelState: panelState }),
   toggleCatalogPanel: () => set((state) => ({
-    catalogPanelState:
-      state.catalogPanelState === 'open' ? 'collapsed' :
-        state.catalogPanelState === 'collapsed' ? 'hidden' : 'open'
+    catalogPanelState: state.catalogPanelState === 'open' ? 'hidden' : 'open'
   })),
+  toggleAdvancedMode: () => set((state) => ({ advancedMode: !state.advancedMode })),
 
   undo: () => {
     const { history, historyIndex } = get();
