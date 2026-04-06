@@ -160,7 +160,7 @@ export class ImportsProcessor extends WorkerHost {
     await this.updateJobStatus(job.id as string, finalStatus, result);
     await job.updateProgress(100);
 
-    // Audit: registrar resultado de importación (NC-TRAZ-02)
+    // Auditoría: registrar resultado de importación (fire-and-forget)
     this.auditService.log({
       actorType: 'SYSTEM' as any,
       actorId: 'import-worker',
@@ -175,7 +175,7 @@ export class ImportsProcessor extends WorkerHost {
         failed: result.failed,
         dryRun,
       },
-    }).catch(() => {});
+    }).catch((err) => console.error('[AuditService] Error registrando importación:', err.message));
 
     return result;
   }

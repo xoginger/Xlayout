@@ -100,7 +100,7 @@ export class AuthService {
       },
     );
 
-    // Audit: registrar login exitoso (NC-TRAZ-02, fire-and-forget)
+    // Auditoría: registrar login exitoso (fire-and-forget, no bloquea login)
     this.auditService.log({
       actorType: this.mapUserTypeToActorType(user.userType),
       actorId: user.id,
@@ -109,7 +109,7 @@ export class AuthService {
       entityType: 'AUTH',
       entityId: user.id,
       payload: { email: user.email, userType: user.userType },
-    }).catch(() => {}); // No bloquear login si la auditoría falla
+    }).catch((err) => console.error('[AuditService] Error registrando login:', err.message));
 
     return {
       access_token,

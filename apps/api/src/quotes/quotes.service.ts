@@ -286,7 +286,7 @@ export class QuotesService {
       return q;
     });
 
-    // Audit: registrar creación de cotización (NC-TRAZ-02, fire-and-forget)
+    // Auditoría: registrar creación de cotización (fire-and-forget)
     this.auditService.log({
       actorType: 'COMPANY_USER' as any,
       actorId: creatorId,
@@ -300,7 +300,7 @@ export class QuotesService {
         totalPieces,
         linesCount: quote.lines.length,
       },
-    }).catch(() => {});
+    }).catch((err) => console.error('[AuditService] Error registrando cotización:', err.message));
 
     return quote;
   }

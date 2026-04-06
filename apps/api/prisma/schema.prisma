@@ -115,7 +115,7 @@ model PlatformUser {
   createdAt    DateTime     @default(now()) @map("created_at")
   updatedAt    DateTime     @updatedAt @map("updated_at")
 
-  auditLogs      AuditLog[] @relation("PlatformUserAuditor")
+  // Relación auditLogs eliminada: actorId es polimórfico, se discrimina por actorType
   tenantsCreated Tenant[]   @relation("TenantCreator")
 
   @@map("platform_users")
@@ -186,7 +186,7 @@ model CompanyUser {
 
   tenant          Tenant          @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   catalogAccesses CatalogAccess[] @relation("CatalogActivator")
-  auditLogs       AuditLog[]      @relation("CompanyUserAuditor")
+  // Relación auditLogs eliminada: actorId es polimórfico, se discrimina por actorType
 
   @@map("company_users")
 }
@@ -211,7 +211,7 @@ model EndUser {
   updatedAt    DateTime   @updatedAt @map("updated_at")
 
   catalogAccesses CatalogAccess[]
-  auditLogs       AuditLog[]      @relation("EndUserAuditor")
+  // Relación auditLogs eliminada: actorId es polimórfico, se discrimina por actorType
 
   @@map("end_users")
 }
@@ -403,18 +403,17 @@ model ActivationCode {
 model AuditLog {
   id         String         @id @default(uuid())
   actorType  AuditActorType @map("actor_type")
-  actorId    String         @map("actor_id")
+  actorId    String         @map("actor_id") // ID del actor, discriminado por actorType (sin FK polimórfica)
   tenantId   String?        @map("tenant_id")
-  action     String // 'CREATE_TENANT' | 'ENABLE_CATALOG' | 'ACTIVATE_CODE' etc.
+  action     String // 'LOGIN' | 'CREATE_QUOTE' | 'IMPORT_SUCCESS' | etc.
   entityType String         @map("entity_type")
   entityId   String?        @map("entity_id")
   payload    Json?
   createdAt  DateTime       @default(now()) @map("created_at")
 
-  tenant       Tenant?       @relation("TenantAudit", fields: [tenantId], references: [id])
-  platformUser PlatformUser? @relation("PlatformUserAuditor", fields: [actorId], references: [id], map: "audit_platform_user_fk")
-  companyUser  CompanyUser?  @relation("CompanyUserAuditor", fields: [actorId], references: [id], map: "audit_company_user_fk")
-  endUser      EndUser?      @relation("EndUserAuditor", fields: [actorId], references: [id], map: "audit_end_user_fk")
+  tenant Tenant? @relation("TenantAudit", fields: [tenantId], references: [id])
+  // FK polimórficas eliminadas: actorId apuntaba a 3 tablas a la vez,
+  // causando FK violation en cada INSERT (causa raíz de audit_logs vacía)
 
   @@map("audit_logs")
 }
