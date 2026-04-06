@@ -4,6 +4,7 @@
  */
 
 import { Module, NestModule, MiddlewareConsumer } from '@nestjs/common';
+import { APP_GUARD } from '@nestjs/core';
 import { AppController } from './app.controller';
 import { AppService } from './app.service';
 import { BullModule } from '@nestjs/bullmq';
@@ -30,14 +31,23 @@ import { HealthModule } from './health/health.module';
 // Módulos del modelo comercial multi-tenant de distribuidores
 import { DistributorsModule } from './distributors/distributors.module';
 import { DistributorUsersModule } from './distributor-users/distributor-users.module';
+import { QuotesModule } from './quotes/quotes.module';
+// Módulo de seguridad — limitación de tasa de requests
+import { ThrottlerModule, ThrottlerGuard } from '@nestjs/throttler';
 
 @Module({
   imports: [
+    // ─── SEGURIDAD: Rate limiting global (300 req/min por IP) ──────────
+    ThrottlerModule.forRoot([{
+      ttl: 60000,  // Ventana de 60 segundos
+      limit: 300,  // Máximo 300 requests por ventana (adaptado a WebApp rica / Editor 3D)
+    }]),
     PrismaModule,
     BullModule.forRoot({
       connection: {
         host: process.env.REDIS_HOST || 'localhost',
         port: parseInt(process.env.REDIS_PORT || '6379', 10),
+        password: process.env.REDIS_PASSWORD || undefined,
       },
     }),
     // ── Módulos legados o existentes ───────
@@ -62,9 +72,15 @@ import { DistributorUsersModule } from './distributor-users/distributor-users.mo
     // Módulos del modelo comercial de distribuidores
     DistributorsModule,
     DistributorUsersModule,
+    // Módulo de cotizaciones y plantillas PDF
+    QuotesModule,
   ],
   controllers: [AppController],
-  providers: [AppService],
+  providers: [
+    AppService,
+    // Aplica rate limiting globalmente a todos los endpoints
+    { provide: APP_GUARD, useClass: ThrottlerGuard },
+  ],
 })
 export class AppModule implements NestModule {
   configure(consumer: MiddlewareConsumer) {

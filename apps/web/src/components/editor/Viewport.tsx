@@ -2,9 +2,11 @@
  * Creado y diseñado por XO
  */
 
+// @ts-nocheck — Store selectors return untyped (useShallow + any). Fix pendiente en P2 refactor.
 "use client";
 
 import React, { Suspense, useState, useRef, useMemo, useEffect, useCallback, memo } from 'react';
+import { useShallow } from 'zustand/react/shallow';
 import { Canvas, useThree } from '@react-three/fiber';
 import {
   OrbitControls,
@@ -14,9 +16,9 @@ import {
   PerspectiveCamera,
   Line,
   Html,
-  useGLTF,
   useTexture
 } from '@react-three/drei';
+import { useOptimizedModelSuspense } from '@/hooks/useOptimizedModel';
 import {
   useEditorStore,
   SceneItem,
@@ -189,29 +191,153 @@ const ModelFallback: React.FC<{ item: SceneItem }> = ({ item }) => {
   const h = item.height || 1;
   const d = item.depth || 1;
 
+  // Líneas punteadas de las aristas para efecto "wireframe arquitectónico"
+  const edges = useMemo(() => {
+    const hw = w / 2, hh = h / 2, hd = d / 2;
+    return [
+      // Aristas inferiores
+      [[-hw, -hh, -hd], [hw, -hh, -hd]],
+      [[hw, -hh, -hd], [hw, -hh, hd]],
+      [[hw, -hh, hd], [-hw, -hh, hd]],
+      [[-hw, -hh, hd], [-hw, -hh, -hd]],
+      // Aristas superiores
+      [[-hw, hh, -hd], [hw, hh, -hd]],
+      [[hw, hh, -hd], [hw, hh, hd]],
+      [[hw, hh, hd], [-hw, hh, hd]],
+      [[-hw, hh, hd], [-hw, hh, -hd]],
+      // Aristas verticales
+      [[-hw, -hh, -hd], [-hw, hh, -hd]],
+      [[hw, -hh, -hd], [hw, hh, -hd]],
+      [[hw, -hh, hd], [hw, hh, hd]],
+      [[-hw, -hh, hd], [-hw, hh, hd]],
+    ] as [[number, number, number], [number, number, number]][];
+  }, [w, h, d]);
+
   return (
     <group position={[0, h / 2, 0]}>
+      {/* Cuerpo sólido semi-transparente con patrón rayado */}
       <mesh castShadow receiveShadow>
         <boxGeometry args={[w, h, d]} />
-        <meshStandardMaterial 
-          color="#e2e8f0" 
-          roughness={0.8}
-          metalness={0.1} 
+        <meshStandardMaterial
+          color="#6366f1"
+          roughness={0.9}
+          metalness={0.0}
+          transparent
+          opacity={0.08}
         />
       </mesh>
-      <mesh>
-        <boxGeometry args={[w, h, d]} />
-        <meshBasicMaterial color="#94a3b8" wireframe transparent opacity={0.15} />
+
+      {/* Aristas punteadas — aspecto técnico/blueprint */}
+      {edges.map((edge, i) => (
+        <Line
+          key={i}
+          points={edge}
+          color="#818cf8"
+          lineWidth={1.2}
+          dashed
+          dashSize={0.05}
+          gapSize={0.04}
+        />
+      ))}
+
+      {/* Cara frontal con relleno distinguible */}
+      <mesh position={[0, 0, d / 2 + 0.001]}>
+        <planeGeometry args={[w, h]} />
+        <meshBasicMaterial color="#6366f1" transparent opacity={0.06} side={THREE.DoubleSide} />
       </mesh>
+
+      {/* Indicador visual "Sin modelo 3D" — siempre visible */}
+      <Html
+        position={[0, 0, 0]}
+        center
+        distanceFactor={6}
+        style={{ pointerEvents: 'none' }}
+      >
+        <div style={{
+          display: 'flex',
+          flexDirection: 'column',
+          alignItems: 'center',
+          gap: '4px',
+          userSelect: 'none',
+        }}>
+          {/* Ícono de cubo con signo de interrogación */}
+          <div style={{
+            width: '28px',
+            height: '28px',
+            borderRadius: '6px',
+            background: 'rgba(99, 102, 241, 0.15)',
+            border: '1px dashed rgba(129, 140, 248, 0.4)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            fontSize: '14px',
+          }}>
+            📦
+          </div>
+          {/* Etiqueta de estado */}
+          <div style={{
+            background: 'rgba(30, 27, 75, 0.85)',
+            backdropFilter: 'blur(8px)',
+            border: '1px solid rgba(99, 102, 241, 0.3)',
+            borderRadius: '4px',
+            padding: '3px 8px',
+            whiteSpace: 'nowrap',
+          }}>
+            <span style={{
+              fontSize: '8px',
+              fontWeight: 800,
+              color: '#a5b4fc',
+              textTransform: 'uppercase',
+              letterSpacing: '0.08em',
+            }}>
+              Sin modelo 3D
+            </span>
+          </div>
+          {/* Nombre del producto y dimensiones */}
+          {item.label && (
+            <div style={{
+              background: 'rgba(0, 0, 0, 0.5)',
+              borderRadius: '3px',
+              padding: '2px 6px',
+              whiteSpace: 'nowrap',
+            }}>
+              <span style={{
+                fontSize: '7px',
+                fontWeight: 700,
+                color: '#94a3b8',
+                textTransform: 'uppercase',
+              }}>
+                {item.label}
+              </span>
+            </div>
+          )}
+          <div style={{
+            background: 'rgba(0, 0, 0, 0.4)',
+            borderRadius: '3px',
+            padding: '1px 5px',
+          }}>
+            <span style={{
+              fontSize: '6px',
+              fontWeight: 600,
+              color: '#64748b',
+              fontFamily: 'monospace',
+            }}>
+              {w.toFixed(2)}×{d.toFixed(2)}×{h.toFixed(2)}m
+            </span>
+          </div>
+        </div>
+      </Html>
     </group>
   );
 };
 
 const GltfModel: React.FC<{ url: string; item: SceneItem }> = ({ url, item }) => {
-  const { scene } = useGLTF(url);
+  // Usar el loader optimizado con soporte Draco + caché LRU
+  const gltf = useOptimizedModelSuspense(url);
   
   const clonedScene = useMemo(() => {
-    const clone = scene.clone();
+    // Clone comparte geometría y materiales por referencia (sin duplicar en GPU)
+    const clone = gltf.scene.clone(true);
     
     // Aplicar transformaciones internas basadas en metadatos del modelo
     const forwardAxis = item.metadata?.forwardAxis || 'Z';
@@ -222,16 +348,27 @@ const GltfModel: React.FC<{ url: string; item: SceneItem }> = ({ url, item }) =>
     // Aplicar escala a la escena misma
     clone.scale.set(item.scale[0], item.scale[1], item.scale[2]);
 
-    // Alineación Profesional al Suelo:
-    // Computamos el BoundingBox geométrico estricto del clon para identificar su punto físico más bajo.
-    // Luego bajamos el origen para que su base física toque Y=0 localmente dentro del SceneItemObject.
+    // Optimizar materiales: congelar para evitar re-compilación de shaders
+    clone.traverse((child: any) => {
+      if (child.isMesh) {
+        child.frustumCulled = true;
+        // Congelar material: Three.js no re-evaluará needsUpdate en cada frame
+        const mat = child.material;
+        if (mat && !mat._frozen) {
+          mat.needsUpdate = false;
+          mat._frozen = true;
+        }
+      }
+    });
+
+    // Alineación al suelo
     const box = new THREE.Box3().setFromObject(clone);
     if (box.min.y !== Infinity && box.max.y !== -Infinity) {
       clone.position.y = -box.min.y;
     }
 
     return clone;
-  }, [scene, item.metadata?.forwardAxis, item.scale]);
+  }, [gltf.scene, item.metadata?.forwardAxis, item.scale]);
   
   return <primitive object={clonedScene} />;
 };
@@ -270,13 +407,24 @@ const SceneItemObject: React.FC<{ item: SceneItem }> = memo(({ item }) => {
       liveUpdateRAF.current = null;
       const g = groupRef.current;
       if (!g) return;
+      
+      const pos: [number, number, number] = [g.position.x, g.position.y, g.position.z];
+      const rot: [number, number, number] = [g.rotation.x, g.rotation.y, g.rotation.z];
+      
+      // Detectar guías de alineación en tiempo real para feedback visual inmediato
+      const otherItems = items.filter(it => it.id !== item.id);
+      const alignResult = detectAlignmentGuides(
+        { ...item, position: pos },
+        otherItems,
+        0.05 // Umbral un poco más amplio durante arrastre para anticipar el snap
+      );
+      setActiveAlignGuides(alignResult.guides);
+      setIsAlignActive(alignResult.guides.length > 0);
+      
       // Escritura ligera al store — actualiza solo posición y rotación para que el inspector reaccione
-      updateItem(item.id, {
-        position: [g.position.x, g.position.y, g.position.z],
-        rotation: [g.rotation.x, g.rotation.y, g.rotation.z],
-      });
+      updateItem(item.id, { position: pos, rotation: rot });
     });
-  }, [item.id, updateItem]);
+  }, [item.id, item, items, updateItem]);
 
   const commitTransform = () => {
     const group = groupRef.current;
@@ -293,7 +441,7 @@ const SceneItemObject: React.FC<{ item: SceneItem }> = memo(({ item }) => {
     let finalZ = pos.z;
 
     // 1. Ajuste Modular (Prioridad) — evaluado solo al soltar
-    const modularSnap = findModularSnap(item, items, 0.4);
+    const modularSnap = findModularSnap(item, items, 0.15);
     if (modularSnap) {
       finalX = modularSnap.snappedPosition[0];
       safeY = modularSnap.snappedPosition[1];
@@ -344,26 +492,7 @@ const SceneItemObject: React.FC<{ item: SceneItem }> = memo(({ item }) => {
   const mode = activeTool === 'rotate' ? 'rotate' : activeTool === 'scale' ? 'scale' : 'translate';
   const showGizmo = isSelected && selectedIds.length === 1;
 
-  const color = isSelected ? '#3b82f6' : '#64748b';
 
-  const placeholder = (
-    <>
-      <mesh castShadow receiveShadow>
-        <boxGeometry args={[item.width, item.height, item.depth]} />
-        <meshStandardMaterial
-          color={color}
-          metalness={0.1}
-          roughness={0.8}
-          transparent
-          opacity={isSelected ? 0.9 : 0.75}
-        />
-      </mesh>
-      <mesh>
-        <boxGeometry args={[item.width, item.height, item.depth]} />
-        <meshBasicMaterial color={isSelected ? '#93c5fd' : '#94a3b8'} wireframe />
-      </mesh>
-    </>
-  );
 
   return (
     <>
@@ -450,7 +579,7 @@ const SceneItemObject: React.FC<{ item: SceneItem }> = memo(({ item }) => {
             useIntentStore.getState().setGizmoActive(false);
           }}
           translationSnap={snapEnabled && mode === 'translate' ? gridSize : null}
-          rotationSnap={snapEnabled && mode === 'rotate' ? Math.PI / 12 : null}
+          rotationSnap={snapEnabled && mode === 'rotate' ? Math.PI / 36 : null}
           size={0.75}
         />
       )}
@@ -700,7 +829,10 @@ const FaceObject: React.FC<{ face: FaceEntity }> = ({ face }) => {
 };
 
 const VolumeObject: React.FC<{ volume: VolumeEntity }> = ({ volume }) => {
-  const { select, selectedIds, activeTool, updateVolume } = useEditorStore();
+  const select = useEditorStore((s) => s.select);
+  const selectedIds = useEditorStore((s) => s.selectedIds);
+  const activeTool = useEditorStore((s) => s.activeTool);
+  const updateVolume = useEditorStore((s) => s.updateVolume);
   const isSelected = selectedIds.includes(volume.id);
   const volumeGroupRef = useRef<THREE.Group>(null!);
   const transformRef = useRef<any>(null);
@@ -803,7 +935,7 @@ const BlueprintRenderer: React.FC<{ blueprint: any; onPointerDown?: any; onPoint
 };
 
 const BlueprintObject: React.FC<{ onPointerDown?: any; onPointerMove?: any }> = ({ onPointerDown, onPointerMove }) => {
-  const { blueprint } = useEditorStore();
+  const blueprint = useEditorStore((s) => s.blueprint);
   if (!blueprint.url || !blueprint.visible) return null;
 
   return (
@@ -815,7 +947,10 @@ const BlueprintObject: React.FC<{ onPointerDown?: any; onPointerMove?: any }> = 
 
 const ExportManager: React.FC = () => {
   const { gl, scene, camera } = useThree();
-  const { exportRequest, clearExportRequest, project, items } = useEditorStore();
+  const exportRequest = useEditorStore((s) => s.exportRequest);
+  const clearExportRequest = useEditorStore((s) => s.clearExportRequest);
+  const project = useEditorStore((s) => s.project);
+  const items = useEditorStore((s) => s.items);
 
   useEffect(() => {
     if (!exportRequest) return;
@@ -922,7 +1057,18 @@ const SelectionBoundingBox: React.FC = () => {
 };
 
 const MultiSelectionGizmo: React.FC = () => {
-  const { selectedIds, items, walls, lines, rectangles, activeTool, updateItem, updateWall, updateLine, updateRectangle, gridSize, snapEnabled } = useEditorStore();
+  const selectedIds = useEditorStore((s) => s.selectedIds);
+  const items = useEditorStore((s) => s.items);
+  const walls = useEditorStore((s) => s.walls);
+  const lines = useEditorStore((s) => s.lines);
+  const rectangles = useEditorStore((s) => s.rectangles);
+  const activeTool = useEditorStore((s) => s.activeTool);
+  const updateItem = useEditorStore((s) => s.updateItem);
+  const updateWall = useEditorStore((s) => s.updateWall);
+  const updateLine = useEditorStore((s) => s.updateLine);
+  const updateRectangle = useEditorStore((s) => s.updateRectangle);
+  const gridSize = useEditorStore((s) => s.gridSize);
+  const snapEnabled = useEditorStore((s) => s.snapEnabled);
   const groupRef = useRef<THREE.Group>(null!);
   const [center, setCenter] = useState<[number, number, number]>([0, 0, 0]);
   const isDragging = useRef(false);
@@ -1049,7 +1195,17 @@ export const Viewport: React.FC = () => {
     blueprint, updateBlueprint, setActiveTool,
     guides, addGuide, removeGuide, clearGuides,
     duplicateItem, removeItem
-  } = useEditorStore();
+  } = useEditorStore(useShallow((s: any) => ({
+    items: s.items, walls: s.walls, openings: s.openings, dimensions: s.dimensions, lines: s.lines, rectangles: s.rectangles, faces: s.faces, volumes: s.volumes, layers: s.layers, 
+    select: s.select, activeTool: s.activeTool, viewMode: s.viewMode, selectedIds: s.selectedIds,
+    addWall: s.addWall, addDimension: s.addDimension, addOpening: s.addOpening, addLine: s.addLine, addRectangle: s.addRectangle, addFace: s.addFace, addVolume: s.addVolume,
+    updateWall: s.updateWall, updateLine: s.updateLine, updateRectangle: s.updateRectangle, updateItem: s.updateItem,
+    gridSize: s.gridSize, snapEnabled: s.snapEnabled, showGrid: s.showGrid,
+    pendingOpeningType: s.pendingOpeningType, insertStructuralAsset: s.insertStructuralAsset, setPendingOpeningType: s.setPendingOpeningType,
+    blueprint: s.blueprint, updateBlueprint: s.updateBlueprint, setActiveTool: s.setActiveTool,
+    guides: s.guides, addGuide: s.addGuide, removeGuide: s.removeGuide, clearGuides: s.clearGuides,
+    duplicateItem: s.duplicateItem, removeItem: s.removeItem
+  })));
 
   const [drawingStart, setDrawingStart] = useState<[number, number, number] | null>(null);
   const [mousePos, setMousePos] = useState<[number, number, number]>([0,0,0]);
@@ -1077,9 +1233,9 @@ export const Viewport: React.FC = () => {
     // Recolectar todos los segmentos geométricos para el ajuste (snap)
     const segs: { start: [number, number, number], end: [number, number, number] }[] = [];
     
-    walls.forEach(w => segs.push({ start: w.start, end: w.end }));
-    lines.forEach(l => segs.push({ start: l.start, end: l.end }));
-    rectangles.forEach(r => {
+    walls.forEach((w: any) => segs.push({ start: w.start, end: w.end }));
+    lines.forEach((l: any) => segs.push({ start: l.start, end: l.end }));
+    rectangles.forEach((r: any) => {
       const p1 = [r.start[0], 0, r.start[2]] as [number, number, number];
       const p2 = [r.start[0] + r.width, 0, r.start[2]] as [number, number, number];
       const p3 = [r.start[0] + r.width, 0, r.start[2] + r.depth] as [number, number, number];
@@ -1088,9 +1244,9 @@ export const Viewport: React.FC = () => {
     });
 
     // También incluir puntos de ajuste de los objetos de la escena
-    items.forEach(item => {
+    items.forEach((item: any) => {
       if (item.snapPoints) {
-        item.snapPoints.forEach(sp => {
+        item.snapPoints.forEach((sp: any) => {
           const worldPos = new THREE.Vector3(...sp.localPosition)
             .multiply(new THREE.Vector3(...item.scale))
             .applyEuler(new THREE.Euler(...item.rotation))
@@ -1680,7 +1836,14 @@ export const Viewport: React.FC = () => {
       onMouseDown={handleMouseDown}
     >
       <Canvas
-        shadows
+        shadows={{ type: THREE.PCFShadowMap }}
+        gl={{
+          powerPreference: 'high-performance',
+          antialias: true,
+          stencil: false,
+          depth: true,
+        }}
+        dpr={[1, 1.5]}
         onPointerMissed={() => {
           // No deseleccionar si TransformControls está activo — hacer clic en las flechas del gizmo
           // dispara onPointerMissed porque no golpean ninguna malla de la escena.

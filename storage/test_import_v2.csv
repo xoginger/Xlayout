@@ -1,0 +1,9 @@
+sku,name,base_sku,variant_type,variant_name,line,category,brand,description,width,depth,height,unit,status,price_a,price_b,price_c,price_d,price_e,currency
+LOC-TEST-100,Locker Industrial Test,,,,Lockers Test,Almacenamiento,MetalPro,Locker industrial de prueba calibre 22,0.38,0.45,1.80,pza,PUBLISHED,4500,4050,3600,3150,2700,MXN
+ESC-TEST-200,Escritorio Operativo Test,,,,Escritorios Test,Mobiliario,OfiLine,Escritorio con cajones de prueba,1.20,0.60,0.75,pza,PUBLISHED,8500,7650,6800,5950,5100,MXN
+SIL-TEST-300,Silla Ejecutiva Test,,,,Sillas Test,Mobiliario,ErgoMax,Silla ejecutiva de prueba,0.65,0.68,1.25,pza,PUBLISHED,12000,10800,9600,8400,7200,MXN
+LOC-TEST-101,Locker 2 Puertas,LOC-TEST-100,size,2 Puertas,,,,Locker de 2 compartimientos,0.38,0.45,1.80,pza,PUBLISHED,4500,4050,3600,3150,2700,MXN
+LOC-TEST-102,Locker 4 Puertas,LOC-TEST-100,size,4 Puertas,,,,Locker de 4 compartimientos,0.76,0.45,1.80,pza,PUBLISHED,8200,7380,6560,5740,4920,MXN
+LOC-TEST-103,Locker Arena,LOC-TEST-100,color,Arena,,,,Acabado arena mate,0.38,0.45,1.80,pza,PUBLISHED,4700,4230,3760,3290,2820,MXN
+ESC-TEST-201,Escritorio 1.50m,ESC-TEST-200,size,1.50 metros,,,,Versión compacta,1.50,0.60,0.75,pza,PUBLISHED,7800,7020,6240,5460,4680,MXN
+ESC-TEST-202,Escritorio 1.80m,ESC-TEST-200,size,1.80 metros,,,,Versión amplia,1.80,0.60,0.75,pza,PUBLISHED,9500,8550,7600,6650,5700,MXN

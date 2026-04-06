@@ -2,15 +2,15 @@
  * Creado y diseñado por XO
  * RouteGuard.tsx
  * ─────────────────────────────────────────────────────────────────────────────
- * Componente wrapper que protege rutas según userType + rol.
- * Redirige a la ruta correcta si el usuario no tiene acceso.
+ * Protege rutas según userType + rol. En xlayout.studio, redirige al login
+ * de xlayout.mx con redirect de vuelta. En xlayout.mx, redirige local.
  */
 
 "use client";
 
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useRef } from 'react';
 import { useRouter, usePathname } from 'next/navigation';
-import { useAuthStore } from '@/store/auth-store';
+import { useAuthStore, getAuthDomain } from '@/store/auth-store';
 import { canAccessRoute, getFallbackRoute, isPublicRoute } from '@/lib/route-permissions';
 
 interface RouteGuardProps {
@@ -24,33 +24,38 @@ export function RouteGuard({ children }: RouteGuardProps) {
   const getUserType = useAuthStore(s => s.getUserType);
   const getDistributorRole = useAuthStore(s => s.getDistributorRole);
   const [authorized, setAuthorized] = useState(false);
+  const hasFetchedRef = useRef(false);
 
   useEffect(() => {
-    // Rutas públicas: siempre accesibles
     if (isPublicRoute(pathname)) {
       setAuthorized(true);
       return;
     }
 
-    // Sin token: redirigir a login
     if (!token) {
       setAuthorized(false);
-      router.replace('/login');
+      hasFetchedRef.current = false;
+      
+      // Determinar si estamos en studio dominio → redirect cross-domain
+      const authDomain = getAuthDomain();
+      if (typeof window !== 'undefined' && authDomain && authDomain !== window.location.origin) {
+        window.location.href = `${authDomain}/login?redirect=${encodeURIComponent(window.location.href)}`;
+      } else {
+        router.replace('/login');
+      }
       return;
     }
 
-    // Si hay token pero no hay usuario cargado, hacer fetch
-    if (!user && !isLoading) {
+    if (!user && !isLoading && !hasFetchedRef.current) {
+      hasFetchedRef.current = true;
       fetchMe();
       return;
     }
 
-    // Si aún está cargando, esperar
     if (isLoading) {
       return;
     }
 
-    // Usuario cargado: verificar permisos de ruta
     if (user) {
       const userType = getUserType();
       const distRole = getDistributorRole();
@@ -59,7 +64,6 @@ export function RouteGuard({ children }: RouteGuardProps) {
       if (hasAccess) {
         setAuthorized(true);
       } else {
-        // Redirigir a la ruta de fallback para este tipo de usuario
         const fallback = getFallbackRoute(userType || undefined);
         setAuthorized(false);
         router.replace(fallback);
@@ -67,7 +71,6 @@ export function RouteGuard({ children }: RouteGuardProps) {
     }
   }, [pathname, token, user, isLoading]);
 
-  // Mostrar pantalla de carga mientras se verifica acceso
   if (!authorized) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-white">

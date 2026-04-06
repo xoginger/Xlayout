@@ -1,0 +1,5 @@
+﻿sku,name,line,category,description,width,depth,height,price_a,currency
+ESC-001,Escritorio Ejecutivo Pro,Oficina Ejecutiva,Escritorios,Escritorio de alta gama con pasacables,1.80,0.80,0.75,25000,MXN
+SIL-002,Silla Ergo Max,Sillas,Operativa,Silla con soporte lumbar dinámico,0.65,0.65,1.20,8500,MXN
+LIB-003,Librero Minimal,Almacenamiento,Libreros,Librero de 5 niveles en melamina,0.90,0.35,1.80,12000,MXN
+GAB-004,Gabinete Credenza,Almacenamiento,Gabinetes,Gabinete bajo con puertas corredizas,1.20,0.45,0.72,15000,MXN

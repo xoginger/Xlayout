@@ -17,6 +17,8 @@ import { ImportsService } from './imports.service';
 import { ImportsController } from './imports.controller';
 import { ImportsProcessor } from './imports.processor';
 import { PrismaModule } from '../prisma/prisma.module';
+import { DistributorsModule } from '../distributors/distributors.module';
+import { AuditModule } from '../audit/audit.module';
 
 // Directorio de almacenamiento para archivos de importación
 const IMPORT_DIR = path.join(process.env.UPLOAD_DIR || '/app/storage', 'imports');
@@ -35,6 +37,8 @@ const storage = multer.diskStorage({
 @Module({
   imports: [
     PrismaModule,
+    DistributorsModule,
+    AuditModule,
     BullModule.registerQueue({ name: 'imports' }),
     MulterModule.register({ storage }),
   ],

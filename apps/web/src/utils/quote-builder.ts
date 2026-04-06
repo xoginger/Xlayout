@@ -19,10 +19,16 @@ export interface QuoteLineItem {
 
 export interface SceneQuote {
   items: QuoteLineItem[];
-  total: number;
-  totalItems: number; // total de piezas físicas
-  itemsWithoutPrice: number; // número de partidas (productos distintos) sin precio
+  subtotal: number;        // Suma de subtotales sin impuestos
+  ivaRate: number;         // Tasa de IVA (0.16 = 16%)
+  ivaAmount: number;       // Monto del IVA calculado
+  total: number;           // Total con IVA incluido
+  totalItems: number;      // Total de piezas físicas
+  itemsWithoutPrice: number; // Número de partidas (productos distintos) sin precio
 }
+
+// Tasa de IVA vigente en México
+const IVA_RATE = 0.16;
 
 // ─── Construir cotización a partir de los items de la escena ─────────────────
 
@@ -30,6 +36,7 @@ export interface SceneQuote {
  * Agrupa los SceneItem por productId, calcula cantidades,
  * y resuelve el precio unitario usando la jerarquía:
  *   finalPrice (con markup) → price (lista asignada) → basePrice (fallback)
+ * Incluye cálculo automático de IVA (16%).
  */
 export function buildSceneQuote(items: any[]): SceneQuote {
   // Solo procesar items de tipo 'catalog-item'
@@ -78,12 +85,14 @@ export function buildSceneQuote(items: any[]): SceneQuote {
       thumbnail: g.thumbnail,
     }));
 
-  // Calcular totales
-  const total = lineItems.reduce((sum, li) => sum + (li.subtotal ?? 0), 0);
+  // Calcular totales con IVA
+  const subtotal = lineItems.reduce((sum, li) => sum + (li.subtotal ?? 0), 0);
+  const ivaAmount = Math.round(subtotal * IVA_RATE * 100) / 100;
+  const total = subtotal + ivaAmount;
   const totalItems = catalogItems.length;
   const itemsWithoutPrice = lineItems.filter(li => !li.hasPrice).length;
 
-  return { items: lineItems, total, totalItems, itemsWithoutPrice };
+  return { items: lineItems, subtotal, ivaRate: IVA_RATE, ivaAmount, total, totalItems, itemsWithoutPrice };
 }
 
 // ─── Resolver precio con jerarquía ──────────────────────────────────────────

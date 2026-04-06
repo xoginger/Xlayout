@@ -80,6 +80,25 @@ enum MarkupScope {
   BY_PRODUCT // Aplica a un producto específico
 }
 
+// Plan del distribuidor — controla capacidades comerciales
+enum DistributorPlan {
+  STANDARD // Cotización por marca, sin fórmula propia
+  PRO // Cotización consolidada, fórmula propia, branding
+}
+
+// Modo de cotización generada
+enum QuoteMode {
+  PER_BRAND // Una cotización por marca (STANDARD)
+  CONSOLIDATED // Cotización multi-marca unificada (PRO)
+}
+
+// Alcance del descuento asignado por la marca al distribuidor
+enum DiscountScope {
+  GLOBAL // Aplica a todos los productos del fabricante
+  BY_LINE // Aplica a una línea de producto específica
+  BY_PRODUCT // Aplica a un producto específico
+}
+
 // ============================================================
 // LAYER 1 — PLATFORM USERS (Xocotzin and platform admins)
 // ============================================================
@@ -133,14 +152,17 @@ model Tenant {
   auditLogs         AuditLog[]         @relation("TenantAudit")
 
   // Relaciones del modelo comercial de distribuidores
-  distributorAccesses        ManufacturerDistributorAccess[]
-  distributorCatalogAccesses DistributorCatalogAccess[]
+  distributorAccesses            ManufacturerDistributorAccess[]
+  distributorCatalogAccesses     DistributorCatalogAccess[]
+  distributorAllowedPriceLists   ManufacturerDistributorAllowedPriceList[]
+  distributorDiscounts           ManufacturerDistributorDiscount[]
 
   // Legacy backward-compat relations (existing schema)
   legacyBrands        Brand[]            @relation("LegacyBrands")
   legacyPriceLists    CompanyPriceList[] @relation("LegacyCompanyPriceLists")
   legacyDiscountRules DiscountRule[]     @relation("LegacyDiscountRules")
   projects            Project[]
+  quoteTemplates      QuoteTemplate[]  @relation("TenantQuoteTemplates")
 
   @@map("tenants")
 }
@@ -164,7 +186,6 @@ model CompanyUser {
 
   tenant          Tenant          @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   catalogAccesses CatalogAccess[] @relation("CatalogActivator")
-  importJobs      ImportJob[]     @relation("ImportCreator")
   auditLogs       AuditLog[]      @relation("CompanyUserAuditor")
 
   @@map("company_users")
@@ -259,6 +280,7 @@ model Product {
   variants   ProductVariant[]
 
   @@unique([tenantId, sku])
+  @@index([status, active])
   @@map("products")
 }
 
@@ -289,6 +311,7 @@ model ProductPrice {
   id        String    @id @default(uuid())
   tenantId  String    @map("tenant_id")
   productId String    @map("product_id")
+  variantId String?   @map("variant_id") // null = precio del producto base
   priceType String    @default("A") @map("price_type") // 'A'|'B'|'C'|'D'|'E'
   currency  String    @default("MXN")
   basePrice Decimal   @map("base_price") @db.Decimal(12, 2)
@@ -299,10 +322,13 @@ model ProductPrice {
   createdAt DateTime  @default(now()) @map("created_at")
   updatedAt DateTime  @updatedAt @map("updated_at")
 
-  tenant  Tenant  @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-  product Product @relation(fields: [productId], references: [id], onDelete: Cascade)
+  tenant  Tenant          @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  product Product         @relation(fields: [productId], references: [id], onDelete: Cascade)
+  variant ProductVariant? @relation(fields: [variantId], references: [id], onDelete: Cascade)
 
-  @@unique([productId, priceType])
+  @@unique([productId, variantId, priceType])
+  @@index([productId])
+  @@index([variantId])
   @@map("product_prices")
 }
 
@@ -400,12 +426,12 @@ model ImportJob {
   filename    String
   status      ImportJobStatus @default(PENDING)
   summary     Json? // { total, succeeded, failed, errors: [...] }
-  createdById String          @map("created_by_id")
+  createdById String          @map("created_by_id") // ID del usuario creador (cualquier tipo)
   createdAt   DateTime        @default(now()) @map("created_at")
   updatedAt   DateTime        @updatedAt @map("updated_at")
 
-  tenant    Tenant      @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-  createdBy CompanyUser @relation("ImportCreator", fields: [createdById], references: [id])
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  // Sin FK a CompanyUser — permite cualquier tipo de usuario (Platform, Company, Distributor)
 
   @@map("import_jobs")
 }
@@ -416,25 +442,36 @@ model ImportJob {
 
 // Empresa distribuidora — actor comercial intermedio entre fabricante y diseñador
 model DistributorCompany {
-  id           String     @id @default(uuid())
+  id           String          @id @default(uuid())
   name         String
-  slug         String     @unique
-  contactEmail String?    @map("contact_email")
+  slug         String          @unique
+  contactEmail String?         @map("contact_email")
   phone        String?
   country      String?
-  status       UserStatus @default(ACTIVE)
+  status       UserStatus      @default(ACTIVE)
+  plan         DistributorPlan @default(STANDARD)
   metadata     Json?
-  createdAt    DateTime   @default(now()) @map("created_at")
-  updatedAt    DateTime   @updatedAt @map("updated_at")
+  createdAt    DateTime        @default(now()) @map("created_at")
+  updatedAt    DateTime        @updatedAt @map("updated_at")
 
   // Usuarios internos del distribuidor (diseñadores, administradores, vendedores)
   users                DistributorUser[]
   // Catálogos de fabricantes autorizados
   manufacturerAccesses ManufacturerDistributorAccess[]
-  // Acceso específico a listas de precio de cada fabricante
+  // Acceso específico a listas de precio de cada fabricante (legacy)
   catalogAccesses      DistributorCatalogAccess[]
-  // Reglas de incremento comercial
+  // Listas de precio permitidas por marca
+  allowedPriceLists    ManufacturerDistributorAllowedPriceList[]
+  // Descuentos asignados por marca
+  discounts            ManufacturerDistributorDiscount[]
+  // Reglas de incremento comercial (legacy)
   priceMarkups         DistributorPriceMarkup[]
+  // Reglas de pricing PRO (nueva)
+  proPricingRules      DistributorProPricingRule[]
+  // Configuración de branding (solo PRO)
+  brandingConfig       DistributorBrandingConfig?
+  // Plantillas de cotización (solo PRO)
+  quoteTemplates       QuoteTemplate[]  @relation("DistributorQuoteTemplates")
 
   @@map("distributor_companies")
 }
@@ -461,13 +498,14 @@ model DistributorUser {
 
 // Autorización de un fabricante hacia un distribuidor — tabla de control de acceso macro
 model ManufacturerDistributorAccess {
-  id            String    @id @default(uuid())
-  tenantId      String    @map("tenant_id") // Fabricante (Tenant)
-  distributorId String    @map("distributor_id") // Distribuidor autorizado
-  active        Boolean   @default(true)
-  grantedAt     DateTime  @default(now()) @map("granted_at")
-  expiresAt     DateTime? @map("expires_at")
-  notes         String? // Notas internas del fabricante sobre esta autorización
+  id               String    @id @default(uuid())
+  tenantId         String    @map("tenant_id") // Fabricante (Tenant)
+  distributorId    String    @map("distributor_id") // Distribuidor autorizado
+  active           Boolean   @default(true)
+  defaultPriceList String    @default("A") @map("default_price_list") // Lista por defecto
+  grantedAt        DateTime  @default(now()) @map("granted_at")
+  expiresAt        DateTime? @map("expires_at")
+  notes            String? // Notas internas del fabricante sobre esta autorización
 
   tenant      Tenant             @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   distributor DistributorCompany @relation(fields: [distributorId], references: [id], onDelete: Cascade)
@@ -518,23 +556,112 @@ model DistributorPriceMarkup {
   @@map("distributor_price_markups")
 }
 
-// Variante de producto — preparada para expansión futura (colores, texturas, materiales)
-// No tiene UI ni endpoints activos en esta fase; es la estructura base lista para fase 2
+// ============================================================
+// MODELO COMERCIAL — RELACIÓN MARCA↔DISTRIBUIDOR (Entidades nuevas)
+// ============================================================
+
+// Listas de precio que una marca permite a un distribuidor específico
+model ManufacturerDistributorAllowedPriceList {
+  id            String   @id @default(uuid())
+  tenantId      String   @map("tenant_id")      // Fabricante
+  distributorId String   @map("distributor_id")  // Distribuidor
+  priceListType String   @map("price_list_type") // 'A'|'B'|'C'|'D'|'E'
+  isDefault     Boolean  @default(false) @map("is_default") // Lista por defecto para este par
+  active        Boolean  @default(true)
+  grantedAt     DateTime @default(now()) @map("granted_at")
+
+  tenant      Tenant             @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  distributor DistributorCompany @relation(fields: [distributorId], references: [id], onDelete: Cascade)
+
+  // Un distribuidor solo puede tener UNA entrada por tipo de lista por fabricante
+  @@unique([tenantId, distributorId, priceListType])
+  @@map("manufacturer_distributor_allowed_price_lists")
+}
+
+// Descuento asignado por una marca a un distribuidor específico
+model ManufacturerDistributorDiscount {
+  id              String        @id @default(uuid())
+  tenantId        String        @map("tenant_id")       // Fabricante
+  distributorId   String        @map("distributor_id")   // Distribuidor
+  discountPercent Decimal       @map("discount_percent") @db.Decimal(8, 4) // Porcentaje: 15.0000 = 15%
+  scope           DiscountScope @default(GLOBAL)
+  productLineId   String?       @map("product_line_id") // Si scope = BY_LINE
+  productId       String?       @map("product_id")      // Si scope = BY_PRODUCT
+  active          Boolean       @default(true)
+  createdAt       DateTime      @default(now()) @map("created_at")
+  updatedAt       DateTime      @updatedAt @map("updated_at")
+
+  tenant      Tenant             @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  distributor DistributorCompany @relation(fields: [distributorId], references: [id], onDelete: Cascade)
+
+  @@map("manufacturer_distributor_discounts")
+}
+
+// Regla de pricing adicional del distribuidor PRO
+// Se aplica DESPUÉS del authorizedPrice y respeta el piso mínimo
+model DistributorProPricingRule {
+  id            String      @id @default(uuid())
+  distributorId String      @map("distributor_id")
+  scope         MarkupScope @default(GLOBAL)
+  tenantId      String?     @map("tenant_id")       // Si scope = BY_TENANT
+  productLineId String?     @map("product_line_id") // Si scope = BY_LINE
+  productId     String?     @map("product_id")      // Si scope = BY_PRODUCT
+  markupPercent Decimal     @map("markup_percent") @db.Decimal(8, 4)
+  active        Boolean     @default(true)
+  priority      Int         @default(0)
+  createdAt     DateTime    @default(now()) @map("created_at")
+  updatedAt     DateTime    @updatedAt @map("updated_at")
+
+  distributor DistributorCompany @relation(fields: [distributorId], references: [id], onDelete: Cascade)
+
+  @@map("distributor_pro_pricing_rules")
+}
+
+// Configuración de branding del distribuidor PRO — personalización visual
+model DistributorBrandingConfig {
+  id            String   @id @default(uuid())
+  distributorId String   @unique @map("distributor_id")
+  logoUrl       String?  @map("logo_url")
+  companyName   String?  @map("company_name")
+  primaryColor  String   @default("#4F46E5") @map("primary_color")
+  accentColor   String   @default("#10B981") @map("accent_color")
+  address       String?
+  phone         String?
+  email         String?
+  rfc           String?
+  website       String?
+  createdAt     DateTime @default(now()) @map("created_at")
+  updatedAt     DateTime @updatedAt @map("updated_at")
+
+  distributor DistributorCompany @relation(fields: [distributorId], references: [id], onDelete: Cascade)
+
+  @@map("distributor_branding_configs")
+}
+
+// Variante de producto — soporta dimensiones, precios y SKU propio
+// Usado por el importador masivo para crear catálogos con estructura base + variantes
 model ProductVariant {
   id          String   @id @default(uuid())
   productId   String   @map("product_id")
   tenantId    String   @map("tenant_id")
-  name        String // "Blanco Mate", "Roble Natural"
-  variantType String   @map("variant_type") // 'color'|'texture'|'material'|'finish'
-  sku         String?
-  // Datos técnicos de la variante: hex de color, URL de textura, etc.
-  metadata    Json?
+  name        String // "Blanco Mate", "Roble Natural", "2 Puertas 90x45x180"
+  variantType String   @map("variant_type") // 'color'|'texture'|'material'|'finish'|'size'|'config'
+  sku         String?  // SKU único de la variante — clave para idempotencia en importación
+  width       Float?   // Dimensiones propias de la variante (metros)
+  depth       Float?
+  height      Float?
+  sortOrder   Int      @default(0) @map("sort_order")
+  metadata    Json?    // Datos técnicos: hex de color, URL de textura, marca, etc.
   active      Boolean  @default(true)
   createdAt   DateTime @default(now()) @map("created_at")
 
-  product Product @relation(fields: [productId], references: [id], onDelete: Cascade)
-  tenant  Tenant  @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  product Product        @relation(fields: [productId], references: [id], onDelete: Cascade)
+  tenant  Tenant         @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  prices  ProductPrice[] // Precios propios de la variante
 
+  @@unique([tenantId, sku])
+  @@index([productId])
+  @@index([active])
   @@map("product_variants")
 }
 
@@ -723,20 +850,52 @@ model ProjectVersion {
 }
 
 model Quote {
-  id               String   @id @default(uuid())
-  tenantId         String   @map("tenant_id")
-  projectVersionId String   @map("project_version_id")
-  totalAmount      Decimal  @map("total_amount") @db.Decimal(10, 2)
-  totalPieces      Int      @default(0) @map("total_pieces")
-  priceType        String   @default("A") @map("price_type")
-  status           String   @default("DRAFT")
+  id               String    @id @default(uuid())
+  tenantId         String    @map("tenant_id")
+  projectVersionId String    @map("project_version_id")
+  distributorId    String?   @map("distributor_id") // Distribuidor que generó la cotización
+  quoteMode        QuoteMode @default(PER_BRAND) @map("quote_mode") // PER_BRAND o CONSOLIDATED
+  totalAmount      Decimal   @map("total_amount") @db.Decimal(12, 2)
+  subtotalAmount   Decimal   @default(0) @map("subtotal_amount") @db.Decimal(12, 2)
+  ivaAmount        Decimal   @default(0) @map("iva_amount") @db.Decimal(12, 2)
+  totalPieces      Int       @default(0) @map("total_pieces")
+  priceType        String    @default("A") @map("price_type")
+  status           String    @default("DRAFT")
   quoteData        Json
-  creatorId        String?  @map("creator_id")
-  createdAt        DateTime @default(now())
+  creatorId        String    @map("creator_id") // Obligatorio: trazabilidad ISO (NC-TRAZ-01)
+  createdAt        DateTime  @default(now())
 
   projectVersion ProjectVersion @relation(fields: [projectVersionId], references: [id])
+  lines          QuoteLine[]
 
   @@map("quotes")
+}
+
+// Línea individual de cotización — trazabilidad completa del cálculo de precio
+model QuoteLine {
+  id              String  @id @default(uuid())
+  quoteId         String  @map("quote_id")
+  productId       String? @map("product_id")
+  variantId       String? @map("variant_id")
+  tenantId        String  @map("tenant_id")       // Marca de origen del producto
+  tenantName      String  @default("") @map("tenant_name")
+  productName     String  @map("product_name")
+  productSku      String? @map("product_sku")
+  quantity        Int     @default(1)
+  // Cadena de precios con trazabilidad completa
+  priceListType   String  @map("price_list_type")  // Lista usada: 'A'|'B'|'C'|'D'|'E'
+  baseListPrice   Decimal @map("base_list_price") @db.Decimal(12, 2) // Precio base de la lista
+  discountPercent Decimal @default(0) @map("discount_percent") @db.Decimal(8, 4) // Descuento de marca
+  authorizedPrice Decimal @map("authorized_price") @db.Decimal(12, 2) // Precio autorizado
+  proMarkup       Decimal @default(0) @map("pro_markup") @db.Decimal(8, 4) // Incremento PRO aplicado
+  finalPrice      Decimal @map("final_price") @db.Decimal(12, 2) // Precio final (>= authorizedPrice)
+  lineTotal       Decimal @map("line_total") @db.Decimal(12, 2) // finalPrice * quantity
+  currency        String  @default("MXN")
+  metadata        Json?   // Datos adicionales de trazabilidad
+
+  quote Quote @relation(fields: [quoteId], references: [id], onDelete: Cascade)
+
+  @@map("quote_lines")
 }
 
 model Room {
@@ -802,4 +961,52 @@ model Placement {
   room           Room?          @relation(fields: [roomId], references: [id], onDelete: SetNull)
 
   @@map("placements")
+}
+
+// ============================================================
+// PLANTILLAS DE COTIZACIÓN — personalizables por marca y distribuidor PRO
+// ============================================================
+
+model QuoteTemplate {
+  id          String   @id @default(uuid())
+  ownerType   String   @map("owner_type")   // 'tenant' | 'distributor'
+
+  // FK opcionales — solo uno se usa según ownerType
+  tenantId       String?  @map("tenant_id")
+  distributorId  String?  @map("distributor_id")
+
+  name        String   @default("Cotización estándar")
+
+  // Datos de empresa para el encabezado
+  logoUrl     String?  @map("logo_url")
+  companyName String?  @map("company_name")
+  address     String?
+  phone       String?
+  email       String?
+  rfc         String?
+  website     String?
+
+  // Diseño visual
+  primaryColor   String  @default("#4F46E5") @map("primary_color")
+  accentColor    String  @default("#10B981") @map("accent_color")
+  fontFamily     String  @default("helvetica") @map("font_family")
+
+  // Contenido estático de la cotización
+  headerText     String? @map("header_text")   // Texto descriptivo arriba de la tabla
+  footerText     String? @map("footer_text")   // Condiciones comerciales / legales
+  validityDays   Int     @default(30) @map("validity_days")
+  showIva        Boolean @default(true) @map("show_iva")
+  ivaRate        Float   @default(0.16) @map("iva_rate")
+  currency       String  @default("MXN")
+
+  isDefault  Boolean  @default(false) @map("is_default")
+  active     Boolean  @default(true)
+  createdAt  DateTime @default(now()) @map("created_at")
+  updatedAt  DateTime @updatedAt @map("updated_at")
+
+  // Relaciones inversas
+  tenant      Tenant?              @relation("TenantQuoteTemplates", fields: [tenantId], references: [id], onDelete: Cascade)
+  distributor DistributorCompany?  @relation("DistributorQuoteTemplates", fields: [distributorId], references: [id], onDelete: Cascade)
+
+  @@map("quote_templates")
 }

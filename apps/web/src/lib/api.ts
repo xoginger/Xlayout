@@ -1,18 +1,26 @@
 /**
  * Creado y diseñado por XO
+ * XLayout — API Client
+ * ─────────────────────────────────────────────────────────────────────────────
+ * Cliente HTTP centralizado con:
+ * - Inyección automática de JWT y tenant context
+ * - Interceptor de auto-refresh en respuestas 401
+ * - Retry automático tras renovar token
+ * - Redirect a login si el refresh también falla
  */
 
 "use client";
 
 import { useAuthStore } from '../store/auth-store';
 
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001';
+const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || '/api';
 
 interface RequestOptions extends RequestInit {
   params?: Record<string, string>;
+  /** Si true, no intentar refresh automático en 401 */
+  _skipRefresh?: boolean;
 }
 
-// Construir URL segura con base absoluta/relativa y query params
 function buildUrl(base: string, endpoint: string, params?: Record<string, string>): string {
   const path = `${base}${endpoint.startsWith('/') ? endpoint : `/${endpoint}`}`;
   if (!params || Object.keys(params).length === 0) return path;
@@ -28,13 +36,10 @@ export const api = {
 
     const headers = new Headers(options.headers);
 
-    // Token de autenticación JWT
     if (token) {
       headers.set('Authorization', `Bearer ${token}`);
     }
 
-    // Contexto de tenant activo — necesario para que PLATFORM_USER
-    // pueda operar sobre endpoints multi-tenant como catálogo
     if (activeTenantId) {
       headers.set('x-tenant-id', activeTenantId);
     }
@@ -47,6 +52,29 @@ export const api = {
       ...options,
       headers,
     });
+
+    // ─── Auto-refresh en 401 ──────────────────────────────────────────────────
+    if (response.status === 401 && !options._skipRefresh) {
+      const refreshed = await useAuthStore.getState().refreshAuth();
+      if (refreshed) {
+        // Reintentar con el nuevo token
+        return this.request<T>(endpoint, { ...options, _skipRefresh: true });
+      } else {
+        // Refresh falló → logout y redirect
+        useAuthStore.getState().logout();
+        if (typeof window !== 'undefined') {
+          const authDomain = process.env.NEXT_PUBLIC_AUTH_DOMAIN || '';
+          const currentUrl = window.location.href;
+          
+          if (authDomain && authDomain !== window.location.origin) {
+            window.location.href = `${authDomain}/login?redirect=${encodeURIComponent(currentUrl)}`;
+          } else {
+            window.location.href = '/login';
+          }
+        }
+        throw new Error('Sesión expirada');
+      }
+    }
 
     if (!response.ok) {
       const errorData = await response.json().catch(() => ({}));

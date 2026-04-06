@@ -10,13 +10,44 @@ import { extractFirstPageAsImage } from '@/utils/pdf-extractor';
 import { QuoteInspectorSection } from './QuoteInspectorSection';
 
 export const RightInspector: React.FC = () => {
-  const { 
-    selectedIds, selectedType, items, walls, openings, dimensions, lines, rectangles, faces, volumes, layers, scenes,
-    activeLayerId, project, blueprint, activeTool,
-    updateItem, updateWall, updateOpening, updateLine, updateRectangle, updateFace, updateVolume, updateDimension,
-    removeItem, toggleLayer, updateLayer, addLayer, setActiveLayer, duplicateItem,
-    addScene, updateScene, removeScene, applyScene, setProjectName, updateBlueprint, setActiveTool
-  } = useEditorStore();
+  const selectedIds = useEditorStore(s => s.selectedIds);
+  const selectedType = useEditorStore(s => s.selectedType);
+  const items = useEditorStore(s => s.items);
+  const walls = useEditorStore(s => s.walls);
+  const openings = useEditorStore(s => s.openings);
+  const dimensions = useEditorStore(s => s.dimensions);
+  const lines = useEditorStore(s => s.lines);
+  const rectangles = useEditorStore(s => s.rectangles);
+  const faces = useEditorStore(s => s.faces);
+  const volumes = useEditorStore(s => s.volumes);
+  const layers = useEditorStore(s => s.layers);
+  const scenes = useEditorStore(s => s.scenes);
+  const activeLayerId = useEditorStore(s => s.activeLayerId);
+  const project = useEditorStore(s => s.project);
+  const blueprint = useEditorStore(s => s.blueprint);
+  const activeTool = useEditorStore(s => s.activeTool);
+
+  const updateItem = useEditorStore(s => s.updateItem);
+  const updateWall = useEditorStore(s => s.updateWall);
+  const updateOpening = useEditorStore(s => s.updateOpening);
+  const updateLine = useEditorStore(s => s.updateLine);
+  const updateRectangle = useEditorStore(s => s.updateRectangle);
+  const updateFace = useEditorStore(s => s.updateFace);
+  const updateVolume = useEditorStore(s => s.updateVolume);
+  const updateDimension = useEditorStore(s => s.updateDimension);
+  const removeItem = useEditorStore(s => s.removeItem);
+  const toggleLayer = useEditorStore(s => s.toggleLayer);
+  const updateLayer = useEditorStore(s => s.updateLayer);
+  const addLayer = useEditorStore(s => s.addLayer);
+  const setActiveLayer = useEditorStore(s => s.setActiveLayer);
+  const duplicateItem = useEditorStore(s => s.duplicateItem);
+  const addScene = useEditorStore(s => s.addScene);
+  const updateScene = useEditorStore(s => s.updateScene);
+  const removeScene = useEditorStore(s => s.removeScene);
+  const applyScene = useEditorStore(s => s.applyScene);
+  const setProjectName = useEditorStore(s => s.setProjectName);
+  const updateBlueprint = useEditorStore(s => s.updateBlueprint);
+  const setActiveTool = useEditorStore(s => s.setActiveTool);
 
   const [activeTab, setActiveTab] = useState<'properties' | 'scene' | 'layers' | 'components' | 'quote' | 'blueprint'>('properties');
   const toggleAdvancedMode = useEditorStore((s) => s.toggleAdvancedMode);
@@ -497,8 +528,9 @@ export const RightInspector: React.FC = () => {
       <div className="p-5 space-y-6 animate-in fade-in slide-in-from-right-3">
         <div className="flex justify-between items-center bg-zinc-900 p-4 rounded-xl shadow-inner border border-zinc-800">
            <div className="flex flex-col">
-              <span className="text-[8px] font-black text-blue-400 uppercase tracking-[0.2em] mb-1">Cotización Estimada</span>
-              <span className="text-xl font-black text-white font-mono leading-none">${totalProjectValue.toLocaleString()}</span>
+              <span className="text-[8px] font-black text-blue-400 uppercase tracking-[0.2em] mb-1">Total con IVA</span>
+              <span className="text-xl font-black text-white font-mono leading-none">${(totalProjectValue * 1.16).toLocaleString('es-MX', { minimumFractionDigits: 0, maximumFractionDigits: 2 })}</span>
+              <span className="text-[7px] font-mono text-zinc-500 mt-1">Subtotal ${totalProjectValue.toLocaleString()} + IVA ${(totalProjectValue * 0.16).toLocaleString('es-MX', { minimumFractionDigits: 0, maximumFractionDigits: 2 })}</span>
            </div>
            <div className="text-right">
               <span className="text-[8px] font-black text-zinc-500 uppercase tracking-widest block">Componentes</span>
@@ -789,6 +821,7 @@ export const RightInspector: React.FC = () => {
         ].map(tab => (
           <button
             key={tab.key}
+            data-inspector-tab={tab.key}
             onClick={() => setActiveTab(tab.key)}
             className="flex-1 py-1.5 px-2 whitespace-nowrap transition-all uppercase"
             style={{

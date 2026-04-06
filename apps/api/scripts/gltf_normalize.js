@@ -1,6 +1,8 @@
 // Creado y diseñado por XO
-const { NodeIO } = require('@gltf-transform/core');
-const { getBounds } = require('@gltf-transform/functions');
+const { NodeIO, Logger } = require('@gltf-transform/core');
+const { KHRDracoMeshCompression } = require('@gltf-transform/extensions');
+const { getBounds, flatten, join, dedup, prune, weld } = require('@gltf-transform/functions');
+const draco3d = require('draco3d');
 const fs = require('fs');
 
 async function main() {
@@ -19,10 +21,16 @@ async function main() {
     }
     
     try {
-        const io = new NodeIO();
+        // Configurar IO con soporte Draco para leer GLBs comprimidos
+        const io = new NodeIO()
+            .registerExtensions([KHRDracoMeshCompression])
+            .registerDependencies({
+                'draco3d.decoder': await draco3d.createDecoderModule(),
+                'draco3d.encoder': await draco3d.createEncoderModule(),
+            });
         const document = await io.read(inputPath);
         
-        // 1. Obtener Bounding Box global de la escena
+        // ── Paso 1: Obtener Bounding Box global de la escena ──────────────
         const scene = document.getRoot().getDefaultScene() || document.getRoot().listScenes()[0];
         if (!scene) {
             throw new Error("El archivo no tiene escena válida");
@@ -37,16 +45,15 @@ async function main() {
         let scale = 1.0;
         let detectedUnit = 'm';
         
-        // 2. Inferencia de Unidad o Fuerza Manual
+        // ── Paso 2: Inferencia de Unidad o Fuerza Manual ──────────────────
         if (forceUnit) {
             detectedUnit = forceUnit;
             if (forceUnit === 'mm') scale = 0.001;
             else if (forceUnit === 'cm') scale = 0.01;
             else if (forceUnit === 'in') scale = 0.0254;
             else if (forceUnit === 'm') scale = 1.0;
-            // Si es 'm', scale=1.0 intencionalmente para restaurar unidades nativas
         } else {
-            // Lógica de heurística automática
+            // Heurística automática
             if (maxDim > 500) {
                 scale = 0.001;
                 detectedUnit = 'mm';
@@ -56,14 +63,9 @@ async function main() {
             }
         }
         
-        // Si hay una unidad forzada a 'm', obligamos la reconstrucción de vértices si la unidad forzada es m
-        // en caso de que necesitemos revertir una compresión previa. Pero normalmente si scale es 1.0, 
-        // podríamos omitirlo salvo que la malla viniese de un estado defectuoso. 
-        // Para simplificar, si scale==1.0, no alteramos los vértices.
         let normalized = false;
         
-        // 3. Aplicar BAKE de escala a los vértices y translations
-        // (Esto garantiza que la escala queda impregnada en la malla y todos los engines lo interpretan igual)
+        // ── Paso 3: Aplicar BAKE de escala a los vértices y translations ──
         if (scale !== 1.0) {
             const scaledAccessors = new Set();
             
@@ -76,13 +78,13 @@ async function main() {
                         for (let i = 0; i < arr.length; i++) {
                             arr[i] *= scale;
                         }
-                        posAccessor.setArray(arr); // setArray() actualiza datos y recalcula automáticamente min/max bounds
+                        posAccessor.setArray(arr);
                         scaledAccessors.add(posAccessor);
                     }
                 }
             }
             
-            // 3b. Escalar Translation de todos los Nodos en la jerarquía
+            // 3b. Escalar Translation de nodos
             for (const node of document.getRoot().listNodes()) {
                 const t = node.getTranslation();
                 if (t[0] !== 0 || t[1] !== 0 || t[2] !== 0) {
@@ -93,16 +95,64 @@ async function main() {
             normalized = true;
         }
         
-        // 4. Escribir archivo de salida
+        // ── Paso 4: Optimización de meshes — Reducir draw calls ───────────
+        // Contar meshes antes de optimizar
+        const meshCountBefore = document.getRoot().listMeshes().length;
+        const nodeCountBefore = document.getRoot().listNodes().length;
+        
+        // Solo aplicar merge si el modelo tiene muchas meshes (umbral: >20)
+        // Esto evita tocar modelos ya optimizados innecesariamente
+        let meshMerged = false;
+        if (meshCountBefore > 20) {
+            // Descomprimir Draco antes de merge (join requiere geometría decodificada)
+            // Draco se re-aplica después por gltf-pipeline en el paso de optimización
+            const dracoExt = document.getRoot().listExtensionsUsed()
+                .find(ext => ext.extensionName === 'KHR_draco_mesh_compression');
+            if (dracoExt) dracoExt.dispose();
+            
+            // Silenciar logs de gltf-transform para no contaminar stdout con JSON
+            document.setLogger(new Logger(Logger.Verbosity.SILENT));
+            
+            // 4a. Flatten: colapsar jerarquía de nodos, bake transforms en vértices
+            await document.transform(flatten());
+            
+            // 4b. Join: fusionar meshes que comparten el mismo material en una sola
+            await document.transform(join());
+            
+            // 4c. Weld: unificar vértices duplicados en bordes compartidos
+            await document.transform(weld({ tolerance: 0.0001 }));
+            
+            // 4d. Dedup: eliminar accessors y buffers duplicados
+            await document.transform(dedup());
+            
+            // 4e. Prune: eliminar nodos, materiales y texturas huérfanos
+            await document.transform(prune());
+            
+            meshMerged = true;
+        }
+        
+        const meshCountAfter = document.getRoot().listMeshes().length;
+        const nodeCountAfter = document.getRoot().listNodes().length;
+        
+        // ── Paso 5: Escribir archivo de salida ────────────────────────────
         await io.write(outputPath, document);
         
-        // 5. Devolver JSON como stdout para ser capturado por el proceso principal
+        // ── Paso 6: Devolver JSON con métricas ────────────────────────────
         const response = {
             normalized,
             detectedUnit,
             scaleApplied: scale,
             originalMaxDim: maxDim,
-            finalMaxDim: maxDim * scale
+            finalMaxDim: maxDim * scale,
+            // Métricas de optimización de meshes
+            meshMerged,
+            meshCountBefore,
+            meshCountAfter,
+            nodeCountBefore,
+            nodeCountAfter,
+            drawCallReduction: meshMerged 
+                ? `${meshCountBefore} → ${meshCountAfter} (-${((1 - meshCountAfter / meshCountBefore) * 100).toFixed(0)}%)`
+                : 'N/A (ya optimizado)'
         };
         
         console.log(JSON.stringify(response));
@@ -115,3 +165,4 @@ async function main() {
 }
 
 main();
+

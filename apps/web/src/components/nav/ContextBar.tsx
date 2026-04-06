@@ -13,7 +13,8 @@ import { Tooltip } from '@/components/ui/Tooltip';
  * Solo muestra nombre, estado de cambios y referencias del contexto.
  */
 export const ContextBar: React.FC = () => {
-  const { project, setProjectName } = useEditorStore();
+  const project = useEditorStore(state => state.project);
+  const setProjectName = useEditorStore(state => state.setProjectName);
   const [isEditingName, setIsEditingName] = useState(false);
 
   return (

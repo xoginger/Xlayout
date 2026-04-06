@@ -13,6 +13,7 @@ import { SidePanelsLayer } from '@/components/editor/layers/SidePanelsLayer';
 import { useEditorStore } from '@/store/editor-store';
 import { useAutosave } from '@/hooks/useAutosave';
 import { useIntentEngine } from '@/hooks/useIntentEngine';
+import { useModelPreload } from '@/hooks/useModelPreload';
 import { CommandPalette } from '@/components/editor/CommandPalette';
 import { CatalogPanel } from '@/components/editor/CatalogPanel';
 import './editor-shell.css';
@@ -40,6 +41,9 @@ export const EditorShell: React.FC = () => {
 
   // ── Motor de Intención (Fase 4) — evalúa contexto cada 100ms ──
   useIntentEngine();
+
+  // ── Preload inteligente de modelos 3D ──
+  useModelPreload();
 
   // ── Guardar estado inicial en el historial ──
   React.useEffect(() => {

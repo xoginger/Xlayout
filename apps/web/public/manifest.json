@@ -1,0 +1,26 @@
+{
+  "name": "XLayout — Plataforma Profesional de Diseño",
+  "short_name": "XLayout",
+  "description": "Diseña, configura y cotiza espacios con precisión profesional",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#2e3339",
+  "theme_color": "#1D4ED8",
+  "icons": [
+    {
+      "src": "/xlayout-icon-x.svg",
+      "type": "image/svg+xml",
+      "sizes": "any"
+    },
+    {
+      "src": "/icon-192.png",
+      "type": "image/png",
+      "sizes": "192x192"
+    },
+    {
+      "src": "/icon-512.png",
+      "type": "image/png",
+      "sizes": "512x512"
+    }
+  ]
+}

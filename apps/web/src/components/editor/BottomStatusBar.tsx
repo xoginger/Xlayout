@@ -2,10 +2,12 @@
  * Creado y diseñado por XO
  */
 
-import React from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { useEditorStore } from '@/store/editor-store';
 import { useVersionInfo } from '@/hooks/useVersionInfo';
 import { useIntentStore } from '@/intent/intent-store';
+import { usePreloadStore } from '@/hooks/useModelPreload';
+import { ModelLoader } from '@/lib/model-loader';
 
 export const BottomStatusBar: React.FC = () => {
   const { activeTool, selectedIds, selectedType, gridSize, snapEnabled, advancedMode } = useEditorStore();
@@ -35,6 +37,30 @@ export const BottomStatusBar: React.FC = () => {
   const badgeText = versionInfo
     ? `${versionInfo.commit} · ${formatDate(versionInfo.buildDate)}`
     : '…';
+
+  /* Preload de modelos 3D */
+  const preloadActive = usePreloadStore((s) => s.active);
+  const preloadTotal = usePreloadStore((s) => s.total);
+  const preloadLoaded = usePreloadStore((s) => s.loaded);
+  const preloadFailed = usePreloadStore((s) => s.failed);
+
+  /* Métricas de caché 3D (actualizar cada 5s) */
+  const [cacheInfo, setCacheInfo] = useState('');
+  useEffect(() => {
+    const update = () => {
+      try {
+        const m = ModelLoader.getInstance().getMetrics();
+        if (m.cachedCount > 0) {
+          setCacheInfo(`${m.cachedCount} mod · ${m.estimatedMemoryMB}MB`);
+        } else {
+          setCacheInfo('');
+        }
+      } catch { setCacheInfo(''); }
+    };
+    update();
+    const iv = setInterval(update, 5000);
+    return () => clearInterval(iv);
+  }, [preloadActive]);
 
   return (
     <footer
@@ -110,15 +136,34 @@ export const BottomStatusBar: React.FC = () => {
 
       {/* ── Lado derecho: grid + snap + intent toggle + version ── */}
       <div className="flex items-center gap-4 h-full">
-        {/* Grid */}
-        <div className="flex items-center gap-1.5">
-          <span style={{ fontSize: '7px', color: 'var(--xo-text-ghost)', fontWeight: 'var(--xo-weight-bold)' }} className="uppercase tracking-widest">
+        {/* Grid con selector de precisión */}
+        <button
+          className="flex items-center gap-1.5 px-1.5 py-0.5 rounded cursor-pointer transition-all"
+          style={{
+            background: 'transparent',
+            border: '1px solid var(--xo-border)',
+            fontSize: '7px',
+            fontWeight: 800,
+            color: 'var(--xo-text-muted)',
+            textTransform: 'uppercase' as const,
+            letterSpacing: 'var(--xo-tracking-wide)',
+          }}
+          title="Clic para cambiar precisión de la rejilla"
+          onClick={() => {
+            // Ciclar entre precisiones: 1cm → 5cm → 10cm → 25cm → 50cm → 1cm
+            const presets = [0.01, 0.05, 0.10, 0.25, 0.50];
+            const idx = presets.findIndex(p => Math.abs(p - gridSize) < 0.001);
+            const next = presets[(idx + 1) % presets.length];
+            useEditorStore.getState().setGridSize(next);
+          }}
+        >
+          <span style={{ fontSize: '7px', color: 'var(--xo-text-ghost)', fontWeight: 800 }} className="uppercase tracking-widest">
             Grid
           </span>
-          <span style={{ fontSize: 'var(--xo-text-2xs)', color: 'var(--xo-text-muted)', fontFamily: 'var(--xo-font-mono)', fontWeight: 'var(--xo-weight-bold)' }}>
-            {(gridSize * 100).toFixed(0)}cm
+          <span style={{ fontSize: 'var(--xo-text-2xs)', color: 'var(--xo-primary)', fontFamily: 'var(--xo-font-mono)', fontWeight: 900 }}>
+            {gridSize >= 0.01 && gridSize < 0.1 ? `${(gridSize * 100).toFixed(0)}cm` : `${(gridSize * 100).toFixed(0)}cm`}
           </span>
-        </div>
+        </button>
 
         {/* Snap */}
         <div className="flex items-center gap-1.5">
@@ -129,6 +174,37 @@ export const BottomStatusBar: React.FC = () => {
             {snapEnabled ? 'ON' : 'OFF'}
           </span>
         </div>
+
+        {/* Preload de modelos 3D */}
+        {preloadActive && (
+          <div
+            className="flex items-center gap-1.5 px-2 py-0.5 rounded"
+            style={{
+              background: 'rgba(16, 185, 129, 0.08)',
+              border: '1px solid rgba(16, 185, 129, 0.15)',
+            }}
+          >
+            <span
+              className="w-1.5 h-1.5 rounded-full animate-pulse"
+              style={{ background: 'var(--xo-success)' }}
+            />
+            <span
+              style={{ fontSize: 'var(--xo-text-2xs)', color: 'var(--xo-success)', fontWeight: 'var(--xo-weight-black)', letterSpacing: 'var(--xo-tracking-wide)' }}
+              className="uppercase"
+            >
+              Modelos {preloadLoaded}/{preloadTotal}
+            </span>
+          </div>
+        )}
+
+        {/* Caché 3D info */}
+        {!preloadActive && cacheInfo && (
+          <div className="flex items-center gap-1">
+            <span style={{ fontSize: '7px', color: 'var(--xo-text-ghost)', fontFamily: 'var(--xo-font-mono)' }}>
+              📦 {cacheInfo}
+            </span>
+          </div>
+        )}
 
         {/* Toggle Intent Engine */}
         <button

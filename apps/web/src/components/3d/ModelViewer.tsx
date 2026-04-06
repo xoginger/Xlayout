@@ -10,12 +10,13 @@
 
 import React, { Suspense, useRef, useEffect } from 'react';
 import { Canvas, useThree } from '@react-three/fiber';
-import { OrbitControls, useGLTF, Center, Grid, Environment } from '@react-three/drei';
+import { OrbitControls, Center, Grid, Environment } from '@react-three/drei';
+import { useOptimizedModelSuspense } from '@/hooks/useOptimizedModel';
 import * as THREE from 'three';
 
 // ─── Componente interno: carga y muestra el modelo GLB ────────────────────────
 const Model: React.FC<{ url: string }> = ({ url }) => {
-  const { scene } = useGLTF(url);
+  const gltf = useOptimizedModelSuspense(url);
   const { camera } = useThree();
   const groupRef = useRef<THREE.Group>(null);
 
@@ -33,12 +34,12 @@ const Model: React.FC<{ url: string }> = ({ url }) => {
     camera.position.set(center.x + distance * 0.5, center.y + distance * 0.3, center.z + distance);
     camera.lookAt(center);
     camera.updateProjectionMatrix();
-  }, [scene, camera]);
+  }, [gltf.scene, camera]);
 
   return (
     <Center>
       <group ref={groupRef}>
-        <primitive object={scene.clone()} />
+        <primitive object={gltf.scene.clone()} />
       </group>
     </Center>
   );

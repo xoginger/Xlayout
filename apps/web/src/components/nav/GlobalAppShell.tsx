@@ -1,5 +1,9 @@
 /**
  * Creado y diseñado por XO
+ * GlobalAppShell
+ * ─────────────────────────────────────────────────────────────────────────────
+ * Shell wrapper que provee RouteGuard + GlobalHeader para rutas protegidas.
+ * Se usa desde los layouts de /site y /studio para rutas que requieren auth.
  */
 
 "use client";
@@ -30,22 +34,14 @@ export function GlobalAppShell({ children }: GlobalAppShellProps) {
     setMounted(true);
   }, []);
 
-  // Rutas que no llevan el navegador persistente (públicas o de aterrizaje)
-  const isPublicRoute = pathname === '/' || pathname.startsWith('/login') || pathname.startsWith('/register');
-
   if (!mounted) {
-    return <div className="min-h-screen w-full bg-white" />; // Evitar flashes
-  }
-
-  if (isPublicRoute) {
-    return <>{children}</>;
+    return <div className="min-h-screen w-full bg-white" />;
   }
 
   return (
     <RouteGuard>
       <div className="flex h-screen w-screen flex-col overflow-hidden bg-white text-zinc-800 font-sans selection:bg-blue-500/30">
         <GlobalHeader pathname={pathname} />
-        {/* El main container cede toda el area a sus children */}
         <div className="flex flex-1 min-h-0 overflow-hidden relative">
           {children}
         </div>
@@ -53,4 +49,3 @@ export function GlobalAppShell({ children }: GlobalAppShellProps) {
     </RouteGuard>
   );
 }
-

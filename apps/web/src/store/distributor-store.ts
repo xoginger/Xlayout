@@ -16,6 +16,7 @@ export interface DistributorCompany {
   phone?: string;
   country?: string;
   status: 'ACTIVE' | 'INACTIVE' | 'SUSPENDED';
+  plan: 'STANDARD' | 'PRO'; // Plan del distribuidor — controla capacidades comerciales
   // Contadores de usuarios y accesos (devueltos por el backend con _count)
   _count?: {
     users: number;
@@ -46,6 +47,16 @@ export interface DistributorMarkup {
   active: boolean;
 }
 
+// Resumen del modelo comercial entre Fabricante y Distribuidor
+export interface DistributorRelationshipSummary {
+  distributorId: string;
+  tenantId: string;
+  allowedPriceLists: string[];
+  defaultPriceList: string;
+  globalDiscountPercent: number;
+  hasAccess: boolean;
+}
+
 interface DistributorStore {
   distributors: DistributorCompany[];
   selectedDistributor: DistributorCompany | null;
@@ -57,7 +68,16 @@ interface DistributorStore {
   fetchDistributor: (id: string) => Promise<any>;
   // Crear un nuevo distribuidor
   createDistributor: (data: Partial<DistributorCompany>) => Promise<DistributorCompany>;
-  // Autorizar a un distribuidor para acceder al catálogo del fabricante actual
+  // Obtener resumen de relación (Listas y Descuentos)
+  fetchRelationshipSummary: (distributorId: string, tenantId: string) => Promise<DistributorRelationshipSummary>;
+  
+  // Asignar Listas de Precio Permitidas (API: ManufacturerDistributorService)
+  assignAllowedPriceLists: (distributorId: string, priceLists: Array<{ priceListType: string; isDefault?: boolean }>) => Promise<any>;
+  
+  // Asignar Descuento Comercial Global (API: ManufacturerDistributorService)
+  assignDiscount: (distributorId: string, data: { discountPercent: number; scope?: 'GLOBAL' | 'BY_LINE' | 'BY_PRODUCT'; productLineId?: string; productId?: string }) => Promise<any>;
+
+  // Autorizar a un distribuidor para acceder al catálogo del fabricante actual (Legacy, a punto de ser deprecado)
   grantCatalogAccess: (distributorId: string, priceListType: string, notes?: string) => Promise<DistributorCatalogAccess>;
   // Revocar acceso al catálogo
   revokeCatalogAccess: (distributorId: string) => Promise<void>;
@@ -100,6 +120,18 @@ export const useDistributorStore = create<DistributorStore>((set) => ({
       distributors: [newDistributor, ...state.distributors],
     }));
     return newDistributor;
+  },
+
+  fetchRelationshipSummary: async (distributorId, tenantId) => {
+    return api.get<DistributorRelationshipSummary>(`/distributors/${distributorId}/relationship/${tenantId}`);
+  },
+
+  assignAllowedPriceLists: async (distributorId, priceLists) => {
+    return api.post(`/distributors/${distributorId}/allowed-price-lists`, { priceLists });
+  },
+
+  assignDiscount: async (distributorId, data) => {
+    return api.post(`/distributors/${distributorId}/discount`, data);
   },
 
   grantCatalogAccess: async (distributorId, priceListType, notes) => {

@@ -366,7 +366,7 @@ export const useEditorStore = create<EditorState>((set, get) => ({
   selectedType: null,
   activeTool: 'select',
   viewMode: '2D',
-  gridSize: 0.5,
+  gridSize: 0.05,
   snapEnabled: true,
   showGrid: true,
   catalogPanelState: 'hidden' as const,

@@ -1,11 +1,12 @@
 /**
  * Creado y diseñado por XO
- * XLayout System — Servicio de Importaciones
+ * XLayout System — Servicio de Importaciones v2
  *
- * Encola trabajos de importación CSV en BullMQ y registra en la base de datos.
+ * Encola trabajos de importación CSV/XLSX en BullMQ y registra en la base de datos.
+ * Soporta modo dry-run (preview) para análisis previo sin escritura.
  */
 
-import { Injectable } from '@nestjs/common';
+import { Injectable, Logger } from '@nestjs/common';
 import { InjectQueue } from '@nestjs/bullmq';
 import { Queue } from 'bullmq';
 import { PrismaService } from '../prisma/prisma.service';
@@ -24,40 +25,58 @@ export class ImportsService {
    * @param fileUrl - Ruta del archivo subido o URL remota
    * @param originalName - Nombre original del archivo
    * @param userId - ID del usuario que inició la importación
+   * @param dryRun - Si es true, solo analiza sin escribir en DB
    */
   async triggerImport(
     tenantId: string,
-    type: 'catalog' | 'prices' | 'conditions',
+    type: 'catalog' | 'prices' | 'conditions' | 'commercial-relations',
     fileUrl: string,
     originalName: string,
     userId: string,
+    dryRun: boolean = false,
   ) {
+    // Generar ID único para el job de importación
+    const jobId = crypto.randomUUID();
+
     // Encolar en BullMQ
     const job = await this.importsQueue.add('process-import', {
       tenantId,
       type,
       fileUrl,
       originalName,
+      dryRun,
+      jobId,
       timestamp: Date.now()
     });
 
     // Registrar en base de datos para historial
-    await this.prisma.client.importJob.create({
-      data: {
-        id: job.id,
-        tenantId,
-        type: type.toUpperCase(),
-        filename: originalName,
-        status: 'PENDING',
-        createdById: userId,
+    // Solo registrar si no es dry-run (preview no se guarda en historial)
+    if (!dryRun) {
+      try {
+        await this.prisma.client.importJob.create({
+          data: {
+            id: jobId,
+            tenantId,
+            type: type.toUpperCase(),
+            filename: originalName,
+            status: 'PENDING',
+            createdById: userId,
+          }
+        });
+      } catch (err: any) {
+        // Si falla el registro en BD, loguear pero no bloquear la importación
+        Logger.error(`Error registrando ImportJob en BD: ${err.message}`, 'ImportsService');
       }
-    });
+    }
 
     return {
-      message: 'Importación encolada exitosamente',
-      jobId: job.id,
+      message: dryRun
+        ? 'Análisis previo encolado. Se procesará en breve.'
+        : 'Importación encolada exitosamente',
+      jobId,
       type,
       filename: originalName,
+      dryRun,
     };
   }
 

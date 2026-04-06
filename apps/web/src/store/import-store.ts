@@ -1,5 +1,9 @@
 /**
  * Creado y diseñado por XO
+ * XLayout System — Store de Importaciones
+ *
+ * Estado global para el módulo de importaciones masivas.
+ * Conecta con los endpoints /imports del backend.
  */
 
 "use client";
@@ -7,14 +11,35 @@
 import { create } from 'zustand';
 import { api } from '@/lib/api';
 
+// Resumen detallado de una importación
+export interface ImportSummary {
+  success: boolean;
+  type: string;
+  dryRun: boolean;
+  total: number;
+  succeeded: number;
+  failed: number;
+  created: number;
+  updated: number;
+  variantsCreated: number;
+  linesCreated: string[];
+  categoriesCreated: string[];
+  errors: string[];
+  warnings: string[];
+  error?: string;
+}
+
+// Job de importación
 export interface ImportJob {
   id: string;
+  tenantId: string;
+  type: string;
   filename: string;
   status: 'PENDING' | 'PROCESSING' | 'COMPLETED' | 'FAILED';
-  totalRows: number;
-  processedRows: number;
-  errorLog?: string;
+  summary: ImportSummary | null;
+  createdById: string;
   createdAt: string;
+  updatedAt: string;
 }
 
 interface ImportState {
@@ -22,7 +47,9 @@ interface ImportState {
   isLoading: boolean;
 
   fetchJobs: () => Promise<void>;
-  createJob: (formData: FormData) => Promise<ImportJob>;
+  uploadFile: (formData: FormData) => Promise<{ jobId: string; message: string }>;
+  previewFile: (formData: FormData) => Promise<{ jobId: string; message: string }>;
+  getJobStatus: (jobId: string) => Promise<any>;
 }
 
 export const useImportStore = create<ImportState>((set) => ({
@@ -32,22 +59,34 @@ export const useImportStore = create<ImportState>((set) => ({
   fetchJobs: async () => {
     set({ isLoading: true });
     try {
-      const jobs = await api.get<ImportJob[]>('/import-jobs');
-      set({ jobs, isLoading: false });
-    } catch (err) {
+      const jobs = await api.get<ImportJob[]>('/imports');
+      set({ jobs: Array.isArray(jobs) ? jobs : [], isLoading: false });
+    } catch {
       set({ isLoading: false });
     }
   },
 
-  createJob: async (formData) => {
+  uploadFile: async (formData) => {
     set({ isLoading: true });
     try {
-      const newJob = await api.post<ImportJob>('/import-jobs', formData);
-      set((state) => ({ jobs: [newJob, ...state.jobs], isLoading: false }));
-      return newJob;
-    } catch (err) {
+      const result = await api.post<{ jobId: string; message: string }>('/imports/upload', formData);
+      return result;
+    } finally {
       set({ isLoading: false });
-      throw err;
     }
-  }
+  },
+
+  previewFile: async (formData) => {
+    set({ isLoading: true });
+    try {
+      const result = await api.post<{ jobId: string; message: string }>('/imports/preview', formData);
+      return result;
+    } finally {
+      set({ isLoading: false });
+    }
+  },
+
+  getJobStatus: async (jobId: string) => {
+    return api.get(`/imports/${jobId}/status`);
+  },
 }));

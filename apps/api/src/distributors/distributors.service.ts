@@ -22,10 +22,13 @@ export class DistributorsService {
     contactEmail?: string;
     phone?: string;
     country?: string;
+    plan?: 'STANDARD' | 'PRO';
+    status?: 'ACTIVE' | 'INACTIVE' | 'PENDING';
+    slug?: string;
     metadata?: any;
   }) {
-    // Genera un slug único a partir del nombre
-    const slug = data.name
+    // Genera un slug único a partir del nombre o usa el provisto
+    const slug = data.slug || data.name
       .toLowerCase()
       .normalize('NFD')
       .replace(/[\u0300-\u036f]/g, '')
@@ -34,7 +37,13 @@ export class DistributorsService {
 
     return this.prisma.client.distributorCompany.create({
       data: {
-        ...data,
+        name: data.name,
+        contactEmail: data.contactEmail,
+        phone: data.phone,
+        country: data.country,
+        plan: (data.plan as any) || 'STANDARD',
+        status: (data.status as any) || 'ACTIVE',
+        metadata: data.metadata,
         slug,
       },
     });
@@ -53,7 +62,7 @@ export class DistributorsService {
     });
   }
 
-  /** Obtiene un distribuidor por ID */
+  /** Obtiene un distribuidor por ID con toda su información comercial */
   async findOne(id: string) {
     const distributor = await this.prisma.client.distributorCompany.findUnique({
       where: { id },
@@ -80,6 +89,24 @@ export class DistributorsService {
             tenant: { select: { id: true, name: true } },
           },
         },
+        allowedPriceLists: {
+          where: { active: true },
+          include: {
+            tenant: { select: { id: true, name: true } },
+          },
+        },
+        discounts: {
+          where: { active: true },
+          include: {
+            tenant: { select: { id: true, name: true } },
+          },
+        },
+        proPricingRules: {
+          where: { active: true },
+          orderBy: { priority: 'desc' },
+        },
+        brandingConfig: true,
+        // Legacy
         priceMarkups: {
           where: { active: true },
           orderBy: { priority: 'desc' },
@@ -99,13 +126,14 @@ export class DistributorsService {
       contactEmail: string;
       phone: string;
       country: string;
+      plan: 'STANDARD' | 'PRO';
       metadata: any;
     }>,
   ) {
     await this.findOne(id);
     return this.prisma.client.distributorCompany.update({
       where: { id },
-      data,
+      data: data as any,
     });
   }
 
@@ -113,12 +141,13 @@ export class DistributorsService {
 
   /**
    * El fabricante (tenantId) autoriza a un distribuidor para acceder a su catálogo.
-   * Además define qué lista de precios recibirá.
+   * Crea el acceso macro Y registra las listas permitidas.
    */
   async grantAccess(
     tenantId: string,
     distributorId: string,
-    priceListType: string = 'A',
+    priceListTypes: string[] = ['A'],
+    defaultPriceList: string = 'A',
     notes?: string,
     expiresAt?: Date,
   ) {
@@ -132,10 +161,12 @@ export class DistributorsService {
     const tenant = await this.prisma.client.tenant.findUnique({ where: { id: tenantId } });
     if (!tenant) throw new NotFoundException('Fabricante no encontrado');
 
-    // Validar tipo de lista de precio
+    // Validar tipos de lista
     const validPriceTypes = ['A', 'B', 'C', 'D', 'E'];
-    if (!validPriceTypes.includes(priceListType.toUpperCase())) {
-      throw new BadRequestException(`Tipo de lista de precio inválido: ${priceListType}. Use A, B, C, D o E.`);
+    for (const pt of priceListTypes) {
+      if (!validPriceTypes.includes(pt.toUpperCase())) {
+        throw new BadRequestException(`Tipo de lista inválido: ${pt}. Use A, B, C, D o E.`);
+      }
     }
 
     // Crear o actualizar el acceso macro (ManufacturerDistributorAccess)
@@ -144,39 +175,90 @@ export class DistributorsService {
     });
 
     if (existingAccess) {
-      // Reactivar si estaba inactivo
       await this.prisma.client.manufacturerDistributorAccess.update({
         where: { tenantId_distributorId: { tenantId, distributorId } },
-        data: { active: true, notes, expiresAt },
+        data: {
+          active: true,
+          defaultPriceList: defaultPriceList.toUpperCase(),
+          notes,
+          expiresAt,
+        },
       });
     } else {
       await this.prisma.client.manufacturerDistributorAccess.create({
-        data: { tenantId, distributorId, active: true, notes, expiresAt },
+        data: {
+          tenantId,
+          distributorId,
+          active: true,
+          defaultPriceList: defaultPriceList.toUpperCase(),
+          notes,
+          expiresAt,
+        },
       });
     }
 
-    // Crear o actualizar el acceso de catálogo con lista de precio asignada
+    // Crear registros de listas permitidas
+    for (const pt of priceListTypes) {
+      const priceListType = pt.toUpperCase();
+      const existing = await this.prisma.client.manufacturerDistributorAllowedPriceList.findUnique({
+        where: {
+          tenantId_distributorId_priceListType: {
+            tenantId,
+            distributorId,
+            priceListType,
+          },
+        },
+      });
+
+      if (existing) {
+        await this.prisma.client.manufacturerDistributorAllowedPriceList.update({
+          where: { id: existing.id },
+          data: {
+            active: true,
+            isDefault: priceListType === defaultPriceList.toUpperCase(),
+          },
+        });
+      } else {
+        await this.prisma.client.manufacturerDistributorAllowedPriceList.create({
+          data: {
+            tenantId,
+            distributorId,
+            priceListType,
+            isDefault: priceListType === defaultPriceList.toUpperCase(),
+            active: true,
+          },
+        });
+      }
+    }
+
+    // Mantener compatibilidad con DistributorCatalogAccess (legacy)
     const existingCatalogAccess = await this.prisma.client.distributorCatalogAccess.findUnique({
       where: { distributorId_tenantId: { distributorId, tenantId } },
     });
 
     if (existingCatalogAccess) {
-      return this.prisma.client.distributorCatalogAccess.update({
+      await this.prisma.client.distributorCatalogAccess.update({
         where: { distributorId_tenantId: { distributorId, tenantId } },
-        data: { active: true, priceListType: priceListType.toUpperCase() },
-        include: { tenant: true, distributor: true },
+        data: { active: true, priceListType: defaultPriceList.toUpperCase() },
+      });
+    } else {
+      await this.prisma.client.distributorCatalogAccess.create({
+        data: {
+          distributorId,
+          tenantId,
+          priceListType: defaultPriceList.toUpperCase(),
+          active: true,
+        },
       });
     }
 
-    return this.prisma.client.distributorCatalogAccess.create({
-      data: {
-        distributorId,
-        tenantId,
-        priceListType: priceListType.toUpperCase(),
-        active: true,
-      },
-      include: { tenant: true, distributor: true },
-    });
+    return {
+      message: 'Acceso otorgado correctamente',
+      tenantId,
+      distributorId,
+      allowedPriceLists: priceListTypes.map(pt => pt.toUpperCase()),
+      defaultPriceList: defaultPriceList.toUpperCase(),
+    };
   }
 
   /** Revoca el acceso de un distribuidor al catálogo de un fabricante */
@@ -185,9 +267,21 @@ export class DistributorsService {
     await this.prisma.client.manufacturerDistributorAccess.update({
       where: { tenantId_distributorId: { tenantId, distributorId } },
       data: { active: false },
-    }).catch(() => null); // No lanzar error si no existe
+    }).catch(() => null);
 
-    // Desactivar acceso de catálogo
+    // Desactivar listas permitidas
+    await this.prisma.client.manufacturerDistributorAllowedPriceList.updateMany({
+      where: { tenantId, distributorId },
+      data: { active: false },
+    });
+
+    // Desactivar descuentos
+    await this.prisma.client.manufacturerDistributorDiscount.updateMany({
+      where: { tenantId, distributorId },
+      data: { active: false },
+    });
+
+    // Desactivar acceso de catálogo (legacy)
     await this.prisma.client.distributorCatalogAccess.update({
       where: { distributorId_tenantId: { distributorId, tenantId } },
       data: { active: false },
@@ -204,13 +298,13 @@ export class DistributorsService {
         distributor: {
           include: {
             _count: { select: { users: true } },
-            catalogAccesses: {
+            allowedPriceLists: {
               where: { tenantId, active: true },
-              select: { priceListType: true },
+              select: { priceListType: true, isDefault: true },
             },
-            priceMarkups: {
-              where: { active: true, tenantId },
-              select: { scope: true, markupPercent: true, priority: true },
+            discounts: {
+              where: { tenantId, active: true },
+              select: { scope: true, discountPercent: true, productLineId: true, productId: true },
             },
           },
         },
@@ -219,9 +313,146 @@ export class DistributorsService {
     });
   }
 
-  // ─── Gestión de Markup de Precios ─────────────────────────────────────────
+  // ─── Reglas de Pricing PRO ────────────────────────────────────────────────
 
-  /** Crea o actualiza una regla de markup para un distribuidor */
+  /**
+   * Crea una regla de pricing PRO para un distribuidor.
+   * Solo distribuidores con plan PRO pueden tener estas reglas.
+   */
+  async setProPricingRule(
+    distributorId: string,
+    data: {
+      scope: 'GLOBAL' | 'BY_TENANT' | 'BY_LINE' | 'BY_PRODUCT';
+      markupPercent: number;
+      tenantId?: string;
+      productLineId?: string;
+      productId?: string;
+      priority?: number;
+    },
+  ) {
+    // Validar que el distribuidor es PRO
+    const distributor = await this.prisma.client.distributorCompany.findUnique({
+      where: { id: distributorId },
+    });
+    if (!distributor) throw new NotFoundException('Distribuidor no encontrado');
+    if (distributor.plan !== 'PRO') {
+      throw new ForbiddenException('Solo distribuidores PRO pueden crear reglas de pricing propias');
+    }
+
+    // Validar que el markup no sea negativo (aunque el piso mínimo lo protege)
+    if (data.markupPercent < 0) {
+      throw new BadRequestException('El incremento de precio no puede ser negativo');
+    }
+
+    return this.prisma.client.distributorProPricingRule.create({
+      data: {
+        distributorId,
+        scope: data.scope as any,
+        markupPercent: data.markupPercent,
+        tenantId: data.tenantId || null,
+        productLineId: data.productLineId || null,
+        productId: data.productId || null,
+        priority: data.priority ?? 0,
+        active: true,
+      },
+    });
+  }
+
+  /** Desactiva una regla de pricing PRO */
+  async deactivateProPricingRule(distributorId: string, ruleId: string) {
+    const rule = await this.prisma.client.distributorProPricingRule.findUnique({
+      where: { id: ruleId },
+    });
+    if (!rule || rule.distributorId !== distributorId) {
+      throw new ForbiddenException('No autorizado para modificar esta regla');
+    }
+    return this.prisma.client.distributorProPricingRule.update({
+      where: { id: ruleId },
+      data: { active: false },
+    });
+  }
+
+  // ─── Branding PRO ─────────────────────────────────────────────────────────
+
+  /** Obtiene o crea la configuración de branding de un distribuidor PRO */
+  async upsertBranding(
+    distributorId: string,
+    data: Partial<{
+      logoUrl: string;
+      companyName: string;
+      primaryColor: string;
+      accentColor: string;
+      address: string;
+      phone: string;
+      email: string;
+      rfc: string;
+      website: string;
+    }>,
+  ) {
+    const distributor = await this.prisma.client.distributorCompany.findUnique({
+      where: { id: distributorId },
+    });
+    if (!distributor) throw new NotFoundException('Distribuidor no encontrado');
+    if (distributor.plan !== 'PRO') {
+      throw new ForbiddenException('Solo distribuidores PRO pueden configurar branding propio');
+    }
+
+    const existing = await this.prisma.client.distributorBrandingConfig.findUnique({
+      where: { distributorId },
+    });
+
+    if (existing) {
+      return this.prisma.client.distributorBrandingConfig.update({
+        where: { distributorId },
+        data,
+      });
+    }
+
+    return this.prisma.client.distributorBrandingConfig.create({
+      data: { distributorId, ...data },
+    });
+  }
+
+  // ─── Mapa de catálogos accesibles ─────────────────────────────────────────
+
+  /**
+   * Obtiene los catálogos accesibles por un distribuidor, con las listas permitidas.
+   * Devuelve un mapa: tenantId → { defaultPriceList, allowedLists, discountPercent }
+   */
+  async getDistributorCatalogMap(distributorId: string) {
+    const accesses = await this.prisma.client.manufacturerDistributorAccess.findMany({
+      where: { distributorId, active: true },
+      include: {
+        tenant: { select: { id: true, name: true } },
+      },
+    });
+
+    const map = new Map<string, {
+      defaultPriceList: string;
+      allowedLists: string[];
+      tenantName: string;
+    }>();
+
+    for (const access of accesses) {
+      const allowedLists = await this.prisma.client.manufacturerDistributorAllowedPriceList.findMany({
+        where: { tenantId: access.tenantId, distributorId, active: true },
+      });
+
+      map.set(access.tenantId, {
+        defaultPriceList: access.defaultPriceList || 'A',
+        allowedLists: allowedLists.length > 0
+          ? allowedLists.map((l: any) => l.priceListType)
+          : [access.defaultPriceList || 'A'],
+        tenantName: access.tenant.name,
+      });
+    }
+
+    return map;
+  }
+
+  // ─── Legacy — compatibilidad con DistributorPriceMarkup ────────────────
+
+  /** Crea una regla de markup (legacy) para un distribuidor */
   async setMarkup(
     distributorId: string,
     data: {
@@ -233,7 +464,6 @@ export class DistributorsService {
       priority?: number;
     },
   ) {
-    // Validar que el markup no sea negativo
     if (data.markupPercent < 0) {
       throw new BadRequestException('El incremento de precio no puede ser negativo');
     }
@@ -241,7 +471,7 @@ export class DistributorsService {
     return this.prisma.client.distributorPriceMarkup.create({
       data: {
         distributorId,
-        scope: data.scope,
+        scope: data.scope as any,
         markupPercent: data.markupPercent,
         tenantId: data.tenantId || null,
         productLineId: data.productLineId || null,
@@ -252,7 +482,7 @@ export class DistributorsService {
     });
   }
 
-  /** Desactiva una regla de markup */
+  /** Desactiva una regla de markup (legacy) */
   async deactivateMarkup(distributorId: string, markupId: string) {
     const markup = await this.prisma.client.distributorPriceMarkup.findUnique({
       where: { id: markupId },
@@ -264,63 +494,5 @@ export class DistributorsService {
       where: { id: markupId },
       data: { active: false },
     });
-  }
-
-  /** 
-   * Calcula el precio final para un producto según las reglas de markup del distribuidor.
-   * Prioridad: BY_PRODUCT > BY_LINE > BY_TENANT > GLOBAL
-   */
-  async calculateFinalPrice(
-    distributorId: string,
-    basePrice: number,
-    context: { tenantId: string; productId: string; productLineId: string },
-  ): Promise<number> {
-    // Obtener todas las reglas activas del distribuidor
-    const markups = await this.prisma.client.distributorPriceMarkup.findMany({
-      where: { distributorId, active: true },
-      orderBy: { priority: 'desc' },
-    });
-
-    // Encontrar la regla de mayor prioridad que aplique al contexto
-    let applicableMarkup = null;
-
-    for (const markup of markups) {
-      if (markup.scope === 'BY_PRODUCT' && markup.productId === context.productId) {
-        applicableMarkup = markup;
-        break;
-      }
-      if (markup.scope === 'BY_LINE' && markup.productLineId === context.productLineId) {
-        applicableMarkup = markup;
-        break;
-      }
-      if (markup.scope === 'BY_TENANT' && markup.tenantId === context.tenantId) {
-        applicableMarkup = markup;
-        break;
-      }
-      if (markup.scope === 'GLOBAL' && !applicableMarkup) {
-        applicableMarkup = markup;
-        // No break — puede haber reglas de mayor prioridad
-      }
-    }
-
-    if (!applicableMarkup) return basePrice;
-
-    // Precio final = precioBase * (1 + markupPercent / 100)
-    const percent = Number(applicableMarkup.markupPercent);
-    return basePrice * (1 + percent / 100);
-  }
-
-  /**
-   * Obtiene los catálogos accesibles por un distribuidor, con la lista de precios asignada.
-   * Devuelve un mapa: tenantId → priceListType
-   */
-  async getDistributorCatalogMap(distributorId: string): Promise<Map<string, string>> {
-    const accesses = await this.prisma.client.distributorCatalogAccess.findMany({
-      where: { distributorId, active: true },
-    });
-
-    const map = new Map<string, string>();
-    accesses.forEach((a: { tenantId: string; priceListType: string }) => map.set(a.tenantId, a.priceListType));
-    return map;
   }
 }

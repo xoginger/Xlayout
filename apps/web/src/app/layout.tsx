@@ -1,3 +1,8 @@
+/**
+ * Creado y diseñado por XO
+ * XLayout — Layout raíz con identidad visual oficial
+ */
+
 import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
@@ -12,11 +17,18 @@ const geistMono = Geist_Mono({
   subsets: ["latin"],
 });
 
-import { GlobalAppShell } from "@/components/nav/GlobalAppShell";
-
 export const metadata: Metadata = {
-  title: "XLayout - Editor Profesional",
-  description: "Plataforma profesional para diseño de layouts en 2D y 3D.",
+  title: "XLayout — Plataforma Profesional de Diseño",
+  description: "Diseña, configura y cotiza espacios con precisión profesional. Catálogos conectados, editor CAD en 2D y 3D, y operación comercial integrada.",
+  manifest: '/manifest.json',
+  themeColor: '#1D4ED8',
+  icons: {
+    icon: [
+      { url: '/xlayout-icon-x.svg', type: 'image/svg+xml' },
+      { url: '/favicon.ico', sizes: '32x32' },
+    ],
+    apple: '/apple-touch-icon.png',
+  },
 };
 
 export default function RootLayout({
@@ -29,7 +41,7 @@ export default function RootLayout({
       <body
         className={`${geistSans.variable} ${geistMono.variable} antialiased`}
       >
-        <GlobalAppShell>{children}</GlobalAppShell>
+        {children}
       </body>
     </html>
   );

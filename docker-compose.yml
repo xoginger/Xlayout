@@ -13,8 +13,9 @@ services:
       POSTGRES_USER: xlayout_user
       POSTGRES_PASSWORD: xlayout_password
       POSTGRES_DB: xlayout_db
-    ports:
-      - "5432:5432"
+    # SEGURIDAD: No exponer al host — solo accesible dentro de la red Docker
+    # ports:
+    #   - "5432:5432"
     volumes:
       - xlayout_pgdata:/var/lib/postgresql/data
     networks:
@@ -30,8 +31,9 @@ services:
   redis:
     image: redis:7-alpine
     container_name: xlayout_redis
-    ports:
-      - "6379:6379"
+    # SEGURIDAD: No exponer al host — solo accesible dentro de la red Docker
+    # ports:
+    #   - "6379:6379"
     networks:
       - xlayout_net
     restart: always

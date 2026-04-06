@@ -29,7 +29,7 @@ export interface AlignmentGuide {
 /**
  * Umbral en metros para que una guía sea considerada activa
  */
-const GUIDE_THRESHOLD = 0.08;
+const GUIDE_THRESHOLD = 0.03;
 
 /**
  * Calcula los bordes (AABB) de un SceneItem en coordenadas mundo

@@ -3,91 +3,82 @@
  * route-permissions.ts
  * ─────────────────────────────────────────────────────────────────────────────
  * Matriz centralizada de permisos por ruta y helpers de autorización.
- * Fuente de verdad para protección de rutas en frontend.
+ * Soporta las rutas /site/* y /studio/* del middleware de dominio,
+ * así como las rutas públicas del usuario.
  */
-
-// ─── Tipos ──────────────────────────────────────────────────────────────────
 
 type UserType = 'PLATFORM_USER' | 'COMPANY_USER' | 'DISTRIBUTOR_USER' | 'END_USER';
 type DistributorRole = 'DISTRIBUTOR_ADMIN' | 'DESIGNER' | 'SALES';
 
 interface RouteRule {
-  /** Prefijo de la ruta a proteger */
   prefix: string;
-  /** Tipos de usuario permitidos */
   allowedUserTypes: UserType[];
-  /** Roles internos permitidos (si aplica para DISTRIBUTOR_USER) */
   allowedDistributorRoles?: DistributorRole[];
 }
 
-// ─── Reglas de ruta (orden importa: más específicas primero) ────────────────
+// ─── Reglas de ruta (las rutas pueden venir con o sin prefijo /site /studio) ──
 
 const ROUTE_RULES: RouteRule[] = [
-  // Rutas de plataforma — solo PLATFORM_USER
+  // Rutas de plataforma
   { prefix: '/admin/platform', allowedUserTypes: ['PLATFORM_USER'] },
-
-  // Rutas de empresa/fabricante — PLATFORM_USER y COMPANY_USER
+  // Rutas de empresa/fabricante
   { prefix: '/admin/company', allowedUserTypes: ['PLATFORM_USER', 'COMPANY_USER'] },
-
-  // Rutas de distribuidor — restricciones por sub-rol
+  // Rutas de distribuidor
   { prefix: '/admin/distributor/markup', allowedUserTypes: ['PLATFORM_USER', 'DISTRIBUTOR_USER'], allowedDistributorRoles: ['DISTRIBUTOR_ADMIN'] },
   { prefix: '/admin/distributor/designers', allowedUserTypes: ['PLATFORM_USER', 'DISTRIBUTOR_USER'], allowedDistributorRoles: ['DISTRIBUTOR_ADMIN'] },
   { prefix: '/admin/distributor', allowedUserTypes: ['PLATFORM_USER', 'DISTRIBUTOR_USER'] },
-
-  // Editor — todos menos END_USER
+  // Editor y workspace
   { prefix: '/editor', allowedUserTypes: ['PLATFORM_USER', 'COMPANY_USER', 'DISTRIBUTOR_USER'] },
-
-  // Proyectos — todos menos END_USER
+  { prefix: '/workspace', allowedUserTypes: ['PLATFORM_USER', 'COMPANY_USER', 'DISTRIBUTOR_USER'] },
+  // Proyectos
   { prefix: '/projects', allowedUserTypes: ['PLATFORM_USER', 'COMPANY_USER', 'DISTRIBUTOR_USER'] },
-
-  // Catálogo público — todos los autenticados (el filtrado de datos lo hace el backend)
+  // Catálogo
   { prefix: '/catalog', allowedUserTypes: ['PLATFORM_USER', 'COMPANY_USER', 'DISTRIBUTOR_USER'] },
-
-  // Registro de distribuidor — ruta pública (no requiere auth)
+  // Registro
   { prefix: '/register', allowedUserTypes: ['PLATFORM_USER', 'COMPANY_USER', 'DISTRIBUTOR_USER', 'END_USER'] },
 ];
 
 /** Rutas que no requieren autenticación */
-const PUBLIC_ROUTES = ['/', '/login', '/register/distributor'];
-
-// ─── Funciones públicas ─────────────────────────────────────────────────────
+const PUBLIC_ROUTES = ['/', '/login', '/register/distributor', '/auth/callback', '/pricing', '/contacto', '/soporte'];
 
 /**
- * Determina si una ruta es pública (no requiere autenticación).
+ * Normaliza un pathname quitando los prefijos /site y /studio
+ * para que las reglas de permisos funcionen uniformemente.
  */
+function normalizePath(pathname: string): string {
+  if (pathname.startsWith('/site')) {
+    return pathname.slice(5) || '/';
+  }
+  if (pathname.startsWith('/studio')) {
+    return pathname.slice(7) || '/';
+  }
+  return pathname;
+}
+
 export function isPublicRoute(pathname: string): boolean {
+  const norm = normalizePath(pathname);
   return PUBLIC_ROUTES.some(route =>
-    pathname === route || pathname.startsWith(route + '/'),
+    norm === route || norm.startsWith(route + '/'),
   );
 }
 
-/**
- * Verifica si un usuario puede acceder a una ruta específica.
- * Retorna true si tiene acceso, false si no.
- */
 export function canAccessRoute(
   userType: string | undefined,
   distributorRole: string | undefined,
   pathname: string,
 ): boolean {
-  // Rutas públicas: siempre accesibles
-  if (isPublicRoute(pathname)) return true;
+  const norm = normalizePath(pathname);
 
-  // Sin tipo de usuario: sin acceso a rutas protegidas
+  if (isPublicRoute(pathname)) return true;
   if (!userType) return false;
 
-  // Buscar la regla más específica que coincida (primera que haga match)
-  const rule = ROUTE_RULES.find(r => pathname.startsWith(r.prefix));
-
-  // Sin regla: permitir acceso (ruta no protegida explícitamente)
+  const rule = ROUTE_RULES.find(r => norm.startsWith(r.prefix));
   if (!rule) return true;
 
-  // Verificar tipo de usuario
   if (!rule.allowedUserTypes.includes(userType as UserType)) {
     return false;
   }
 
-  // Si hay restricción de rol de distribuidor y el usuario es DISTRIBUTOR_USER
   if (
     rule.allowedDistributorRoles &&
     userType === 'DISTRIBUTOR_USER'
@@ -100,9 +91,6 @@ export function canAccessRoute(
   return true;
 }
 
-/**
- * Retorna la ruta de redirección post-login según el userType.
- */
 export function getPostLoginRedirect(userType: string | undefined): string {
   switch (userType) {
     case 'PLATFORM_USER':
@@ -118,9 +106,6 @@ export function getPostLoginRedirect(userType: string | undefined): string {
   }
 }
 
-/**
- * Retorna la ruta de fallback cuando un usuario intenta acceder a una ruta no permitida.
- */
 export function getFallbackRoute(userType: string | undefined): string {
   return getPostLoginRedirect(userType);
 }

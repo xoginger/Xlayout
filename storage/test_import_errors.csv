@@ -1,0 +1,8 @@
+sku,name,base_sku,variant_type,line,category,width,depth,height,price_a,currency
+,Producto sin SKU,,,Linea X,,1,1,1,100,MXN
+ERR-001,,,,Linea Y,,1,1,1,200,MXN
+ERR-002,Producto Sin Linea,,,,,,1,1,300,MXN
+ERR-003,Producto Dim Invalida,,,Linea Z,,abc,def,ghi,400,MXN
+ERR-004,Producto Precio Negativo,,,Linea Z,,1,1,1,-500,MXN
+ERR-005,Variante Fantasma,NOEXISTE-999,size,,,1,1,1,600,MXN
+ERR-003,SKU Duplicado en Archivo,,,Linea Z,,1,1,1,700,MXN

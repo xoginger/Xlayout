@@ -33,6 +33,8 @@ const ASSIMP_FORMATS = new Set([
   'dwg',   // AutoCAD — via dwg2dxf + assimp
 ]);
 const GLTF_FORMATS = new Set(['glb', 'gltf']);
+// Formatos que requieren Blender headless para conversión
+const BLENDER_FORMATS = new Set(['skp']);
 const UNSUPPORTED = new Set<string>([]);
 
 // ─── Umbrales de validación ───────────────────────────────────────────────
@@ -92,6 +94,8 @@ export class ConversionProcessor extends WorkerHost {
         rawGlbPath = await this.convertKmz(originalFilePath, rawOutputPath);
       } else if (originalFormat === 'dwg') {
         rawGlbPath = await this.convertDwg(originalFilePath, rawOutputPath);
+      } else if (BLENDER_FORMATS.has(originalFormat)) {
+        rawGlbPath = await this.convertSkp(originalFilePath, rawOutputPath);
       } else if (ASSIMP_FORMATS.has(originalFormat)) {
         rawGlbPath = await this.convertWithAssimp(originalFilePath, rawOutputPath);
       } else if (UNSUPPORTED.has(originalFormat)) {
@@ -105,7 +109,7 @@ export class ConversionProcessor extends WorkerHost {
         throw new Error(`La conversión no produjo un archivo GLB válido (formato: ${originalFormat}).`);
       }
 
-      // ── Paso 1.5: Normalizar Escala y Unidad ────────────────────────────
+      // ── Paso 1.5: Normalizar Escala, Unidad y Merge de Meshes ──────────
       let normalizationInfo: Record<string, any> = { normalized: false, error: 'Not attempted' };
       try {
         const normalizeArgs = ['/app/scripts/gltf_normalize.js', rawGlbPath, rawGlbPath];
@@ -114,13 +118,17 @@ export class ConversionProcessor extends WorkerHost {
         }
         
         const { stdout } = await execFileAsync('node', normalizeArgs, {
-          timeout: 60_000,
+          timeout: 180_000, // 3 min — merge de meshes puede tomar tiempo en modelos complejos
         });
         normalizationInfo = JSON.parse(stdout);
         if (normalizationInfo.normalized || job.data.forceUnit) {
           this.logger.log(`📏 Escala normalizada: detectado ${normalizationInfo.detectedUnit}, escala x${normalizationInfo.scaleApplied} (maxDim original: ${normalizationInfo.originalMaxDim.toFixed(2)})`);
         } else {
           this.logger.log(`📏 Escala mantenida: detectado ${normalizationInfo.detectedUnit} (maxDim: ${normalizationInfo.originalMaxDim.toFixed(2)})`);
+        }
+        // Registrar optimización de meshes
+        if (normalizationInfo.meshMerged) {
+          this.logger.log(`🔧 Meshes optimizadas: ${normalizationInfo.drawCallReduction}`);
         }
       } catch (normErr: any) {
         this.logger.warn(`⚠️ Fallo al normalizar escala: ${normErr.message}`);
@@ -388,7 +396,88 @@ export class ConversionProcessor extends WorkerHost {
     }
   }
 
+  // ── SKP: Blender headless + addon SketchUp Importer → GLB ─────────────────
+  // Pipeline: SKP → Blender (import vía addon) → export GLB directo
+  // El script skp_convert.py maneja la importación y validación dentro de Blender.
+  private async convertSkp(inputPath: string, outputPath: string): Promise<string> {
+    this.logger.log(`🔷 Iniciando pipeline SKP (Blender headless): ${path.basename(inputPath)}`);
 
+    try {
+      // Ejecutar Blender en modo background con el script de conversión
+      const { stdout, stderr } = await execFileAsync('blender', [
+        '--background',
+        '--python', '/app/scripts/skp_convert.py',
+        '--', inputPath, outputPath,
+      ], {
+        timeout: 180_000, // 3 minutos — modelos SKP complejos pueden tardar
+      });
+
+      // Buscar resultado JSON en la salida de Blender
+      const resultLine = stdout.split('\n').find((l: string) => l.startsWith('SKP_RESULT:'));
+      let skpResult: any = null;
+
+      if (resultLine) {
+        try {
+          skpResult = JSON.parse(resultLine.replace('SKP_RESULT:', ''));
+        } catch {
+          this.logger.warn('No se pudo parsear resultado JSON del script SKP');
+        }
+      }
+
+      // Verificar resultado del script
+      if (skpResult && !skpResult.success) {
+        throw new Error(skpResult.error || 'Error desconocido en conversión SKP');
+      }
+
+      // Verificar que el GLB fue generado
+      if (!fs.existsSync(outputPath) || fs.statSync(outputPath).size === 0) {
+        // Intentar extraer error de stderr si el script falló sin JSON
+        const stderrClean = (stderr || '').substring(0, 300);
+        throw new Error(
+          'Blender no generó el archivo GLB de salida. ' +
+          (stderrClean ? `Detalle: ${stderrClean}` : 'El modelo SKP puede estar corrupto o vacío.')
+        );
+      }
+
+      // Log metadata del script si está disponible
+      if (skpResult) {
+        this.logger.log(
+          `✅ SKP procesado: ${skpResult.triangles} triángulos, ` +
+          `${skpResult.objects} objetos, Blender ${skpResult.blenderVersion || '?'}`
+        );
+      }
+
+      return outputPath;
+
+    } catch (err: any) {
+      const msg = err.message || '';
+
+      // Re-lanzar errores descriptivos de negocio directamente
+      if (
+        msg.includes('geometría 3D') ||
+        msg.includes('no contiene') ||
+        msg.includes('addon') ||
+        msg.includes('SketchUp Importer') ||
+        msg.includes('vacío') ||
+        msg.includes('corrupto')
+      ) {
+        throw err;
+      }
+
+      // Error de timeout
+      if (msg.includes('TIMEOUT') || msg.includes('timed out') || msg.includes('killed')) {
+        throw new Error(
+          'La conversión del modelo SketchUp excedió el tiempo límite (3 minutos). ' +
+          'El archivo puede ser demasiado complejo. Simplifica el modelo o exporta como OBJ/FBX desde SketchUp.'
+        );
+      }
+
+      throw new Error(
+        `Pipeline SKP → GLB falló: ${msg.substring(0, 300)}. ` +
+        'Si el error persiste, exporta el modelo como OBJ o FBX desde SketchUp.'
+      );
+    }
+  }
 
   // ── Convertir con assimp (FBX, DAE, OBJ, 3DS, DXF, STL, IFC, WRL, XSI) ──
   private async convertWithAssimp(inputPath: string, outputPath: string): Promise<string> {
@@ -656,7 +745,9 @@ export class ConversionProcessor extends WorkerHost {
     let msg = raw.substring(0, 400);
 
     // Agregar contexto del formato
-    if (msg.includes('assimp')) {
+    if (format === 'skp' && !msg.includes('SKP') && !msg.includes('SketchUp')) {
+      msg = `Error al convertir modelo SketchUp (.skp): ${msg}`;
+    } else if (msg.includes('assimp')) {
       msg = `Error al convertir archivo .${format}: ${msg}`;
     } else if (msg.includes('gltf-pipeline')) {
       msg = `Error al optimizar GLB: ${msg}`;
@@ -670,7 +761,8 @@ export class ConversionProcessor extends WorkerHost {
   // ── Clasificar tipo de error ────────────────────────────────────────────────
   private classifyError(err: any): string {
     const msg = (err?.message || '').toLowerCase();
-    if (msg.includes('timeout')) return 'timeout';
+    if (msg.includes('timeout') || msg.includes('timed out')) return 'timeout';
+    if (msg.includes('blender') || msg.includes('skp') || msg.includes('sketchup')) return 'skp_conversion';
     if (msg.includes('assimp')) return 'conversion';
     if (msg.includes('gltf-pipeline') || msg.includes('draco')) return 'optimization';
     if (msg.includes('unzip') || msg.includes('kmz')) return 'extraction';

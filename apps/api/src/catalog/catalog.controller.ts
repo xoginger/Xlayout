@@ -17,10 +17,11 @@ import { UserTypeGuard } from '../common/guards/user-type.guard';
 import { AllowedUserTypes } from '../common/decorators/user-type.decorator';
 import * as path from 'path';
 
-// Formatos 3D aceptados (DWG y DXF desactivados por inestabilidad de motores CAD)
+// Formatos 3D aceptados (SKP vía Blender headless, DWG/DXF desactivados por inestabilidad)
 const ACCEPTED_EXTENSIONS = new Set([
   'glb', 'gltf', 'obj', 'dae', 'fbx', '3ds', 'kmz', 'stl', 'ply',
   'ifc', 'wrl', 'xsi',
+  'skp', // SketchUp — conversión automática vía Blender headless
 ]);
 
 // Tamaño máximo permitido para archivos 3D (50 MB)

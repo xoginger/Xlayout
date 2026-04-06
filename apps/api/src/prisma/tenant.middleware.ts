@@ -11,7 +11,8 @@ import * as jwt from 'jsonwebtoken';
 @Injectable()
 export class TenantMiddleware implements NestMiddleware {
   use(req: Request, res: Response, next: NextFunction) {
-    const secret = process.env.JWT_SECRET || 'super_secret_jwt_key';
+    const secret = process.env.JWT_SECRET;
+    if (!secret) throw new Error('JWT_SECRET no está definido. Verifica las variables de entorno.');
     let tenantId = req.headers['x-tenant-id'] as string;
 
     if (!tenantId) {

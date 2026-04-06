@@ -133,22 +133,29 @@ export class ProjectsService {
       });
     }
 
-    // 3. Generar automáticamente una cotización basada en los placements
+    // 3. Generar automáticamente un snapshot de cotización básica basada en los placements
     if (items.length > 0) {
-       const quoteData = await this.pricingEngine.calculateQuote(tenantId, items);
-       
+       // Snapshot básico — la cotización formal se genera desde el endpoint /quotes/generate
+       const basicQuoteData = items.map((it: any) => ({
+         productId: it.productId,
+         label: it.label || 'Producto',
+         price: it.price || 0,
+       }));
+       const totalAmount = basicQuoteData.reduce((sum: number, it: any) => sum + (it.price || 0), 0);
+
        await this.prisma.client.quote.create({
          data: {
            tenantId,
            projectVersionId: version.id,
-           totalAmount: quoteData.total,
-           quoteData: quoteData.lines as any,
+           totalAmount,
+           quoteData: basicQuoteData as any,
            status: 'DRAFT',
            totalPieces: items.length,
            priceType: sceneState.project?.priceType || 'A'
          }
        });
     }
+
 
     return version;
   }

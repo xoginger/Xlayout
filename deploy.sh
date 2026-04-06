@@ -1,42 +1,92 @@
 #!/bin/bash
+# Creado y diseñado por XO
+# ─────────────────────────────────────────────────────────────────────────────
+# XLayout — Script de Deploy de Producción
+# ─────────────────────────────────────────────────────────────────────────────
+# Uso: sudo bash deploy.sh
+# ─────────────────────────────────────────────────────────────────────────────
+
 set -e
 
-echo "============================================="
-echo " XLayout Deployment Script (Contabo VPS/Ubuntu) "
-echo "============================================="
+# Colores
+GREEN='\033[0;32m'
+YELLOW='\033[1;33m'
+RED='\033[0;31m'
+NC='\033[0m'
 
-# 1. Update system & Dependencies
-echo "[1/4] Updating system and installing dependencies..."
-sudo apt-get update -y
-sudo apt-get install -y docker.io docker-compose curl gettext-base
+COMPOSE_FILE="docker-compose.prod.yml"
+PROJECT_DIR="/opt/xlayout"
 
-# 2. Create Required Structure
-echo "[2/4] Creating Directory Structure Structure..."
-sudo mkdir -p /opt/xlayout/storage/{images,models,exports,imports,spatial-imports,logs}
-sudo chmod -R 775 /opt/xlayout/storage
+echo -e "${GREEN}═════════════════════════════════════════════════${NC}"
+echo -e "${GREEN}  XLayout — Deploy de Producción${NC}"
+echo -e "${GREEN}═════════════════════════════════════════════════${NC}"
+echo ""
 
-# 3. Pull / Build Containers
-echo "[3/4] Building and launching Docker containers..."
-cd /opt/xlayout || exit 1
+cd "$PROJECT_DIR" || { echo -e "${RED}Error: no se encontró $PROJECT_DIR${NC}"; exit 1; }
 
-# Inyectar automáticamente la versión de build desde el repositorio
+# Variables de build
 export GIT_COMMIT=$(git rev-parse --short HEAD 2>/dev/null || echo "dev")
 export BUILD_DATE=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
 export APP_VERSION="1.0.0"
-echo "  Build: commit=$GIT_COMMIT date=$BUILD_DATE"
+echo -e "${YELLOW}[info]${NC} Build: commit=$GIT_COMMIT date=$BUILD_DATE"
 
-sudo -E docker-compose up -d --build
+# Paso 1: Build y levantar
+echo ""
+echo -e "${YELLOW}[1/4]${NC} Construyendo y levantando servicios..."
+docker compose -f "$COMPOSE_FILE" up -d --build
 
-# 4. Wait & Run Migrations / Seed
-echo "[4/4] Executing Database Migrations and Seeding..."
-echo "Waiting for PostgreSQL to be ready..."
+# Paso 2: Esperar healthchecks
+echo ""
+echo -e "${YELLOW}[2/4]${NC} Esperando healthchecks..."
 sleep 10
+for svc in postgres_prod redis_prod api_prod web_prod; do
+    STATUS=$(docker inspect --format='{{.State.Health.Status}}' "xlayout_${svc}" 2>/dev/null || echo "no-health")
+    if [ "$STATUS" = "healthy" ]; then
+        echo -e "  ${GREEN}✓${NC} $svc → healthy"
+    else
+        echo -e "  ${RED}✗${NC} $svc → $STATUS"
+    fi
+done
 
-sudo docker-compose exec -T api npx prisma migrate deploy
-sudo docker-compose exec -T api npx ts-node prisma/seed.ts
+# Paso 3: Migraciones Prisma
+echo ""
+echo -e "${YELLOW}[3/4]${NC} Ejecutando migraciones Prisma..."
+docker exec xlayout_api_prod npx prisma migrate deploy 2>&1 | tail -3
 
-echo "============================================="
-echo " Deployment Complete! "
-echo " Access the platform via http://SERVER_IP "
-echo " API Docs at http://SERVER_IP/api/docs "
-echo "============================================="
+# Paso 4: Verificación final
+echo ""
+echo -e "${YELLOW}[4/4]${NC} Validación final..."
+
+# API health
+API_CODE=$(curl -s -o /dev/null -w "%{http_code}" https://api.xlayout.mx/api/health 2>/dev/null || echo "000")
+if [ "$API_CODE" = "200" ]; then
+    echo -e "  ${GREEN}✓${NC} API → HTTPS 200"
+else
+    echo -e "  ${RED}✗${NC} API → HTTP $API_CODE"
+fi
+
+# Web HTTPS
+WEB_CODE=$(curl -s -o /dev/null -w "%{http_code}" https://xlayout.mx 2>/dev/null || echo "000")
+if [ "$WEB_CODE" = "200" ]; then
+    echo -e "  ${GREEN}✓${NC} xlayout.mx → HTTPS 200"
+else
+    echo -e "  ${RED}✗${NC} xlayout.mx → HTTP $WEB_CODE"
+fi
+
+# Studio HTTPS
+STUDIO_CODE=$(curl -s -o /dev/null -w "%{http_code}" https://xlayout.studio 2>/dev/null || echo "000")
+if [ "$STUDIO_CODE" = "200" ]; then
+    echo -e "  ${GREEN}✓${NC} xlayout.studio → HTTPS 200"
+else
+    echo -e "  ${RED}✗${NC} xlayout.studio → HTTP $STUDIO_CODE"
+fi
+
+echo ""
+echo -e "${GREEN}═════════════════════════════════════════════════${NC}"
+echo -e "${GREEN}  Deploy completado${NC}"
+echo -e "${GREEN}═════════════════════════════════════════════════${NC}"
+echo ""
+echo "  🌐 https://xlayout.mx"
+echo "  🎨 https://xlayout.studio"
+echo "  🔧 https://api.xlayout.mx"
+echo ""

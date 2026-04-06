@@ -2,9 +2,12 @@
  * Creado y diseñado por XO
  */
 
-import React, { useMemo, useEffect } from 'react';
+import React, { useMemo, useEffect, useState, useCallback } from 'react';
 import { useEditorStore } from '@/store/editor-store';
 import { buildSceneQuote, formatCurrency } from '@/utils/quote-builder';
+import { generateQuotePDF, SYSTEM_DEFAULT_TEMPLATE } from '@/utils/pdf-quote-generator';
+import type { QuoteTemplateData, QuoteLineItem as PDFLineItem } from '@/utils/pdf-quote-generator';
+import { api } from '@/lib/api';
 
 /**
  * Sección de cotización para el Inspector del Editor.
@@ -76,10 +79,13 @@ export const QuoteInspectorSection: React.FC = () => {
             <div className="flex flex-col">
               <span className="text-[8px] font-black text-blue-400 uppercase tracking-[0.25em] mb-1.5 flex items-center gap-1.5">
                 <span className="w-1.5 h-1.5 rounded-full bg-blue-500 animate-pulse"></span>
-                Total Estimado
+                Total con IVA
               </span>
               <span className="text-2xl font-black text-white font-mono tracking-tighter">
                 {formatCurrency(currentQuote.total)}
+              </span>
+              <span className="text-[8px] font-mono mt-1" style={{ color: 'var(--xo-text-ghost)' }}>
+                Subtotal {formatCurrency(currentQuote.subtotal)} + IVA {formatCurrency(currentQuote.ivaAmount)}
               </span>
             </div>
             <div className="text-right flex flex-col items-end">
@@ -185,6 +191,7 @@ export const QuoteInspectorSection: React.FC = () => {
           </>
         )}
 
+
         {/* ── Historial de Cotizaciones ────────────────────────────────────── */}
         {quotes.length > 0 && (
           <div className="mt-8">
@@ -253,7 +260,27 @@ export const QuoteInspectorSection: React.FC = () => {
           <>
             <div className="flex justify-between items-center px-1">
               <div className="flex flex-col">
-                <span className="text-[10px] font-black uppercase tracking-widest" style={{ color: 'var(--xo-text)' }}>Total Actual</span>
+                <span className="text-[10px] font-black uppercase tracking-widest" style={{ color: 'var(--xo-text-dim)' }}>Subtotal</span>
+              </div>
+              <span className="text-[12px] font-bold font-mono tracking-tighter" style={{ color: 'var(--xo-text-muted)' }}>
+                {formatCurrency(currentQuote.subtotal)}
+              </span>
+            </div>
+
+            <div className="flex justify-between items-center px-1">
+              <div className="flex flex-col">
+                <span className="text-[10px] font-black uppercase tracking-widest" style={{ color: 'var(--xo-text-dim)' }}>IVA (16%)</span>
+              </div>
+              <span className="text-[12px] font-bold font-mono tracking-tighter" style={{ color: 'var(--xo-text-muted)' }}>
+                {formatCurrency(currentQuote.ivaAmount)}
+              </span>
+            </div>
+
+            <div className="h-px w-full" style={{ background: 'var(--xo-border-hover)' }}></div>
+
+            <div className="flex justify-between items-center px-1">
+              <div className="flex flex-col">
+                <span className="text-[10px] font-black uppercase tracking-widest" style={{ color: 'var(--xo-text)' }}>Total con IVA</span>
                 <span className="text-[8px] font-bold uppercase" style={{ color: 'var(--xo-text-ghost)' }}>(Proyecto {project.name})</span>
               </div>
               <span className="text-xl font-black font-mono tracking-tighter" style={{ color: 'var(--xo-text)' }}>
@@ -283,6 +310,10 @@ export const QuoteInspectorSection: React.FC = () => {
                 </>
               )}
             </button>
+
+            {/* Botón Generar PDF */}
+            <GeneratePDFButton currentQuote={currentQuote} project={project} />
+
             {project.id === 'default' && (
               <p className="text-[7.5px] text-center font-bold uppercase tracking-widest" style={{ color: 'var(--xo-text-ghost)' }}>
                 Guarda el proyecto primero para poder cotizar
@@ -292,5 +323,126 @@ export const QuoteInspectorSection: React.FC = () => {
         )}
       </div>
     </div>
+  );
+};
+
+/* ─── Botón de generación de PDF con plantilla ─── */
+const GeneratePDFButton: React.FC<{ currentQuote: any; project: any }> = ({ currentQuote, project }) => {
+  const [isGenerating, setIsGenerating] = useState(false);
+
+  const handleGeneratePDF = useCallback(async () => {
+    if (currentQuote.items.length === 0) return;
+    setIsGenerating(true);
+    console.log('[PDF] Iniciando generación de PDF...', { items: currentQuote.items.length });
+
+    try {
+      // 1. Intentar cargar plantilla personalizada del API, si no usar default
+      let template: QuoteTemplateData = SYSTEM_DEFAULT_TEMPLATE;
+      try {
+        const templates: any = await api.get('/quotes/templates');
+        const arr = Array.isArray(templates) ? templates : [];
+        if (arr.length > 0) {
+          const t = arr[0];
+          template = {
+            id: t.id || 'custom',
+            ownerType: t.ownerType || 'tenant',
+            name: t.name || 'Cotización',
+            logoUrl: t.logoUrl || null,
+            companyName: t.companyName || null,
+            address: t.address || null,
+            phone: t.phone || null,
+            email: t.email || null,
+            rfc: t.rfc || null,
+            website: t.website || null,
+            primaryColor: t.primaryColor || '#4F46E5',
+            accentColor: t.accentColor || '#10B981',
+            fontFamily: t.fontFamily || 'helvetica',
+            headerText: t.headerText || null,
+            footerText: t.footerText || SYSTEM_DEFAULT_TEMPLATE.footerText,
+            validityDays: t.validityDays ?? 30,
+            showIva: t.showIva ?? true,
+            ivaRate: t.ivaRate ?? 0.16,
+            currency: t.currency || 'MXN',
+          };
+          console.log('[PDF] Plantilla personalizada cargada:', template.companyName);
+        }
+      } catch (e) {
+        console.log('[PDF] Sin plantilla personalizada, usando default');
+      }
+
+      // 2. Capturar snapshot del render 3D
+      let sceneSnapshot: string | undefined;
+      try {
+        const canvas = document.querySelector('canvas');
+        if (canvas) {
+          sceneSnapshot = (canvas as HTMLCanvasElement).toDataURL('image/jpeg', 0.85);
+          console.log('[PDF] Snapshot 3D capturado');
+        }
+      } catch { /* Sin snapshot */ }
+
+      // 3. Convertir items de la cotización a formato PDF
+      const pdfItems: PDFLineItem[] = currentQuote.items.map((item: any) => ({
+        name: item.name || 'Producto',
+        sku: item.sku || '',
+        quantity: item.quantity || 1,
+        unitPrice: item.unitPrice ?? null,
+        subtotal: item.subtotal ?? null,
+        hasPrice: item.hasPrice ?? false,
+      }));
+
+      console.log('[PDF] Generando PDF con', pdfItems.length, 'partidas');
+
+      // 4. Datos del proyecto
+      const projectData = {
+        projectName: project.name || 'Proyecto XLayout',
+        projectCode: project.projectCode || '',
+        clientName: project.clientName || '',
+        clientCompany: project.clientCompany || '',
+        contactEmail: project.contactEmail || '',
+        contactPhone: project.contactPhone || '',
+      };
+
+      // 5. Generar y descargar PDF
+      await generateQuotePDF({
+        template,
+        items: pdfItems,
+        project: projectData,
+        sceneSnapshot,
+      });
+
+      console.log('[PDF] ✅ PDF generado exitosamente');
+
+    } catch (err) {
+      console.error('[PDF] ❌ Error al generar PDF:', err);
+      alert('Error al generar la cotización PDF. Revisa la consola para más detalles.');
+    } finally {
+      setIsGenerating(false);
+    }
+  }, [currentQuote, project]);
+
+  return (
+    <button
+      onClick={handleGeneratePDF}
+      disabled={isGenerating || currentQuote.items.length === 0}
+      className="w-full py-3 rounded-xl text-[10px] font-black uppercase tracking-[0.2em] transition-all active:scale-[0.98] disabled:opacity-50 disabled:pointer-events-none flex items-center justify-center gap-2"
+      style={{
+        background: 'linear-gradient(135deg, #059669, #10b981)',
+        color: 'white',
+        cursor: currentQuote.items.length === 0 ? 'not-allowed' : 'pointer',
+        boxShadow: '0 4px 12px rgba(16,185,129,0.3)',
+      }}
+    >
+      {isGenerating ? (
+        <>
+          <span className="w-3 h-3 border-2 border-white/30 border-t-white rounded-full animate-spin"></span>
+          Generando PDF...
+        </>
+      ) : (
+        <>
+          <span className="text-xs">📄</span>
+          Generar Cotización PDF
+        </>
+      )}
+    </button>
   );
 };
